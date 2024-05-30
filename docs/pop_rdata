@@ -1,0 +1,10 @@
+
+unit_type_to_obj_indexes_map - maps unit type to an array of object indexes
+    type: i16
+    size: 276 * 2
+    offset: 0x1a6d50 (raw from ghidra)
+
+obj_indexes_table - maps unit to 3d object or sprite referece
+    type: i16
+    size: 319 * 2
+    offset: 0x1a6858 (raw from ghidra)
