@@ -12,7 +12,8 @@
       buildInputs = with pkgs; [
         #gcc_multi
         pkgsCross.mingw32.buildPackages.gcc
-        pkgs.gnumake
+        gnumake
+        python3
       ];
     };
   in {
