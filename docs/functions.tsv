@@ -1,0 +1,5 @@
+address	name	feature_area	status	role
+0x4ed8a0	alloc_unit	units	traced	Allocates a unit: alloc_unit(class, type, tribe, pos*); args pushed in reverse order
+0x401b10	-	other	traced	Effect state handler, called as fn(unit, state); dispatches via the per-state table at 0x50afd4
+0x50a59c	-	other	named	Per-type init dispatch table for effects (class 7 units), indexed by type
+0x50afd4	-	other	named	Per-state per-turn dispatch table for effects (class 7 units), indexed by state
