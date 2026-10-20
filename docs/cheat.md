@@ -166,6 +166,47 @@ unused.
   change, at ~5 Hz, while the user attempts a cast) was set up to settle whether a cast attempt even
   touches this data - result pending.
 
+## Live memory: measuring a Blast (read-only)
+
+Goal: check pop3-rev-analysis.md's "Blast push and flight" hand estimates ("not measured") against
+the real game, by watching a pushed person's position/velocity/life turn by turn - same
+`find_game()`/`/proc/pid/mem` approach as above, but read-only (no `sudo` write needed, though
+`ptrace` read still needs it in practice) and synced to the turn counter (`0x89D188`) rather than
+wall-clock polling, since turns run at ~12/s and polling on a fixed sleep risks missing or
+double-counting one. Script: `pop3-rev/scripts/measure_blast.py` (kept, unlike the rest of this
+doc's scratch snippets, since it's read-only and reusable for the next trial).
+
+### Unit record (confirmed live this session)
+`unit_array` 0x8E0428, 0xB3 bytes/record, 2000 slots. Shared by every unit class (person, effect,
+etc. - `unit_class` +0x2A picks the interpretation):
+- `flags` +0xC (u32): bit `0x2000` airborne, bit `0x80000` blown (set by a blast push).
+- `pos` (6 bytes, confirmed from the person physics step's disassembly, 0x4e6d1d-0x4e6d7b): `x`
+  (i16, low word of the dword at +0x3D), `z` (i16, high word of that dword, i.e. +0x3F), `height`
+  (i16, +0x41) - same x/z-packed-plus-height convention as the tribe's reincarnation site
+  (+0x911/+0x915). A live blown unit's `height` moves by exactly its `vel.y` every turn, `x`/`z` by
+  `vel.x`/`vel.z` - clean confirmation. Six bytes follow (+0x43-+0x48, before velocity at +0x49)
+  that tracked the same values as velocity in one trial; not explained, not needed for this.
+- `vel` (as already documented): `x` +0x49, vertical +0x4B, `z` +0x4D, each i16.
+- `life`/`max_life`: u16 at +0x6E/+0x6C.
+- For the blast effect itself (not the person it pushes): `unit_class` +0x2A == 7 (effect),
+  `state` +0x2C == 1 (simple blast); same `pos` fields give its centre, to compute the real
+  distance `d` to a pushed person.
+
+### What's confirmed
+Scanning the pool each turn for `unit_class == 1` and `flags & 0x80000` and logging `pos`/`vel`/
+`life`: vertical velocity drops by exactly **-32/turn** (matches "Gravity 32 per turn" exactly);
+horizontal velocity (`x` and `z`) each drop by exactly **-2/turn** while airborne (matches "Air
+drag 2 per turn"); landing is visible as a sharp jump in horizontal velocity (friction) and
+`height` clamping instead of continuing its fall. All of this matches "Person physics" exactly,
+live, across both a short single push and longer multi-turn flights.
+
+### Still open
+The distance-dependent part of "Blast push and flight" itself (`f = (R - d) / R`, the slope rule,
+the 3-turn cumulative push) is not yet checked: no trial so far correlated a pushed person's
+distance from the blast's own position (above) against its initial push velocity. Next step: run
+`scripts/measure_blast.py` across trials at several known distances/slopes and fit the logged
+`kind=blast`/`kind=person` rows against the formula.
+
 ## Scripts this session (scratchpad, not preserved across sessions)
 
 Written to `/tmp/claude-1000/-home-laurent-compile-pop3-rev/<session>/scratchpad/`: `max_charges.py`
