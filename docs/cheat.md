@@ -245,9 +245,33 @@ ticks above are visible precisely because they land while a person is already bl
 v2 of `measure_blast.py` logs every person every turn unconditionally (not just blown ones), which
 fixes all three - but **a running Python process doesn't pick up an on-disk script edit**: the
 second trial above was still produced by v1 (it has zero not-blown rows), almost certainly because
-the logger had already been started before the v2 edit landed. Next step: kill and restart the
-logger fresh, ideally against one isolated unit rather than a live skirmish, at several known
-distances/slopes, joining `kind=blast`/`kind=person` rows on `turn` to fit the formula.
+the logger had already been started before the v2 edit landed.
+
+### Session 2026-10-21, third trial (`blast_log3.csv`, v2, 192 persons, ~165k rows)
+A genuine restart of the logger, so it actually ran v2 this time. Live gameplay (a real skirmish, not
+an isolated staged trial), 14 separate Blast casts caught cleanly (3-row `kind=blast` clusters each).
+For every nearby person, this is the first time a *pre-cast* position/velocity/life sample exists, so
+the push itself could finally be checked:
+
+- **New timing fact, not previously documented here**: a pushed person's position and velocity stay
+  completely frozen through the blast's own 3 active turns - even one sitting exactly at the impact
+  point the whole time shows zero change - and only jump on the turn *right after* the blast effect
+  itself disappears. The engine commits the push (and the blown flags) as a single step once the
+  effect ends, not incrementally per tick; that single jump already reflects whatever accumulated
+  internally.
+- **Push direction**: comparing each person's pre-cast position (relative to the blast centre) against
+  its post-jump velocity direction, across ~15 clean detections the push points outward from the
+  centre to within 0-10° - confirms "angle = direction from the centre to the unit, no randomness"
+  exactly.
+- **Push magnitude**: plausible, not pinned down. Horizontal push vs. predicted `140 × f` ranges
+  0.9x-2.3x across detections - inside the slope rule's own documented range (x1.06 flat, up to x2
+  falling-away), consistent but not provable without also logging ground height. Vertical push vs.
+  predicted `98 × f`, in the cleanest same-spot (`f = 1`) cases, clusters at two repeating values 98
+  apart rather than one smooth value - a real, reproducible pattern, left unexplained.
+
+Next step for an exact fit: a controlled single-unit flat-ground trial (now that v2 actually captures
+pre-cast state), ideally also reading the unit's local ground height each turn to separate the slope
+rule from the base coefficient.
 
 ## Scripts this session (scratchpad, not preserved across sessions)
 
