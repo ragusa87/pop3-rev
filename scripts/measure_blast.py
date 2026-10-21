@@ -1,7 +1,20 @@
 """Measure a simple Blast: per-turn position of the blast effect itself (class 7, state 1,
-"kind=blast" rows) plus position/velocity/life of every living person ("kind=person" rows,
-any tribe, blown or not) - join them on `turn` to get the real distance `d` and check it
-against the formula in "Blast push and flight" (f = (R - d) / R, R = 1280).
+"kind=blast" rows, now also its own radius/push-constant/vertical-constant fields) plus
+position/velocity/life of every living person ("kind=person" rows, any tribe, blown or not) -
+join them on `turn` to get the real distance `d` and check it against the formula in "Blast
+push and flight" (f = (R - d) / R).
+
+v3: disassembly of the per-turn push code (0x50b9a6-0x50ba05, called from the shared simple-
+blast turn handler) showed R, the "140" push constant and the "98" vertical constant are NOT
+immediates in that code - they're read live from the blast instance's own fields every turn:
+`R` = DWORD at +0x6c (same field the doc already names "radius"), the horizontal push
+constant = WORD at +0x74, the vertical push constant = WORD at +0x78 (both read via `movsx`,
+so i16). This means the "140"/"98" figures aren't universal constants to verify once - they're
+per-instance config that whatever spell creates the blast (Blast, Firestorm's fireball,
+Volcano's fireball) sets at init, and R itself can legitimately differ turn to turn within one
+blast's own 3-turn life. Logging them straight from the blast's own struct is strictly better
+than inferring them from a pushed person's velocity delta (which is what v2 analysis had to do,
+and which could only get the ratio of the true constant to an ASSUMED R=1280).
 
 sudo python3 measure_blast.py > blast_log.csv
 
@@ -57,6 +70,9 @@ OFF_MAX_LIFE = 0x6C   # u16
 OFF_LIFE = 0x6E       # u16
 
 OFF_STATE = 0x2C      # u8; for class 7 (effect), state 1 = simple blast (pop3-rev-analysis.md "Effect state")
+OFF_RADIUS = 0x6C     # i32, R in "Blast push and flight" - read live each turn, not a fixed 1280
+OFF_PUSH_K = 0x74     # i16, horizontal push constant ("140"), per-instance, set at init
+OFF_VERT_K = 0x78     # i16, vertical push constant ("98"), per-instance, set at init
 
 BLOWN_BIT = 0x80000
 CLASS_PERSON = 1
@@ -93,7 +109,7 @@ def main():
             mem.seek(translate(addr))
             return mem.read(size)
 
-        print("turn,kind,unit_idx,flags,x,z,height,vel_x,vel_y,vel_z,life,max_life")
+        print("turn,kind,unit_idx,flags,x,z,height,vel_x,vel_y,vel_z,life,max_life,radius,push_k,vert_k")
         last_turn = None
         while True:
             turn = struct.unpack("<I", read(TURN_COUNTER, 4))[0]
@@ -113,7 +129,10 @@ def main():
                     x = struct.unpack("<h", read(base + OFF_POS_X, 2))[0]
                     z = struct.unpack("<h", read(base + OFF_POS_Z, 2))[0]
                     h = struct.unpack("<h", read(base + OFF_POS_H, 2))[0]
-                    print(f"{turn},blast,{idx},,{x},{z},{h},,,,,")
+                    radius = struct.unpack("<i", read(base + OFF_RADIUS, 4))[0]
+                    push_k = struct.unpack("<h", read(base + OFF_PUSH_K, 2))[0]
+                    vert_k = struct.unpack("<h", read(base + OFF_VERT_K, 2))[0]
+                    print(f"{turn},blast,{idx},,{x},{z},{h},,,,,,{radius},{push_k},{vert_k}")
                     continue
 
                 if cls != CLASS_PERSON:
@@ -126,7 +145,7 @@ def main():
                 vx, vy, vz = struct.unpack("<hhh", read(base + OFF_VEL_X, 6))
                 max_life, life = struct.unpack("<HH", read(base + OFF_MAX_LIFE, 4))
 
-                print(f"{turn},person,{idx},0x{flags:x},{x},{z},{h},{vx},{vy},{vz},{life},{max_life}")
+                print(f"{turn},person,{idx},0x{flags:x},{x},{z},{h},{vx},{vy},{vz},{life},{max_life},,,")
             sys.stdout.flush()
 
 

@@ -273,6 +273,43 @@ Next step for an exact fit: a controlled single-unit flat-ground trial (now that
 pre-cast state), ideally also reading the unit's local ground height each turn to separate the slope
 rule from the base coefficient.
 
+### Session 2026-10-21, fourth trial (`blast_log4.csv`) - the controlled trial, plus a disassembly find
+A genuinely clean trial this time: 15 units, flat ground (height 128 at every impact point), 3 casts,
+every turn logged (0-340, no gaps). Re-running the same pre-cast/post-jump analysis on it:
+
+- **Horizontal `140 × f` confirmed tightly on flat ground**: the cleanest single-push detections (angle
+  matched to within 0-1°) land at ratio 0.97-1.04 against `140 × f` - essentially exact, with the small
+  excess consistent with the slope rule's own flat-ground floor (×1.0625 from `clamp(0,1,16)/16`).
+  Detections at ~2.0-2.1x are consistent with the same person qualifying for two of the blast's three
+  ticks (the doc's own "cumulative... pushed again" - see below for why that's now better understood).
+- **Vertical: measured `132`, not `98`, at `f = 1` - reproduced exactly across two independent sessions**
+  (this trial and the third one, different persons, different casts): a person sitting exactly at the
+  impact point gets a `+132` vertical kick, not `+98`. Away from `f = 1` the vertical readings get
+  noisy (one unit's vel.y oscillates on its own, unrelated to any blast, between 0 and -64 - a false
+  detection to watch for), so `132` at `f=1` is the one number here that's both clean and reproduced.
+- **Horizontal and vertical don't scale together on a "double hit"**: the ~2x horizontal cases above
+  still show roughly 1x vertical, at first looking contradictory. It isn't - see the disassembly below:
+  the slope rule only multiplies the horizontal `len`, never the vertical term, so a bigger slope
+  multiplier (not a second hit) can easily explain a 2x horizontal ratio with an unchanged vertical one.
+
+**Disassembly of the push itself** (reached from the shared simple-blast turn handler `0x50b740`,
+traced this session): at `0x50b9a6`-`0x50b9bf` it computes `d` via `call 0x4503f0` (distance, matches
+the doc's own citation) between the blast's position (`edi+0x3d`) and the candidate person's
+(`esi+0x3d`), where `edi` is the blast instance and `esi` the person being considered. Then, at
+`0x50b9ca`-`0x50b9d2`: `ebp = clamp(d, 0, R)` where **`R` is read from `DWORD [edi+0x6c]`** - the
+same field the doc already calls "radius", not a hardcoded `1280`. At `0x50b9d8`-`0x50b9ec`:
+`eax = movsx WORD [edi+0x74]` (a per-instance i16, the "140" from the doc) `* (R - d) / R`, then
+`call 0x4e93f0` with `(len, &blast_pos, &person_vel)` - this is the slope-rule-and-apply routine,
+writing the adjusted push straight into the person's `vel.x`/`vel.z` (`esi+0x49`). At `0x50b9f4`-
+`0x50ba05`: the same `(R - d) / R` again times **`movsx WORD [edi+0x78]`** (the "98"), added directly
+to `vel.y` (`esi+0x4b`) with a plain `add`, no slope call - confirms the slope rule is horizontal-only.
+
+**The upshot: "140", "98" and "R" are not universal constants baked into this code - they're fields on
+the blast instance itself, set by whichever spell created it** (Blast, Firestorm's fireball, Volcano's).
+`measure_blast.py` v3 now reads `+0x6c`/`+0x74`/`+0x78` straight off the `kind=blast` row every turn, so
+the next trial gets the exact ground truth directly instead of inferring it from a person's velocity
+delta under an assumed `R`.
+
 ## Scripts this session (scratchpad, not preserved across sessions)
 
 Written to `/tmp/claude-1000/-home-laurent-compile-pop3-rev/<session>/scratchpad/`: `max_charges.py`
