@@ -308,7 +308,31 @@ to `vel.y` (`esi+0x4b`) with a plain `add`, no slope call - confirms the slope r
 the blast instance itself, set by whichever spell created it** (Blast, Firestorm's fireball, Volcano's).
 `measure_blast.py` v3 now reads `+0x6c`/`+0x74`/`+0x78` straight off the `kind=blast` row every turn, so
 the next trial gets the exact ground truth directly instead of inferring it from a person's velocity
-delta under an assumed `R`.
+delta under an assumed `R`. (98/140 ARE confirmed real values elsewhere in the doc, just for a different
+caller: a destroyed boat's land explosion passes `0x50B6F0` the literal params `3, 2, 5, 0x62, 0x8C, 1, 0` -
+`0x62`/`0x8C` = 98/140 decimal. So the "132" measured live for the Blast spell's own cast is a different
+call site genuinely configured differently, not a doc error.)
+
+### Landing in water: a person drowns, confirmed 3 times
+Both `blast_log3.csv` and `blast_log4.csv` had a pushed person's flight end over water. All three instances
+(persons 1827, 1831 in the fourth trial; 1272 in the third) show the identical sequence:
+1. Ordinary blown flight (gravity -32/turn, drag -2/turn, as established) until `height` reaches the water
+   surface (`0`, locally).
+2. One turn later, flags +0xC bit `0x80000` (blown) clears, and a sinking sub-state kicks in: flags gain
+   bits `0x2`, `0x10000`, `0x100000`, `0x40000000`.
+3. `height` now drops by a **fixed -16/turn for exactly 16 turns**, regardless of the unit's actual stored
+   velocity (which stays frozen, unused) - identical in all 3 instances, down to the exact turn count.
+4. At `height = -256`, life is forced to **exactly 0** (a clean kill, not a subtraction) and flag bit `0x2`
+   clears again.
+
+Independent of this: the ordinary hard-landing fall damage (`FALL_OUT_OF_WW_DAMAGE` 700, needs vel.y ≤ -200
+the turn `height` first hits 0) can also apply on the way in - person 1827 took both (-700, then drowned 17
+turns later); 1831 and 1272 touched down too gently for that (vel.y -188 both times, below the -200
+trigger) but still drowned on the same schedule regardless - drowning here looks unconditional on impact
+speed, unlike the fall damage. Bit `0x2` very likely exists to exempt a sinking unit from the OTHER,
+generic per-turn drowning check ("Drowning") while its own dedicated sink-and-die sequence runs - that
+other check's own "not drowning if bit 0x2" reads backwards until you realize it means "already handled
+elsewhere," not "safe."
 
 ## Scripts this session (scratchpad, not preserved across sessions)
 
