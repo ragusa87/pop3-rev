@@ -200,12 +200,54 @@ drag 2 per turn"); landing is visible as a sharp jump in horizontal velocity (fr
 `height` clamping instead of continuing its fall. All of this matches "Person physics" exactly,
 live, across both a short single push and longer multi-turn flights.
 
+Session 2026-10-21 (4 trials, 7 pushed persons, ~100 logged turns): the same two numbers (-32,
+-2) hold with **zero exceptions** across every trial while airborne, and are independently
+confirmed from the EXE on disk - no running game needed - by reading the movement-profile table
+(`0x5A7B90`, 26 bytes/row, "Walking speed"/"Unit record"): row 2 (brave, per
+pop3-rev-analysis.md's own "profile 2" note) is `(256, 170, 64, 110, 192, 512, 192, 512, 384, 32,
+28, 72, 1)` - word 9 (+0x12) = **32** (gravity), word 10 (+0x14) = **28** (ground friction), words
+4/6 (+0x8/+0xC) = **192** (horizontal velocity cap, both axes) - all matching "Person physics"
+exactly (`scripts/measure_blast.py`'s own docstring has the one-liner to reproduce this read).
+
+One live reading looked like a mismatch and turned out not to be: two different persons in the
+same trial both saturated their horizontal velocity at exactly **-190**, not -192. Resolved by
+the table confirmation above, not a correction: the push, its 192 clamp, and that same turn's -2
+air drag all happen before the turn ends, so the earliest sample this script can ever read back
+is already `192 - 2 = 190` - the uncapped/undragged value is never actually observable this way.
+This is the general shape of the problem below.
+
+Session 2026-10-21, second trial (`blast_log2.csv`, a real multi-unit skirmish rather than a clean
+isolated cast, 10 persons, ~200 logged rows): closes the -190/-192 question for good - the same
+cap is seen **untouched** this time (two units, vel_x = 192 and vel_z = 192 on different axes,
+before that turn's drag brought them to 189/190 the next sample). It also directly confirms two
+numbers from "Blast push and flight"/"Person physics" that v1 couldn't reach, because this time
+several persons stayed blown across more than one of the blast's own turns, so the damage ticks
+landed inside the logged window instead of before it:
+- **`BLAST_DAMAGE_PERSON` = exactly -50** life, 5 separate turns across 3 persons - including while
+  still rising (vel.y > 0), not just once grounded.
+- **`FALL_OUT_OF_WW_DAMAGE` = exactly -700** life, 3 separate landings (persons 1666, 1694, 1320) -
+  applied the turn *after* `height` first reaches the ground, not the same turn.
+
 ### Still open
 The distance-dependent part of "Blast push and flight" itself (`f = (R - d) / R`, the slope rule,
-the 3-turn cumulative push) is not yet checked: no trial so far correlated a pushed person's
-distance from the blast's own position (above) against its initial push velocity. Next step: run
-`scripts/measure_blast.py` across trials at several known distances/slopes and fit the logged
-`kind=blast`/`kind=person` rows against the formula.
+the 3-turn cumulative push) is still not checked. What's missing is specifically the *first*
+tick that turns a standing person into a blown one - the sustained direct-damage/fall-damage
+ticks above are visible precisely because they land while a person is already blown, but:
+- the first blown sample is already after that turn's full push-and-physics update (see the
+  -190/-192 case above), so it never shows the raw, pre-clamp push;
+- a person pushed on more than one of the blast's 3 ticks has already moved between ticks, so its
+  position at first sample is not its distance `d` *at cast time* - back-computing `d` from where
+  we first see it systematically overstates the real distance, which made an early by-hand fit of
+  the formula look like it needed a "double push" when it didn't;
+- the very first `BLAST_DAMAGE_PERSON` tick, the one dealt before the person is pushed hard enough
+  to fly, is still invisible to a blown-only filter.
+
+v2 of `measure_blast.py` logs every person every turn unconditionally (not just blown ones), which
+fixes all three - but **a running Python process doesn't pick up an on-disk script edit**: the
+second trial above was still produced by v1 (it has zero not-blown rows), almost certainly because
+the logger had already been started before the v2 edit landed. Next step: kill and restart the
+logger fresh, ideally against one isolated unit rather than a live skirmish, at several known
+distances/slopes, joining `kind=blast`/`kind=person` rows on `turn` to fit the formula.
 
 ## Scripts this session (scratchpad, not preserved across sessions)
 

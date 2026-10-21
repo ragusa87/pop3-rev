@@ -1,15 +1,32 @@
 """Measure a simple Blast: per-turn position of the blast effect itself (class 7, state 1,
-"kind=blast" rows) plus position/velocity/life of every unit it is pushing ("kind=person"
-rows) - join them on `turn` to get the real distance `d` and check it against the formula
-in "Blast push and flight" (f = (R - d) / R, R = 1280).
+"kind=blast" rows) plus position/velocity/life of every living person ("kind=person" rows,
+any tribe, blown or not) - join them on `turn` to get the real distance `d` and check it
+against the formula in "Blast push and flight" (f = (R - d) / R, R = 1280).
 
 sudo python3 measure_blast.py > blast_log.csv
 
 Setup for a clean trial:
 - one lone, allied brave standing alone on flat ground, far from buildings/other units
+- start the logger BEFORE casting (it logs every person every turn, not just blown ones,
+  so the pre-push distance and any direct damage tick are both captured this time)
 - cast Blast so the brave sits at a known distance from the impact cell
-- let it run until the unit lands and stops sliding (logging stops on its own)
+- let it run until the unit lands and stops sliding
 - repeat at several distances (0, 1, 1.5, 2, 2.5+ cells) and on sloped ground
+
+v1 of this script only logged a person once its "blown" flag was already set, which turned
+out to be too late to check the push formula itself: the first visible sample was always
+already past the push (and often past more than one of the blast's 3 ticks, with the person
+already moved away from its true at-cast distance) and could never see a pre-push health
+value to catch direct (non-push) damage. It was, however, enough to pin down Person physics
+exactly: gravity -32/turn and air drag -2/turn on vel while airborne, friction 28/turn on
+landing - all confirmed live AND cross-checked against the movement-profile table itself
+(0x5A7B90 row 2 = brave, read straight from the EXE on disk, no running game needed):
+(256, 170, 64, 110, 192, 512, 192, 512, 384, 32, 28, 72, 1) - +0x12 (word 9) = 32, +0x14
+(word 10) = 28, +0x8/+0xC (words 4/6) = 192, matching "Person physics" exactly. The one
+apparent mismatch (live trials twice saturated at exactly vel_x = vel_z = -190, not -192) is
+resolved, not a correction: a push that hits the 192 cap and that same turn's -2 air drag
+both happen before the turn ends, so the first sample we can ever read back is already
+192 - 2 = 190 - the pipeline just never exposes the untouched, uncapped value.
 
 Based on docs/cheat.md's find_game() + the "Unit record" field offsets in
 pop3-rev-analysis.md ("Person statuses" / "Movement"). `pos` layout (x: i16 low word of the
@@ -102,8 +119,6 @@ def main():
                 if cls != CLASS_PERSON:
                     continue
                 flags = struct.unpack("<I", read(base + OFF_FLAGS, 4))[0]
-                if not (flags & BLOWN_BIT):
-                    continue
 
                 x = struct.unpack("<h", read(base + OFF_POS_X, 2))[0]
                 z = struct.unpack("<h", read(base + OFF_POS_Z, 2))[0]

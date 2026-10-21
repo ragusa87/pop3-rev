@@ -9,3 +9,5 @@ script/*.dat
 script/*.log
 script/*.hdr
 script/*.ver
+blast_log*.csv
+__pycache__
