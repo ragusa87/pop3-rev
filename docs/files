@@ -4,7 +4,7 @@ terrain related files
     bigf0-*.dat - colors for terrain, size 294912
     cliff0-*.dat - ???
     fade0-*.dat - ???
-    watdisp.dat - displacement for water ???, size 65536
+    watdisp.dat - CONFIRMED (0x46CB90, 0x4BCF8C): a 256x256 noise texture sampled twice per water vertex, scrolling in opposite diagonals with the turn counter, summed into a height ripple and a light/shimmer value - see open-populous docs/specs/pop3-rev-analysis.md "Water rendering (watdisp.dat)". Global, loaded once per level (not per-theme, unlike the files above), size 65536
 
 pls* - contain "planets" data, used in a "solar system" view between missions in a campaign
     plspl0-*.dat - palette, size 1024
