@@ -97,6 +97,13 @@ restricted to its fixed list, `status` named/traced/verified, `role` a single se
 `functions.tsv` the superset of every function either skill has looked at, without a separate catalog-only
 session. Sort by address when done (`sort -t$'\t' -k1,1`).
 
+Likewise, for every class-1/7/10 per-turn STATE (`+0x2C`) you document or correct this session, also
+append/update the matching row in `pop3-rev/docs/person_states.tsv` (class 1), `effect_states.csv` (class 7) or
+`controller_states.csv` (class 10) — see `exe-function-map/SKILL.md`'s "Writing the state catalogs" for the exact
+columns/conventions. `pop3-rev-analysis.md`'s own prose should point at these files for the full state-by-state
+list rather than re-deriving or re-listing it inline; these are three separate numbering spaces, so always say
+which class a bare "state N" belongs to.
+
 ## Updating TODO.md and our specs
 - Compare with our implementation (read the spec and, when needed, the code in `open-populous/crates`).
 - Rewrite the matching `- [ ] ...` item with the original's concrete rule and a pointer to the analysis

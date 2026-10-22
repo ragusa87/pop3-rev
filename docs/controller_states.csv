@@ -1,0 +1,19 @@
+state,name,feature_area,status,handler,role
+1,(unnamed),other,named,-,"Listed by the ENTER-state remap (0x500EA8/0x500E88, states 1-12) and PER-TURN remap (0x500FE4/0x500FC8, states 5-18) as a valid slot, but no body was read for it this investigation."
+2,snap to ground height,other,traced,0x500E20 (ENTER dispatch),"On entering this state, the controller's own altitude (+0x41) is snapped to the ground height under it. Body beyond the ENTER step not read."
+3,(unnamed),other,named,-,Listed as a valid ENTER-dispatch slot (1-12); no body read.
+4,reset sub-state,other,traced,0x500E20 (ENTER dispatch),"On entering this state, the controller's own sub-state (+0x2D) is reset to 0. Body beyond the ENTER step not read."
+5,face a target heading,other,traced,0x500EC0 (per-turn dispatch),"Turns the controller to face a stored target heading (+0x28) by up to a fixed step each turn, then re-snaps its altitude (+0x41) to the ground height under it."
+6,(shared no-op),other,traced,0x500FC3 (shared with states 8/9/10/11/13/14/16),"Generic housekeeping only at this dispatch level - effectively a no-op; a controller TYPE's own dedicated per-turn code (if any, e.g. fight_turn/pre_fight_turn for types 8/9) may still do real work outside this generic dispatch - not reconciled, see the note below."
+7,(unnamed),other,named,0x502660 (not traced),"Per-turn dispatch target, not independently traced this investigation."
+8,(shared no-op),other,traced,0x500FC3 (shared with states 6/9/10/11/13/14/16),See state 6.
+9,(shared no-op),other,traced,0x500FC3 (shared with states 6/8/10/11/13/14/16),See state 6.
+10,(shared no-op),other,traced,0x500FC3 (shared with states 6/8/9/11/13/14/16),See state 6.
+11,(shared no-op),other,traced,0x500FC3 (shared with states 6/8/9/10/13/14/16),See state 6.
+12,post-death spirit,units,traced,"0x500E20 (ENTER) and 0x500EC0 (per turn), both -> 0x5029D0","The 'spirit rise' controller (class-10 type 0xC, created by the universal death handler 0x4D5CF0) lives here. 0x5029D0 is its OWN sub-state (+0x2D, 0-6) dispatcher: 0 calm/stationary rise (0x5029EF), 1/2/4/5/6 not read this investigation, 3 the 'climbing + spin' launch (0x502BA3, always for a wildman, otherwise only if it died in a drowning-eligible spot). See 'Death and the spirit rise'."
+13,(shared no-op),other,traced,0x500FC3 (shared with states 6/8/9/10/11/14/16),See state 6.
+14,(shared no-op),other,traced,0x500FC3 (shared with states 6/8/9/10/11/13/16),See state 6.
+15,(unnamed),other,named,0x502EB0 (not traced),"Per-turn dispatch target, not independently traced this investigation."
+16,(shared no-op),other,traced,0x500FC3 (shared with states 6/8/9/10/11/13/14),See state 6.
+17,(unnamed),other,named,0x500F67 (not traced),"Per-turn dispatch target, not independently traced this investigation."
+18,sinking-building animation,buildings,traced,0x500EC0 (per turn) -> 0x503550,"The class-10 type-0x13 building-sinking stand-in's own state (created by the foundation check's flooding destroy path, 0x408080 sub-state 2, via the type-0x13 creation handler 0x500D1B). Counts down an 80-tick lifetime; rocking (a damped oscillator on its own facing/yaw) and progressive sinking (its base height stepped down every 8 ticks) while its own internal phase is 0/1, a short interpolated settle flourish once phase reaches 2. See 'Building sinking (flooded destruction)'."

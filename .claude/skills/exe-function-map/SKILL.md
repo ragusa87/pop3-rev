@@ -17,6 +17,11 @@ target at a time. This is the first half of the pipeline; it does not touch `ope
   `livemem.py`, `addrmap.py`, `consts.py`) — do not duplicate them here.
 - Catalog to write: `pop3-rev/docs/functions.tsv`. Standalone: it never points into
   `open-populous` and nothing in `open-populous` points into it.
+- State catalogs to write alongside it, one per "stateful" unit class, whenever the target is a
+  per-turn STATE dispatch (`+0x2C`) rather than an ordinary function: `pop3-rev/docs/person_states.tsv`
+  (class 1), `pop3-rev/docs/effect_states.csv` (class 7), `pop3-rev/docs/controller_states.csv`
+  (class 10). These are three separate numbering spaces - the same number means something
+  different in each file; never merge them or assume a state found in one applies to another.
 
 ## Setup (once per session)
 Same as `original-game-spec`: `bash .claude/skills/original-game-spec/scripts/setup.sh` builds
@@ -25,7 +30,8 @@ Same as `original-game-spec`: `bash .claude/skills/original-game-spec/scripts/se
 
 ## Scoping & resuming a session
 - **Start**: `grep`/skim `docs/functions.tsv` first — check whether the target address or a
-  function near it is already catalogued before re-deriving it from scratch.
+  function near it is already catalogued before re-deriving it from scratch. If the target is a
+  per-turn state, also check the matching state catalog (see below) for that state number first.
 - **One target per session**: one function, or one tight cluster of callees actually needed to
   understand it. Not an open-ended sweep across unrelated systems.
 - **Deep dive** means following calls until *that* target's own behaviour is understood. When a
@@ -65,6 +71,17 @@ address	name	feature_area	status	role
   other doc.
 
 Sort by address when rewriting the file (`sort -t$'\t' -k1,1`), append new rows then re-sort.
+
+## Writing the state catalogs
+When the target is a class-1/7/10 per-turn state (`+0x2C`), also append/update a row in the
+matching file (`person_states.tsv` / `effect_states.csv` / `controller_states.csv`), re-read first
+the same way. Columns: `state	name	feature_area	status	handler	role` (person/controller) or
+`state	name	status	handler	role` (effect, no `feature_area`) - same `status` vocabulary as
+`functions.tsv`, `handler` is the address(es) that actually run when a unit is in that state (a
+dispatch-table trampoline address is fine if that's as far as it's been traced), `role` is one
+self-contained line. Cross-reference the OTHER class's state of the same number if it would be
+easy to confuse them (e.g. "NOT the same as person state 24, see person_states.tsv"). Sort by
+state number when rewriting.
 
 ## Clean-room boundary
 Never write out, or keep as a scratch artifact, a literal decompiled/transliterated C or C++
