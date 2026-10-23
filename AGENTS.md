@@ -23,7 +23,25 @@ Agents working from this repo analyse the original game and document it. They ne
 - `docs/unit_types`: per-class unit/person/building/etc. type ids and names (a different axis from the state
   catalogs above - `+0x2B` type vs. `+0x2C` state).
 - `docs/cheat.md`: narrative log of live-memory sessions (blast pushes, damage constants, etc.), not a catalog.
-- `backup/backup.xml`: the Ghidra export both skills read function names/ranges from.
+- `backup/backup.xml`: the Ghidra export both skills read function names/ranges from. **It holds much more than that**
+  (found by an agent session, previously unused): full `STRUCTURE`/`MEMBER` type definitions for this exact game
+  (`unit_struct`, `tribe_struct`, `unit_type_person`, `sprite_bank`, `vstart_struct`/`vfra_struct`/`vele_struct`,
+  `objs0_struct`/`pnts0_struct`/`facs0_struct`, and more - grep `<STRUCTURE NAME=` to list them), plus ~19k
+  `REGULAR_CMT` comments (almost all Ghidra boilerplate - "Function Signature Data Type" - but a few dozen are
+  real human notes, mostly about terrain/sprites). These are worth checking before re-deriving a field from
+  scratch: `unit_struct`'s members already confirmed `class_counter`/`unit_type`/`tribe_index`/`state`/`state_2`
+  exactly as independently derived, and caught a real mistake - `tribe_struct+0x881` is named `person_units`
+  (buildings are a separate list at `+0x885`), not the "building list" several functions.tsv rows had called it.
+  Caveats: coverage is sparse/generic past the first ~0x98 bytes of `unit_struct` (exactly where most per-state
+  fields like `+0x70`/`+0xAA`/`+0xAC`/`+0xAD` live), and a member's name can reflect a DIFFERENT unit class's
+  usage of that shared offset than the one being checked (this exe reuses offsets across classes/types
+  constantly, as the rest of this file's docs already track) - treat names here as a strong cross-check lead, not
+  infallible ground truth. Current toolchain is `objdump` disassembly (via the two skills' own `sl.py`/`setup.sh`)
+  plus this static XML export - no live Ghidra instance in this environment (not installed as of this note,
+  though available via `pacman -S ghidra`/`yay -S ghidra` on this machine, headless analyzer included in the same
+  package). A live instance (headless scripting, or an MCP server such as AUR's `ghidra-mcp`) would give a real
+  decompiler view and a complete cross-reference graph instead of grep-over-`dis.txt` (which misses indirect
+  calls and jump-table-driven calls) - worth setting up if this investigation continues much further.
 
 ## Clean-room boundary
 The goal is a clean-room reimplementation: behaviour reimplemented without copying the
