@@ -45,3 +45,52 @@ struct UnitFormat {
     u16 f3;
     u8 fd[40];
 }
+
+-------------------------------------------------------------------------------
+objects/objs0-N.dat, pnts0-N.dat, facs0-N.dat (3D scenery/building meshes)
+Field names/offsets below are Ghidra's own struct recovery from backup/backup.xml
+(STRUCTURE objs0_struct/pnts0_struct/facs0_struct), not independently re-derived from
+disassembly this session - cross-check leads, not confirmed. Same 54/6/60-byte record
+sizes as the on-disk objs/pnts/facs format (see open-populous docs/specs/objects.md for
+the file-format-level documentation and what's independently confirmed there).
+
+struct objs0_struct { // 0x36 (54) bytes, matches the on-disk `objs` record
+    u16 flags;
+    u16 facs_num;        // face count
+    u16 pnts_num;        // point count
+    u8  f1;
+    u8  morph_index;     // untraced; name suggests multi-shape/morph objects (volcano phases? building construction stages?)
+    u32 f2;
+    u32 maybe_coord_scale;
+    facs0_struct *facs0_ptr;      // raw file has a 1-based i32 [start,end) pair here instead; patched to a pointer at load time
+    facs0_struct *facs0_ptr_end;
+    pnts0_struct *pnts0_ptr;      // same: raw file has a 1-based i32 [start,end) pair
+    pnts0_struct *pnts0_ptr_end;
+    u16 f4; u16 f5; u16 f6; u16 f7; short f8; u16 f9;  // bounding box, per objects.md
+    u8  shapes_index;    // untraced; possibly paired with morph_index above
+    u8  u1;
+    u16 f10; u16 f11; u16 f12; u16 f13;
+}
+
+struct pnts0_struct { // 0x6 bytes
+    short x;
+    short y;
+    short z;
+}
+
+struct facs0_struct { // 0x3c (60) bytes, matches the on-disk `facs` record
+    short maybe_normal;      // objects.md documents only the low byte as "palette colour (flat faces)"; high byte's role untraced
+    u16 maybe_tex_index;     // = objects.md's "atlas tile"
+    u16 f5;
+    u8  num_points;
+    u8  f11;                 // = objects.md's offset-7 flags byte (0x20 blended)
+    u32 point_1_u; u32 point_1_v;
+    u32 point_2_u; u32 point_2_v;
+    u32 point_3_u; u32 point_3_v;
+    u32 point_4_u; u32 point_4_v;   // 4x (u,v) texels, matches objects.md
+    short point_1; short point_2; short point_3; short point_4;  // point indices, matches objects.md
+    u16 f6;
+    u16 ff1; u16 ff2; u16 ff3; u16 ff4;  // objects.md's "per-point shade (?)" guess - one word per point, untraced
+    char f8;
+    u8  flags;   // untraced; distinct from the offset-7 flags byte above
+}
