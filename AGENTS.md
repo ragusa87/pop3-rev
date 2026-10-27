@@ -50,6 +50,9 @@ Agents working from this repo analyse the original game and document it. They ne
   switches than `commands.tsv` currently covers (`switchD_0043e93d`/`switchD_004ab6f3`/`switchD_004adda9`) - a
   lead for later, deliberately not bulk-dumped (kept incremental, like everything else here).
 - `docs/cheat.md`: narrative log of live-memory sessions (blast pushes, damage constants, etc.), not a catalog.
+- `docs/camera.md`: working log for the camera/flyby investigation (raw addresses, candidate tribe_struct
+  fields, confidence levels, dead ends, tools) - the fuller record behind what's written into `open-populous`
+  `docs/specs/pop3-rev-analysis.md` "Camera flyby state (tribe_struct)".
 - `backup/backup.xml`: the Ghidra export both skills read function names/ranges from. **It holds much more than that**
   (found by an agent session, previously unused): full `STRUCTURE`/`MEMBER` type definitions for this exact game
   (`unit_struct`, `tribe_struct`, `unit_type_person`, `sprite_bank`, `vstart_struct`/`vfra_struct`/`vele_struct`,
