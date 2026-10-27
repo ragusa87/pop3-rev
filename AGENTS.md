@@ -30,6 +30,25 @@ Agents working from this repo analyse the original game and document it. They ne
   different ids can sound similar; never assume one id means only one thing without checking). `role` says exactly
   when it plays (the condition at that call site), one line per distinct trigger if there's more than one. Built
   the same incremental, one-session-at-a-time way as the other catalogs, via the `exe-function-map` skill.
+- `docs/commands.tsv`: catalog of the game's two player/AI-command dispatch layers, each its own raw-id numbering
+  space (always say which `layer` a bare id belongs to, same rule as the state catalogs below): `ui_cmd` is
+  `process_cmd`'s own id (a player action - keypress, UI click - read as this function's single argument,
+  dispatched via its own remap/jump table) and `tribe_cmd` is `process_tribe_cmd`'s own id (a QUEUED per-tribe
+  command, the `cmd_pop` 15-byte opcode+2-args record, drained once per tribe per turn by `process_tribes_cmd` in
+  every game mode - not campaign/AI-script-specific, a mistake an earlier session made and corrected). A `ui_cmd`
+  case typically ends by calling `set_tribe_command` to queue a `tribe_cmd`, so the two layers chain but are not
+  the same numbers. Columns: `layer  id  name  input  feature_area  status  trigger  role` - `input` is the
+  known keybind/click (`ui_cmd` only, `-` for `tribe_cmd`, cross-check `open-populous/docs/specs/shortcuts.md`
+  for the player-reported side), `trigger` is the case's own entry address plus which dispatch table/index it
+  came from, same `status`/`feature_area` vocabulary as `functions.tsv`. Built the same incremental,
+  one-session-at-a-time way as the other catalogs. **Check `backup.xml`'s own `SYMBOL` entries before
+  reverse-engineering a dispatch table by hand**: Ghidra's analysis already names every switch case it found as
+  `caseD_<hex id>` under a `switchD_<switch address>::` namespace (`grep "switchD_<addr>" backup/backup.xml`) -
+  this is the literal raw id for that case, for free, and caught a real mistake this session (`0x479DD0` looked
+  like a second entry point of `set_tribe_command`/0x479CF0 from its disassembly alone, but `backup.xml` names it
+  as a separate function, `set_data_to_rddata_chunk`). `process_cmd` and `process_tribe_cmd` have more labeled
+  switches than `commands.tsv` currently covers (`switchD_0043e93d`/`switchD_004ab6f3`/`switchD_004adda9`) - a
+  lead for later, deliberately not bulk-dumped (kept incremental, like everything else here).
 - `docs/cheat.md`: narrative log of live-memory sessions (blast pushes, damage constants, etc.), not a catalog.
 - `backup/backup.xml`: the Ghidra export both skills read function names/ranges from. **It holds much more than that**
   (found by an agent session, previously unused): full `STRUCTURE`/`MEMBER` type definitions for this exact game
@@ -40,6 +59,11 @@ Agents working from this repo analyse the original game and document it. They ne
   scratch: `unit_struct`'s members already confirmed `class_counter`/`unit_type`/`tribe_index`/`state`/`state_2`
   exactly as independently derived, and caught a real mistake - `tribe_struct+0x881` is named `person_units`
   (buildings are a separate list at `+0x885`), not the "building list" several functions.tsv rows had called it.
+  Also check its `SYMBOL` entries before hand-decoding ANY jump table (not just for `commands.tsv`): Ghidra names
+  every switch case it recognised as `caseD_<hex id>` under a `switchD_<switch address>::` namespace, so
+  `grep "switchD_<addr>" backup/backup.xml` can hand you a dispatch table's literal case ids directly, instead of
+  reading the jump table's raw bytes and a remap table by hand (`jt.py`'s own method, still needed for tables
+  Ghidra didn't recognise as a switch, or whenever `backup.xml` has no entry at that switch address).
   Caveats: coverage is sparse/generic past the first ~0x98 bytes of `unit_struct` (exactly where most per-state
   fields like `+0x70`/`+0xAA`/`+0xAC`/`+0xAD` live), and a member's name can reflect a DIFFERENT unit class's
   usage of that shared offset than the one being checked (this exe reuses offsets across classes/types
@@ -60,5 +84,5 @@ stays at the level of behavioural description: pseudocode of control flow, exact
 formulas/constants, data layouts, named functions and their one-line role. This applies to the
 function catalog (`pop3-rev/docs/functions.tsv`), the state catalogs
 (`person_states.tsv`/`effect_states.csv`/`controller_states.csv`), the sound catalog
-(`sound.tsv`, all via the `exe-function-map` skill) and the implementable spec
+(`sound.tsv`), the command catalog (`commands.tsv`, all via the `exe-function-map` skill) and the implementable spec
 (`pop3-rev-analysis.md`, via the `original-game-spec` skill) alike.
