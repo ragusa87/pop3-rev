@@ -1,0 +1,15 @@
+sound_id	name	feature_area	status	trigger	role
+0x9	-	units	traced	0x4E6D00 (0x4E73D1)	Landing scream: played on touchdown for a BLOWN person whose vel.y <= -100 at the moment of landing, type is not shaman (7) and not wildman (1) - "Person physics".
+0xB	-	units	traced	0x4D73E0 (0x4D787C), 0x4D83B0 (0x4D8BFE)	Small debris/effect-burst tick sound: once per class-5 type-0xB visual-effect object spawned. Two known contexts, same pattern both times: state 19's ground-recovery settling (spawns one per 100 carried wood dropped, see person_states.tsv row 19) and preacher-conversion's roll-failure sub-state 4 ("being preached to" listening-effect burst, person_states.tsv row 23) - plausibly the same underlying "shedding/spawning small objects" primitive in both.
+0x16	-	units	traced	0x4D60D0	Wildman-only ambient idle sound, ~1/256 chance per turn while in state 8 ("wildman idle tick").
+0x1A	-	units	traced	0x4E6D00 (0x4E75F3)	Take-off scream for the PLAYER's own shaman (current/local tribe, 0x89C6F0, matches self+0x2F) when it first goes BLOWN - "Person physics".
+0x1B	-	units	traced	0x4E6D00 (0x4E73C7)	Landing scream: played on touchdown for a BLOWN shaman (type 7) whose vel.y <= -100 at the moment of landing - "Person physics". Sibling of 0x9 (the non-shaman case).
+0x51	-	units	traced	0x4D3832 (state 26), 0x4D9080 (state 31)	Ambient crackle, every qualifying tick: played by both the cosmetic "scorched by a blast" state (26) and ordinary "on fire" (31, burn-damage) - a scorched-but-not-burning person sounds identical to one actually burning.
+0x55	-	spells	traced	0x511800	Firestorm/Volcano fireball impact on a WATER cell: plays with the unnamed splash effect (class 7 type 0x2B, hfx 1152) - "Fireball impact".
+0x89	-	units	traced	0x4E6D00 (0x4E73F7)	Take-off scream for an OTHER tribe's shaman (type 7, tribe != current/local 0x89C6F0) when it first goes BLOWN - "Person physics". Sibling of 0x1A (the player's-own-shaman case).
+0x9F	-	units	traced	0x43C7A0 (0x43CD77)	Played on the preach TARGET (not the preacher) when the preach order's substate reaches 8, the moment its state is set to 5 and its animation-sequence kinds get rewritten - the "being preached to" sermon payoff.
+0xA4	-	spells	traced	0x510120	Insect Plague's invisible cloud: ambient sound played every turn while the effect is alive - its only audible trace.
+0xB6	-	spells	traced	0x511800	Firestorm/Volcano fireball impact on LAND: plays when the ground-fire scenery object ignites (0x4A8C60) - "Fireball impact".
+0xBC	-	spells	traced	0x4BC500	Volcano fireball (small or big) launch kick, played once at init alongside the random horizontal/vertical velocity roll - "Volcano fireballs".
+0xC4	-	units	traced	0x4E6D00 (0x4E7607)	Take-off scream for a non-shaman person rising faster than 90 (vel.y > 90) when it first goes BLOWN - "Person physics". A slow/weak push gets no take-off sound at all for non-shamans.
+0xDB	-	spells	traced	0x4DB980	Played once (self+0x37 guard) when the Angel of Death's hunting AI (person state 28) allocates its own class-6 type-8 helper/trail object, on first having no live reference yet.

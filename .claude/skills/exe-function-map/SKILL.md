@@ -22,6 +22,11 @@ target at a time. This is the first half of the pipeline; it does not touch `ope
   (class 1), `pop3-rev/docs/effect_states.csv` (class 7), `pop3-rev/docs/controller_states.csv`
   (class 10). These are three separate numbering spaces - the same number means something
   different in each file; never merge them or assume a state found in one applies to another.
+- Sound catalog to write alongside it, whenever a traced function calls `0x48A050` (`fn(unit, type_id, flag)`,
+  the one confirmed generic "play sound" entry point): `pop3-rev/docs/sound.tsv`, one row per distinct
+  `type_id` seen. Not a per-class numbering space like the state catalogs - the same id can legitimately
+  turn up at more than one unrelated call site, so a row accumulates triggers rather than being
+  "claimed" by the first function that uses it.
 
 ## Setup (once per session)
 Same as `original-game-spec`: `bash .claude/skills/original-game-spec/scripts/setup.sh` builds
@@ -83,6 +88,29 @@ self-contained line. Cross-reference the OTHER class's state of the same number 
 easy to confuse them (e.g. "NOT the same as person state 24, see person_states.tsv"). Sort by
 state number when rewriting.
 
+## Writing `docs/sound.tsv`
+Whenever a traced function's call to `0x48A050` resolves to a literal `type_id`, add or update that id's row
+(re-read the file first, same append-then-resort discipline as the other catalogs). Columns:
+
+```
+sound_id	name	feature_area	status	trigger	role
+```
+
+- `sound_id`: `0x...`, the literal id passed as `0x48A050`'s 2nd argument.
+- `name`: a short descriptive name once confirmed (by ear, live) or strongly implied by context, else `-`.
+- `feature_area`/`status`: same vocabulary as `functions.tsv`. `status` here means: `named` (seen at one call
+  site, condition not fully read) / `traced` (the exact triggering condition is read and understood) /
+  `verified` (confirmed by ear against the running game, not just the disassembly).
+- `trigger`: the address(es) of the call site(s) found so far (comma-separated if more than one).
+- `role`: one line per distinct trigger context - the exact condition under which it plays (e.g. "shaman's own
+  landing scream, vel.y <= -100, universal physics touchdown 0x4E6D00") - not just "plays during X system", say
+  *when* inside that system.
+
+An id is not a unique key: finding the SAME id at a second, unrelated call site means adding a second `role`
+line to the same row (with its own trigger address), not creating a conflict to resolve - sounds are a shared
+asset pool, reused across systems the way sprites/object ids are elsewhere in this exe. Sort by `sound_id` when
+rewriting.
+
 ## Clean-room boundary
 Never write out, or keep as a scratch artifact, a literal decompiled/transliterated C or C++
 translation of the disassembly. `role` and any supporting notes describe *behaviour* (what the
@@ -91,6 +119,7 @@ transcription of the original's code. See `AGENTS.md` for the full rule (applies
 
 ## Report to the user
 A short, direct answer to the question first (the address, the name, what it does), then which
-rows were added/updated in `docs/functions.tsv`, and what's still unverified. If the finding
+rows were added/updated in `docs/functions.tsv` (and `sound.tsv`/the state catalogs, if touched),
+and what's still unverified. If the finding
 should also become part of the reimplementation spec, say so and suggest running
 `original-game-spec` next — don't write into `pop3-rev-analysis.md` yourself from this skill.

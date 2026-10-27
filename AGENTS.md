@@ -22,6 +22,14 @@ Agents working from this repo analyse the original game and document it. They ne
   every state inline.
 - `docs/unit_types`: per-class unit/person/building/etc. type ids and names (a different axis from the state
   catalogs above - `+0x2B` type vs. `+0x2C` state).
+- `docs/sound.tsv`: catalog of sound ids, keyed by the `type_id` argument to `0x48A050` (`fn(unit, type_id, flag)`,
+  the one confirmed generic "play this sound" entry point - re-verify that assumption if a session ever finds a
+  second one). Columns: `sound_id  name  feature_area  status  trigger  role`, same `status`/`feature_area`
+  vocabulary as `functions.tsv`. `trigger` is the address(es) of the call site(s) found so far that pass this id
+  (a sound id is not a unique key the way a state number is - the SAME id can turn up at unrelated call sites, and
+  different ids can sound similar; never assume one id means only one thing without checking). `role` says exactly
+  when it plays (the condition at that call site), one line per distinct trigger if there's more than one. Built
+  the same incremental, one-session-at-a-time way as the other catalogs, via the `exe-function-map` skill.
 - `docs/cheat.md`: narrative log of live-memory sessions (blast pushes, damage constants, etc.), not a catalog.
 - `backup/backup.xml`: the Ghidra export both skills read function names/ranges from. **It holds much more than that**
   (found by an agent session, previously unused): full `STRUCTURE`/`MEMBER` type definitions for this exact game
@@ -51,6 +59,6 @@ literal decompiled/transliterated C or C++ translation of the disassembly anywhe
 stays at the level of behavioural description: pseudocode of control flow, exact
 formulas/constants, data layouts, named functions and their one-line role. This applies to the
 function catalog (`pop3-rev/docs/functions.tsv`), the state catalogs
-(`person_states.tsv`/`effect_states.csv`/`controller_states.csv`, all via the `exe-function-map`
-skill) and the implementable spec (`pop3-rev-analysis.md`, via the `original-game-spec` skill)
-alike.
+(`person_states.tsv`/`effect_states.csv`/`controller_states.csv`), the sound catalog
+(`sound.tsv`, all via the `exe-function-map` skill) and the implementable spec
+(`pop3-rev-analysis.md`, via the `original-game-spec` skill) alike.
