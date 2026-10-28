@@ -11,51 +11,75 @@ All addresses below were matched against our own Ghidra export
 our own disassembly (`dis.txt`) yet, and none should be assumed correct just
 because an address lines up.
 
-## Address matches ours, but role/name not independently verified
+## Resolved this session (2026-10-28)
 
-These rows are already in `docs/functions.tsv` (status `named`) because the
-*address* matches a real symbol in `backup.xml`, confirming same exe build -
-but our own name differs from `globals.toml`'s, and neither name's claimed
-*role* has been independently traced this session. Needs someone to actually
-read the code/data usage and settle which name (ours, theirs, or neither) is
-right, then update the row's `status`.
+All of the "address matches ours, but role not verified" items, and all of
+the "exact match, not yet added" items, were independently traced against
+`dis.txt`/`backup.xml` this session and their `docs/functions.tsv` rows
+updated (name adopted/kept, status raised to `traced` where the role was
+actually read, with the reasoning inline in each row - see that file rather
+than re-duplicating it here):
 
-- `0x89d184` - ours `offset_counter` vs their `command_frame`
-- `0x89d188` - ours `offset_counter_2` vs their `simulation_turn`
-- `0x89c661` - ours `land_flags_1` vs their `pause_flags` (bit 0x2 = paused)
-- `0x8e0428` - ours `unit_array` vs their `entity_base` (stride 179, count 2000 - stride/count unverified)
-- `0x74a350` - ours `tribe_ptr` (Ghidra datatype `tribe_struct *`) vs their `display_camera_ptr` - may relate to the tribe_struct camera field tracked in `docs/camera.md`, not reconciled
-- `0x4ec6f0` - ours `main_loop_inner` vs their `on_turn` hook
-- `0x40c670` - ours `load_objs_1` vs their `level_startup_thunk` (role agrees: thunk wrapping load_objs)
-- `0xa68f64` - ours `vertex_shift_x` vs their `display_origin_x`
+- `0x89d184` -> renamed `command_frame` (was `offset_counter`)
+- `0x89d188` -> renamed `simulation_turn` (was `offset_counter_2`)
+- `0x89c661` -> renamed `game_flags_1` (was `land_flags_1`; bit 0x2 = paused
+  confirmed, but it's a general multi-purpose flags dword, not land- or
+  pause-specific - neither prior name was quite right)
+- `0x8e0428` (`unit_array`) - stride 179 / count 2000 independently verified
+  via `backup.xml`'s own `game_state` struct layout math, not just trusted
+  from `globals.toml`
+- `0x74a350` (`tribe_ptr`) - reconciled with `update_vfconfig` (0x417338) and
+  docs/camera.md: it's a tribe_struct pointer whose target doubles as the
+  live camera matrix, so both names describe the same thing
+- `0x4ec6f0` (`main_loop_inner`) and `0x4a5590` (`main_loop_outer`) - merged
+  with pre-existing (unnamed) rows that had already traced their role;
+  `on_turn`/`on_frame` naming confirmed accurate for inner/outer respectively
+- `0x40c670` (`load_objs_1`) - thunk behaviour read in full, confirms
+  `level_startup_thunk` role
+- `0x89ce3a`, `0x87ca92`, `0x87caa4`, `0x87caa6` (`current_obj_num`,
+  `screen_height_2`, `screen_width_2_half`, `screen_height_2_half`) - added
+  as rows, exact address+name matches confirmed, derivation of the two
+  "_half" values traced
+- `0x45efd0`/`0x45f4a0`/`0x45f9d0` (`set_human_anim_*`) - added as rows,
+  exact address+name matches confirmed; function bodies not fully traced
+- `0x46dbe0` (`coord_global_convert`) - traced: world-to-view-space point
+  transform via the same camera matrix as `tribe_ptr` above
+- `0x46f080` (`add_object_to_rendering_queue_type_1_10`) - traced: computes
+  a unit's render-interpolation delta, gated by the pause bit above
+- `0x4f95a0` (`init_polygon_quad_with_sprite_5a`) - partially traced (reads
+  the screen origin, see next item); full body still open
+- `0xa68f64` -> renamed `vertex_shift_x` role confirmed as a screen-space
+  origin-x offset added to vertex/sprite coordinates, matching
+  `globals.toml`'s `display_origin_x` better than our old name
 
-## Address exists in backup.xml but not yet cross-checked at all
+### Previously "no matching symbol" - now confirmed same build, just unannotated
 
-Found while reading the full `globals.toml`, not yet compared or added to
-`functions.tsv`:
+Checked directly against `dis.txt`/`backup.xml` this session, per the old
+note's own instruction. None of these are a build/offset mismatch - code
+exists at the exact same address in both exports, Ghidra (and we) just never
+named it:
 
-- `0x89ce3a` - ours `current_obj_num`, theirs same name - exact match, just not yet added as a row
-- `0x87ca92` - ours `screen_height_2`, theirs same name - exact match, just not yet added
-- `0x87caa4` - ours `screen_width_2_half`, theirs same name - exact match, just not yet added
-- `0x87caa6` - ours `screen_height_2_half`, theirs same name - exact match, just not yet added
-- `0x4a5590` - ours `main_loop_outer` vs their `on_frame`/alias `frame_driver`
-- `0x46dbe0` - ours `coord_global_convert` vs their `display_project_point`
-- `0x46f080` - ours `add_object_to_rendering_queue_type_1_10` vs their `display_queue_entity`
-- `0x45f4a0` - ours `set_human_anim_tribe` vs their `display_human_tribe`
-- `0x45f9d0` - ours `set_human_anim_tribe_person` vs their `display_human_person`
-- `0x45efd0` - ours `set_human_anim_no_tribe` vs their `display_human_unowned`
-- `0x4f95a0` - ours `init_polygon_quad_with_sprite_5a` vs their `display_sprite_quad`
+- `0x42c6d0` - light trace added (per-tribe teardown call, consistent with
+  `on_level_end`, not fully confirmed) - `docs/functions.tsv`
+- `0x4b0e80` - light trace added (32-way mode dispatch via remap+jump table,
+  consistent with `display_enumerate_mode`, cases unread) - `docs/functions.tsv`
+- `0x46daa0` - traced (screen-bounds outcode/clip-flags computation against
+  `screen_width_2`/`screen_height_2`, consistent with `display_cull_triangle`)
+  - `docs/functions.tsv`
+- `0x4f98a0` - light trace added (sprite-record field reads + scaled float
+  math, consistent with `display_sprite_resolve` but not confirmed) -
+  `docs/functions.tsv`
 
-## No matching symbol found in backup.xml at all
+## Still open
 
-Could mean: different exe build/offset, or just unannotated in our export
-(not necessarily a contradiction). Needs checking directly against `dis.txt`
-before drawing any conclusion either way.
-
-- `0x42c6d0` - their `on_level_end`/alias `level_end`; ours has an unnamed `FUN_0042c6d0` at that address (code exists, no role traced)
-- `0x4b0e80` - their `display_enumerate_mode`; ours has a code block/bookmark at that address but no symbol name or traced role
-- `0x46daa0` - their `display_cull_triangle`; ours has an unnamed `FUN_0046daa0` at that address
-- `0x4f98a0` - their `display_sprite_resolve`; ours has an unnamed `FUN_004f98a0` at that address
-- `0xd0597c` - their `mouse_cursor_x` - no entry at this exact address in our export
-- `0xd05980` - their `mouse_cursor_y` - no entry at this exact address in our export
-- `0xd05978` - their `mouse_input_context` - no entry at this exact address in our export
+- `0xd0597c` (`mouse_cursor_x`), `0xd05980` (`mouse_cursor_y`),
+  `0xd05978` (`mouse_input_context`) - checked this session: genuinely
+  **absent** from both `backup.xml` and `dis.txt`, not just unannotated.
+  Our exe build does reference the surrounding `0xd05xxx` region heavily
+  (500+ distinct addresses there), including bytes immediately on both
+  sides of the gap (`0xd05960` and `0xd059b0` both appear, nothing at all
+  in between) - so this looks like a real per-build data-layout difference
+  for this specific struct/buffer, not a dead reference. Needs the mouse
+  input code found independently in our own disassembly (follow whatever
+  reads screen-space cursor coordinates) rather than assumed from the
+  external address.
