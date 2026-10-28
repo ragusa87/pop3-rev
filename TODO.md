@@ -70,16 +70,26 @@ named it:
   math, consistent with `display_sprite_resolve` but not confirmed) -
   `docs/functions.tsv`
 
-## Still open
+## Resolved (static only, 2026-10-28) - `0xd0597c`/`0xd05980`/`0xd05978`
 
-- `0xd0597c` (`mouse_cursor_x`), `0xd05980` (`mouse_cursor_y`),
-  `0xd05978` (`mouse_input_context`) - checked this session: genuinely
-  **absent** from both `backup.xml` and `dis.txt`, not just unannotated.
-  Our exe build does reference the surrounding `0xd05xxx` region heavily
-  (500+ distinct addresses there), including bytes immediately on both
-  sides of the gap (`0xd05960` and `0xd059b0` both appear, nothing at all
-  in between) - so this looks like a real per-build data-layout difference
-  for this specific struct/buffer, not a dead reference. Needs the mouse
-  input code found independently in our own disassembly (follow whatever
-  reads screen-space cursor coordinates) rather than assumed from the
-  external address.
+Dug further into this one without live memory (none available this session).
+The 3 addresses are genuinely absent as independent globals in our build -
+but that's because they're not independent globals in the first place: they
+sit at the exact same *relative offsets* (+0x1c, +0x20, +0x24) from the base
+of a single global C++-style object at `0xd0595c`, found by following the
+`DINPUT.dll`/`SetCursorPos`/`SetCursor` imports forward rather than trusting
+the flat external addresses. See that address's new row in
+`docs/functions.tsv` for the full reasoning - short version: `+0x1c` is a
+lazily-allocated 0xf8-byte context pointer (matches `mouse_input_context` in
+spirit), `+0x20`/`+0x24` are a DWORD (x,y) pair with a getter/setter pair,
+and the object's own buffered-input consumer specifically accumulates
+DirectInput's `DIMOFS_X`/`DIMOFS_Y` (offsets 0/4) deltas before reading that
+position back - about as strong a static confirmation as this gets that the
+object is the mouse-position tracker, and that `globals.toml`'s claimed
+roles for these 3 offsets are right, just modeled as flat globals in that
+project's build vs. a class member here.
+
+**Not yet live-verified** (no live-memory access this session) - the object
+layout (`+0x14`, `+0x28`/`+0x2c`, the `+0x38` rect, the `+0x1c` sub-object's
+own 0xf8 bytes) is still open for a session that can watch `0xd0595c` while
+moving the mouse.

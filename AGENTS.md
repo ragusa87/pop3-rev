@@ -46,9 +46,14 @@ Agents working from this repo analyse the original game and document it. They ne
   `caseD_<hex id>` under a `switchD_<switch address>::` namespace (`grep "switchD_<addr>" backup/backup.xml`) -
   this is the literal raw id for that case, for free, and caught a real mistake this session (`0x479DD0` looked
   like a second entry point of `set_tribe_command`/0x479CF0 from its disassembly alone, but `backup.xml` names it
-  as a separate function, `set_data_to_rddata_chunk`). `process_cmd` and `process_tribe_cmd` have more labeled
-  switches than `commands.tsv` currently covers (`switchD_0043e93d`/`switchD_004ab6f3`/`switchD_004adda9`) - a
-  lead for later, deliberately not bulk-dumped (kept incremental, like everything else here).
+  as a separate function, `set_data_to_rddata_chunk`). A later session worked through the three labeled switches
+  `commands.tsv` didn't yet cover (`switchD_0043e93d`/`switchD_004ab6f3`/`switchD_004adda9`, found inside
+  `process_tribe_cmd`/`process_cmd`/`FUN_004adbb0` respectively) - results are in `commands.tsv` (tribe_cmd
+  0xc/0x1c, ui_cmd 0x9c) and `functions.tsv` (`0x4adbb0`'s own row, the mouse-drag-to-camera pipeline it turned
+  out to be part of). Several sub-cases and callees (`0x4e6a70`, `0x479f00`, the per-game-mode cases of
+  `switchD_004adda9` itself) are still open leads, not exhausted - `process_cmd`/`process_tribe_cmd` almost
+  certainly have further unlabeled switches past these; the `grep "switchD_<addr>"` trick remains the way to find
+  the next one's raw case ids for free instead of hand-decoding a jump table.
 - `docs/cheat.md`: narrative log of live-memory sessions (blast pushes, damage constants, etc.), not a catalog.
 - `docs/camera.md`: working log for the camera/flyby investigation (raw addresses, candidate tribe_struct
   fields, confidence levels, dead ends, tools) - the fuller record behind what's written into `open-populous`
