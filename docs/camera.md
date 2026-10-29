@@ -55,6 +55,11 @@ underneath it** (171.6°→237.3°→228.3° over that same window) - yaw and pi
 independently during a flyby, not locked together. `open-populous`'s `flyby.rs` currently never
 touches `CameraRig.pitch` during a flyby (only `focus.x/y`, `yaw`, `distance`) - confirmed gap.
 
+A later, independent full-flyby capture (`cam7.txt`, turn-continuous from 81 to 438, see "Raw
+capture logs") reproduces this exactly and pins the low hold precisely: pitch bottoms out at
+**-55.37°/-55.38°** (`M21=-13481..-13483`) and holds flat for a 31-32 turn plateau, **turns
+134-165** - tighter than the earlier "around turn 130-140" estimate, same value.
+
 ### `FLYBY_START`'s turn - SOLVED EXACTLY: turn 72
 Open question #1 is closed. Ran the existing `cargo run -p pop3-ai-script --example ai_script_info --
 <path to cpscr010.dat>` dumper (the user's own hint: "use the command to dump level info" - level 1's `.hdr`
@@ -85,6 +90,36 @@ first `ANGLE` keyframe predicted a plateau at `FLYBY_START+40`, observed yaw pla
 fitted (see "Joint fit" below, now superseded for pinning the start turn, though the fit quality discussion
 there still stands for the channels' own scale/offset).
 
+### The intro message dialog pauses the global turn counter, not just script logic
+`turn` (`0x89D188`) itself - not just the AI script's own execution - stops incrementing while the
+turn-72 `CREATE_MSG_INFORMATION(78)` dialog (see above) is on screen: a fresh capture (`cam6.txt`)
+sat dead flat at `turn=76` (the first `turn%8==0` tick after 72 where the poll happened to land)
+for several real seconds, matrix/`K`/`cam_x`/`cam_z` all frozen too, then resumed incrementing
+immediately on the same poll where the player dismissed the dialog (Enter/OK) - no missed turns,
+no catch-up jump, it simply continues from 76. So `FLYBY_START`=72 (previous session, exact, from
+the script AST) is the script's own logical turn, but the flyby's real/wall-clock on-screen start
+additionally waits on however long the player takes to dismiss this one dialog - relevant if
+`flyby.rs` or any host-side timing ever needs to match wall-clock rather than turn count.
+
+Captured end-to-end with the level running fully headless (Xvfb + Wine virtual-desktop window,
+no real X server/GPU, `scripts/docker/*.sh`, see that tooling's own notes) instead of a live manual
+play session - first time this investigation's tool (`watch_camera.py`) has been run against a
+process neither started nor watched interactively by a human the whole way through. Confirms the
+game's own turn pacing (~12/s) is unaffected by that environment (turn deltas between poll
+timestamps stayed consistent with 12/s throughout, both before and after the dialog pause).
+
+The flyby's matrix had visibly settled to a new, different steady orientation by the time it
+finished (`m0=-4996 m2=15604 m3=-5438 m4=15357 m5=-1741 m6=-14626 m7=-5709 m8=-4682`), vs. the
+idle-hold values it started from (`m0=11585 m2=-11586 m3=4036 m4=15357 m5=4036 m6=10859 m7=-5709
+m8=10859`, yaw `atan2(-11586,11585)≈-45°≈315°` - matches the already-documented 315° idle hold
+exactly, a good sanity check that this capture's addresses/decode are still correct). Decoding the
+final matrix's yaw (`atan2(15604,-4996)≈107.8°`) against the script's own last `ANGLE` keyframe
+value (`1438`, from the `FLYBY_SET_END_TARGET` recap above, `1438/2048*360≈252.8°`) lands almost
+exactly 180° apart (`252.8-180=72.8°` vs. the matrix's `107.8°`'s own reference angle `72.2°`) -
+a single data point, not proof, but a concrete lead for open question 5's D3D-axis caveat: worth
+checking properly against `cam5.txt`'s per-turn `ANGLE`-vs-decoded-yaw data (which has far more
+resolution than this one before/after pair) rather than re-deriving from scratch.
+
 ### `FLYBY_SET_EVENT_POS`/`_ZOOM`/`_ANGLE` argument order
 Confirmed `(value, start, duration)` for `ANGLE`/`ZOOM`, `(x, z, start, duration)` for `POS`, by
 cross-checking against `FLYBY_SET_END_TARGET 20 216 1438 0`, which exactly restates the LAST
@@ -100,7 +135,7 @@ tribe_struct fields right after the matrix (`+0x24` on; the struct's own known f
 | Offset | Observed shape | Candidate | Confidence |
 |---|---|---|---|
 | `+0x24` | packed dword, two 16-bit halves move independently | camera focus x (low half), z (high half) | **CONFIRMED** (see "POS and ANGLE channels" below): directly written by the `POS` channel's tick callback (`0x449760`), world units = `(cell+1)*256`; scale/offset now solved too |
-| `+0x28` hi 16 bits | wraps like a cyclic angle; flat exactly when pitch is flat even while yaw keeps moving (decisive: turns 185-270, yaw moves freely, this field and pitch both sit dead flat for 85 straight turns) | raw pitch angle | shape strongly correlates with pitch; raw-to-degrees transform not solved - tried simple ratios at two sample points, inconsistent (not a constant scale, not a constant offset from `M21`) |
+| `+0x28` hi 16 bits | wraps like a cyclic angle; flat exactly when pitch is flat even while yaw keeps moving (decisive: turns 185-270, yaw moves freely, this field and pitch both sit dead flat for 85 straight turns) | raw pitch angle | **RULED OUT as any memoryless function of current pitch** (see "`+0x28` is not a function of current pitch" below) - correlates in shape, not in value |
 | `+0x28` lo 16 bits | pinned at constant `0x0065` the whole capture | unrelated adjacent byte/flag | - |
 | `+0x2c` | smoothly monotonic, always an exact multiple of `0x10000` in both captures | camera distance/zoom | STILL NOT the zoom channel (see "The real AI-script zoom chain" below, traced fully - it never touches this field); correlates with the `ZOOM` channel's timing but by some other, still-unfound mechanism |
 | `+0x30` | ramps between 0 and exactly `0x1000000` (2²⁴), direction flips at each transition, holds at the max through idle/hold windows | per-segment interpolation progress, 8.24 fixed point (0.0-1.0) | plausible shape, not cross-checked against a ground-truth progress value |
@@ -113,6 +148,31 @@ These are `process_cmd`'s debug pan/zoom key handlers (`switchD_004AABCA` caseD_
 camera fields in actual play - a dead/unused code path (same genre as the `ui_cmd 0x6D` mistake in
 `docs/commands.tsv`). `K` (bend, `0x87CA5C`) DOES vary live, oscillating during camera transitions,
 matching the documented "render block can blend" behaviour.
+
+## `+0x28` is not a function of current pitch (open question #2, strengthened dead end)
+`cam7.txt` (see "Raw capture logs") is the first capture where the rotation matrix (`+0x00..+0x20`,
+including `M21` at `+0x1C`) and `+0x28` were recorded in the SAME `--scan-tribe` run, so the two can
+be regressed against each other directly instead of eyeballing two separate captures.
+
+- **Best-case linear fit, `+0x28` hi 16 bits (signed) vs. `M21`: R²=0.395** - clearly correlated in
+  direction, far from a clean function. Trying every lag from -30 to +30 turns (in case `+0x28` is
+  an eased/delayed copy of pitch, the same way `+0x34` eases toward the `ZOOM` channel's target
+  instead of tracking it instantaneously) never exceeds **R²=0.392** (best at lag 0..-3) - a lag
+  does not rescue the fit, so this isn't simply "the right relationship with a delay."
+- **Decisive counter-example, same capture**: at turn 90 `M21=-5709` (idle pitch, -20.4°) pairs with
+  `hi28=-24753`; at turn ~250 (mid-flyby hold) `M21=-5473` (-19.5°, a *more* idle-like pitch, closer
+  to level) pairs with `hi28=-21012` - a 3700-unit swing in `+0x28` for a *smaller* pitch difference
+  than the first pair, in the wrong direction for any single-valued function (monotonic or not) of
+  `M21` alone.
+- **Conclusion**: `+0x28`'s hi 16 bits track pitch's general shape (rises/falls together, flat
+  exactly when pitch is flat - true in every capture so far) but are not determined by the current
+  (or recently-lagged) pitch value by themselves. Likely explanations, not yet distinguished: (a) a
+  genuinely different quantity from a different subsystem that happens to move in sympathy with
+  pitch during a flyby (the same "shared offset, different class's usage" risk this file's own
+  caveats already flag elsewhere), or (b) a stateful/path-dependent value (hysteresis, an
+  accumulator with its own history) rather than a pure function of one input. Don't re-attempt a
+  plain scale/offset/lag fit against `M21` without first finding a reason to expect (b) resolved -
+  the two data points above already rule out every version of (a): a simple function of pitch.
 
 ## Joint least-squares fit (`cam5.txt` against the script's 15 keyframes)
 Grid search on candidate `FLYBY_START` turn, closed-form affine regression per channel (scale/offset
@@ -273,6 +333,101 @@ showing a tooltip triggers a camera effect; if the correlation is real rather th
 cause is still completely unknown. Don't re-chase the tooltip/message pipeline for this again - it's a
 confirmed dead end now, checked from both the creation and the rendering side.
 
+## The `0x44A070` ease-setup helper (open question #7, mostly solved)
+Traced statically (pure disassembly + reading the two literal float constants it multiplies by out of
+the exe's `.rdata`, no live memory needed) - the shared "ease toward a target" setup every flyby channel's
+`start` callback calls (`0x449670` POS, `0x449920` ANGLE, `0x449AE0` ZOOM, `0x449C40` INT_POINT - all own
+`functions.tsv` rows). Own row added: `0x44A070`.
+
+- **Signature**: `fn(delta: i32, duration: i32, state: *EaseState, out: *f32x2)`.
+- **One contiguous state block, not two separate pointers**: the ZOOM call site passes `&0x969D52` for
+  `state` and `&0x969D66` for `out` - exactly `0x14` (20) bytes apart, matching the state block's own
+  written size. So `out` is just `state+0x14`, the same per-channel blob `functions.tsv`'s `0x449B30` row
+  already named as "per-tick state at `0x969D52`/`0x969D5A`/`0x969D66`."
+- **Velocity continuity, not a reset**: `state`'s existing "current rate" field (read back in, not
+  zeroed) feeds the new computation - re-triggering an ease mid-motion blends from the camera's current
+  rate rather than snapping to a fresh start, consistent with this exe's camera generally avoiding
+  discontinuities (matches the manual-pan momentum system noted in "Mouse-drag camera" above, a different
+  but thematically similar smoothing habit).
+- **Duration scaling**: `duration` gets multiplied by two literal constants read directly from `.rdata`
+  (`0x58F2FC` = 64.0, `0x58F300` = 1/256; product = 0.25 exactly) and floored at a minimum of 1.0 - i.e.
+  the usable tick budget is a quarter of the raw `duration` argument, never less than one tick. Not yet
+  tied to a known subtick/frame-rate constant elsewhere in the exe; a plausible explanation (not confirmed)
+  is that `duration` arrives already expressed in a 4x-finer unit than the budget this function actually
+  steps in.
+- **Kinematic branch**: computes a "stopping distance" threshold from the carried-over rate using the
+  standard constant-deceleration formula `rate² / (2·accel)`, then branches on whether `delta`'s magnitude
+  is inside or outside that threshold - i.e. "can the current rate already get there without overshoot."
+  Inside -> single flat rate `delta/duration` (no accel/decel phase, two of the output fields zeroed).
+  Outside -> a two-phase accelerate/decelerate profile, duration split into a "time to kill the existing
+  rate" piece and a remaining piece - this session didn't re-derive the exact blend past that split point
+  (several chained adds/subtracts/divides combine duration, the stop-time, and the scaled-duration value
+  into final phase lengths/rates - plausible but not confirmed to be a textbook trapezoidal/S-curve profile).
+- **Practical read for `flyby.rs` parity**: this confirms the original's ease is NOT a plain
+  lerp/smoothstep over `[start, start+duration]` the way `open-populous` likely assumes - it's a
+  kinematic, rate-continuous accelerate/decelerate profile that also depends on whatever rate the channel
+  already had going in. The "Joint fit" section above tried plain linear/smoothstep curves and got
+  R²~0.1-0.6, never a clean fit - this finding explains why: neither curve family is the right shape in the
+  first place.
+
+## Manual zoom (`+`/`-`) is a pitch+bend orbit, not a distance dolly
+Live test, this session (headless Docker/Xvfb, in normal post-flyby free play, not a flyby):
+held the zoom-out and zoom-in keys and logged `D`/`K`/`S`/the matrix via `watch_camera.py`'s fixed
+field list (not `--scan-tribe` this time - these fields were already in `FIELDS`). Across the
+**entire** zoom range - from the idle ground view, down through the documented flyby-dive pitch
+(~-55°), all the way out to the iconic Populous "whole-planet globe" view (~-88.6° pitch, confirmed
+on screen, a real screenshot of the planet floating in space) - **`D` (0x87CA64) and `S` (0x87CA68)
+never moved once, staying exactly 6500 and 11 for the whole test.** Only the matrix's own pitch
+(`M21`/`+0x1C`) and `K` (0x87CA5C, bend) moved, together, monotonically, and fully reversibly:
+
+```
+K        pitch     notes
+ 46000   -20.39°   idle default (matches "Landscape projection"'s own documented K/pitch exactly)
+ 38000   -24.61°
+ 28000   -31.82°
+ 16000   -41.31°
+  4000   -50.80°
+     0   -55.55°   K floors out here...
+     0   -66.09°   ...but pitch keeps steepening while K stays pinned at 0
+     0   -88.58°   whole-planet globe view (screenshot-confirmed), D and S still 6500/11
+     0   -55.55°   (zooming back in) K still 0 here, pitch already back to the flyby-dive value
+  3680   -54.14°   K starts moving again
+ 46000   -20.39°   idle reproduced exactly on the way back through
+ 58800   -10.54°   zooming further "in" than idle: pitch keeps going shallower, K keeps rising
+                   past its own default - idle is a point mid-curve, not an endpoint
+```
+
+- **Corrects "Landscape projection"'s own `M` row** ("pitch fixed at about 20.4° ... while the
+  player drives the camera - varies during AI-script flybys"): pitch is NOT fixed during ordinary
+  manual play either - it only looks fixed because nobody was zooming. The flyby's own ~-55° dive
+  (see "Pitch is not a fixed per-game constant" above) passes through essentially the same pitch
+  value manual zoom-out reaches on its own way out to the globe view - consistent with both sharing
+  the same small preset table via `0x41C700`/`preset_blend_by_fraction` (already traced for the
+  flyby's `ZOOM` channel, "The real AI-script zoom chain" above).
+- K saturating at 0 while pitch keeps moving (and vice versa not observed - they never visibly
+  decouple at the idle-ward end) confirms K and pitch are two independently-moving outputs of
+  whatever single "zoom level" input drives both, not one computed from the other by a fixed
+  formula.
+- **This empirically confirms, with live round-trip data rather than just the statically-traced
+  flyby chain, the architectural point behind `open-populous` `TODO.md`'s existing "`zoom_to_distance`
+  may have the wrong shape entirely" note**: at every level the real engine's "zoom" - manual play
+  and flyby script alike - orbits the camera's pitch around a (so far, in this test) constant-radius
+  arc and reshapes K/bend; it never moves the literal camera-distance register `D`.
+- Not yet measured: whether `D` is EVER non-constant anywhere in the real game (a mod/cheat, a
+  different level, combat zoom, etc.), or what exactly happens to `tribe_struct+0x2c` (the still-
+  unexplained field, open question 6) during this same manual-zoom sequence - worth a `--scan-tribe`
+  capture through the same `-`/`=` sequence as a natural follow-up.
+
+### Headless keyboard reliability (practical note for future sessions)
+`xdotool key plus` / `key minus` (and `keydown`/`keyup` the same) do **not** reliably reach the game
+for the shifted `+` character - only `-`/`minus` worked directly; zoom-IN only started working once
+sent as `equal` (the bare, unshifted physical key) instead of `plus` (which needs a synthesized
+Shift that this Wine/XTest setup doesn't deliver through to the game's DirectInput polling).
+Plain arrow keys (rotate) worked fine either way. No explicit window activation was needed once the
+game window existed (`xdotool search --name ""` + `getwindowname` to find it, e.g. "Populous, The
+Beginning" - there's no window manager here to report an "active" window, but plain `xdotool key`
+without `--window` still reached it).
+
 ## D3D axis caveat (flagged by the user, not yet applied)
 D3D's coordinate convention is left-handed, differing from `open-populous`'s own engine, at least on
 the Z axis. Any of the candidates above, once their scale/offset is pinned down, will need an
@@ -344,12 +499,19 @@ call `0x4e6a70` - it's a different operation (see below).
 1. ~~Pin `FLYBY_START`'s turn exactly~~ **SOLVED** this session: **turn 72**, read straight from the compiled
    script's own `Every{period:8} / IF INT_GAME_TURN>70 / IF $57==0` gate via the `ai_script_info` example
    tool - see "FLYBY_START's turn - SOLVED EXACTLY" above. No live memory needed.
-2. Solve `+0x28`'s raw-to-pitch-degrees transform (need more samples; two-point ratio checks didn't
-   resolve to a constant).
+2. ~~Solve `+0x28`'s raw-to-pitch-degrees transform~~ **STRENGTHENED DEAD END**, a later session: a
+   same-capture regression against the matrix's own `M21` (`cam7.txt`) gets R²=0.395 at best, lag
+   search included - confirmed NOT a memoryless function (even lagged) of current pitch, with a
+   decisive counter-example pair. See "`+0x28` is not a function of current pitch" above. Next step,
+   if ever revisited: stop regressing against `M21` and instead look for what else could be driving
+   it (hysteresis/accumulator state, or an unrelated field at the same shared offset).
 3. ~~Decode the `POS` waypoints' own coordinate units~~ **SOLVED** this session: plain 0-255 cell indices,
    world units = `(cell+1)*256` - see "POS and ANGLE channels" above.
 4. Re-run the cancel capture with precisely-timed Ctrl+C'd turn numbers (see "Flyby cancel" above).
-5. Apply the D3D axis caveat once position/angle values are solid enough to change `flyby.rs`.
+5. Apply the D3D axis caveat once position/angle values are solid enough to change `flyby.rs`. New
+   lead (see "The intro message dialog pauses..." above): a before/after matrix yaw vs. the
+   script's final `ANGLE` keyframe lined up ~180° apart in one capture - check this properly
+   against `cam5.txt`'s per-turn data.
 6. **What actually writes `tribe_struct+0x2c`, still unsolved - the "zoom while a popup is open" theory is
    now RULED OUT too.** All FIVE channels (ZOOM, POS, ANGLE, INT_POINT, TOOLTIP) and the entire tooltip/
    notification pipeline on BOTH the creation side (`0x44D7F0`/`0x44A030`) and the rendering side
@@ -367,13 +529,29 @@ call `0x4e6a70` - it's a different operation (see below).
    capture-session artifact). With `FLYBY_START` now exact, a fresh capture would also finally let the `ZOOM`/
    `POS`/`ANGLE` channels' own scale/offset (still only "right shape" R²~0.1-0.6, "Joint fit" above) be fit
    properly against clean, correctly-aligned turn numbers instead of a grid search over the start turn too.
-7. **`0x44A070`, not traced this session** (`docs/functions.tsv`): the per-tick increment/ease-setup helper
-   every channel's `start` callback calls (ZOOM, POS, ANGLE all use it) - tracing it would give the exact
-   per-tick stepping formula generalized across all channels, not just the zoom-specific read done this
-   session.
+7. ~~Trace `0x44A070`~~ **MOSTLY SOLVED**, a later session: it's a generic kinematic ease-setup shared by
+   every flyby channel's `start` callback (ZOOM/POS/ANGLE/INT_POINT all call it) - see "The `0x44A070`
+   ease-setup helper" below. The outer shape (duration scaling, stopping-distance branch, one-phase vs.
+   two-phase cases) is confirmed from static disassembly alone, no live memory needed; the exact algebra of
+   the two-phase branch's blend (past where it splits the duration into a "kill existing rate" piece and a
+   remainder) wasn't fully re-derived - a further session could finish that if the precise acceleration curve
+   ever matters for `flyby.rs` (it's plausibly within smoothstep/easing error tolerance already).
 
 ## Raw capture logs
 Not committed, scratch only: `cam.txt` (POPTB.EXE, mistranslated address lesson - m1..m8 read stuck
 at 0 the whole time due to `addrmap.py`'s anchor+delta fallback being wrong for that struct), `cam2.txt`/
 `cam3.txt` (native `D3DPOPTB.EXE`, pre-`--scan-tribe`, trustworthy), `cam4.txt`/`cam5.txt`
 (`--scan-tribe` runs, native, trustworthy; `cam5.txt` is the first turn-anchored full-flyby capture).
+`cam6.txt` (native `D3DPOPTB.EXE`, fixed field list not `--scan-tribe`; first capture from the
+headless Docker/Xvfb setup, see "The intro message dialog pauses..." above).
+
+`cam7.txt` (`--scan-tribe`, headless Docker/Xvfb setup, a later session): the cleanest full-flyby
+capture so far - capture was started while the turn-72 intro dialog was already on screen (caught
+live via an `import -window root` screenshot of the Xvfb display rather than guessed from timing),
+dismissed with one `xdotool key Return`, then left running turn-continuously (turn 81 through 438,
+fully settled/idle at the end, no gaps) with no dialog-pause artifact to reason around at all. Covers
+the matrix (`+0x00..+0x20`) and every candidate field (`+0x24/0x28/0x2c/0x30/0x34`) in one run, which
+is what made the `+0x28`-vs-`M21` regression above possible (earlier captures never had both in the
+same file). Also reproduces `cam4.txt`/`cam5.txt`'s `+0x2c` zoom-channel numbers almost exactly
+(idle 1932, minimum 1733 at the same turn region, maximum ~1976) - third independent confirmation of
+that trajectory, mechanism still unsolved (open question 6).
