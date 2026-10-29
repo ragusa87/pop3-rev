@@ -19,6 +19,14 @@ sudo python3 scripts/watch_camera.py [--every SECONDS]            # fixed field 
 sudo python3 scripts/watch_camera.py --scan-tribe [--every SECONDS]  # dumps tribe_struct +0x00..+0x880, prints only changed dwords, tagged with the game turn
 ```
 
+`scripts/watch_addr.py` (new, a later session): a live GDB hardware write-watchpoint on one address
+(literal, or `tribe+0xOFFSET` for a tribe_struct field) - use when static disassembly can't find a
+single recognizable immediate for an address because it's only ever reached through a computed base
+register (see "`tribe_struct+0x2c` solved" below, its first use). Needs `gdb` in the Docker image
+(`docker/Dockerfile`, added this session - rebuild with `docker compose build` if your image predates
+this) and real ptrace, so run it via `scripts/docker/watch_addr.sh tribe+0x2c [--seconds N]` inside the
+headless rig (root inside the container, no host sudo prompt) rather than directly on the host.
+
 ## Confirmed
 
 ### The rotation matrix lives in tribe_struct, not a separate camera struct
@@ -137,7 +145,7 @@ tribe_struct fields right after the matrix (`+0x24` on; the struct's own known f
 | `+0x24` | packed dword, two 16-bit halves move independently | camera focus x (low half), z (high half) | **CONFIRMED** (see "POS and ANGLE channels" below): directly written by the `POS` channel's tick callback (`0x449760`), world units = `(cell+1)*256`; scale/offset now solved too |
 | `+0x28` hi 16 bits | wraps like a cyclic angle; flat exactly when pitch is flat even while yaw keeps moving (decisive: turns 185-270, yaw moves freely, this field and pitch both sit dead flat for 85 straight turns) | raw pitch angle | **RULED OUT as any memoryless function of current pitch** (see "`+0x28` is not a function of current pitch" below) - correlates in shape, not in value |
 | `+0x28` lo 16 bits | pinned at constant `0x0065` the whole capture | unrelated adjacent byte/flag | - |
-| `+0x2c` | smoothly monotonic, always an exact multiple of `0x10000` in both captures | camera distance/zoom | STILL NOT the zoom channel (see "The real AI-script zoom chain" below, traced fully - it never touches this field); correlates with the `ZOOM` channel's timing but by some other, still-unfound mechanism |
+| `+0x2c` | smoothly monotonic, always an exact multiple of `0x10000` in both captures | N/A - **not a real field, see below** | **SOLVED this session, open question 6 CLOSED**: it's a scan artifact, not an independent value - see "`tribe_struct+0x2c` solved" below |
 | `+0x30` | ramps between 0 and exactly `0x1000000` (2²⁴), direction flips at each transition, holds at the max through idle/hold windows | per-segment interpolation progress, 8.24 fixed point (0.0-1.0) | plausible shape, not cross-checked against a ground-truth progress value |
 | `+0x34` | **CONFIRMED** (see "The real AI-script zoom chain" below): the zoom channel's own live, signed Q14 fixed-point accumulator (16384 = 1.0, same scale as the rotation matrix), clamped to [-16384, +16384], written every turn by `0x449B30`'s tick callback and fed straight into `0x41C700` to blend camera-preset render-block fields. The "grows with an almost-constant second difference" shape this table used to describe is consistent with `0x44A070`'s own (not fully traced) per-tick increment scheme. |
 
@@ -333,6 +341,62 @@ showing a tooltip triggers a camera effect; if the correlation is real rather th
 cause is still completely unknown. Don't re-chase the tooltip/message pipeline for this again - it's a
 confirmed dead end now, checked from both the creation and the rendering side.
 
+## `tribe_struct+0x2c` solved: it's not a real field, just two adjacent ones aliased by the scan (open question #6, CLOSED)
+Found via a live GDB hardware write-watchpoint on the computed address (`0x89D1C8+tribe*0xC65+0x2c`,
+tribe=0 confirmed live), run through a fresh full flyby inside the headless Docker/Xvfb rig (gdb
+added to `docker/Dockerfile` this session) - the static-grep approach camera.md's own "Open
+questions" #6 flagged as exhausted finally has a live tool now (`scripts/watch_addr.py` +
+`scripts/docker/watch_addr.sh`, generic reusable hardware-watchpoint helper, added this session).
+216 of 218 hits captured landed on the exact same instruction.
+
+**The "+0x2c dword" `--scan-tribe` was ever reporting never existed as its own field.** `--scan-tribe`
+reads the tribe_struct range as 4-byte-aligned dwords, so what it calls "+0x2c" is just
+`bytes[+0x2c..+0x2f]` read as one little-endian int. Those 4 bytes are actually the tail end of TWO
+unrelated, independently-written fields:
+
+- `tribe_struct+0x2a` (dword, bytes `+0x2a..+0x2d`): a straight per-tribe, per-frame COPY of the
+  GLOBAL render block's own `+0x8` field (`0x88F00C`, one of the 5 fields `0x41C700`/
+  `preset_blend_by_fraction` blends every tick for the flyby's ZOOM channel - `functions.tsv`'s own
+  row for it). Live-confirmed this session: this value stays small (observed `0x9F52`, well under
+  `0x10000`), so its own high word - which is exactly `tribe_struct`'s bytes `+0x2c/+0x2d`, the "low
+  half" the scan tool was reporting as part of "+0x2c" - is normally `0`. That's the entire
+  explanation for the old "always an exact multiple of `0x10000`" observation: the low half of the
+  scanned dword is just unrelated padding from a DIFFERENT field that happens to stay small.
+- `tribe_struct+0x2e` (word, bytes `+0x2e/+0x2f` - the scanned dword's HIGH half, i.e. the part that
+  actually carries the signal): a straight per-tribe, per-frame copy of the render block's own
+  `+0x20` field (`0x88F024`), ALSO one of `0x41C700`'s 5 blended fields. Live-confirmed exactly:
+  read simultaneously mid-session, `tribe_struct+0x2e == render_block+0x20 == 1932` (the documented
+  idle value) to the integer.
+
+Both copies happen in the same function, found this session: `set_player_transform_matrix`
+(`0x47F480`, name from `backup.xml`'s own Ghidra `FUNCTION` entry, role now independently
+traced - `functions.tsv`'s own row has the full breakdown). It's called from `update_vfconfig`
+(`0x417338`, two call sites inside that same function, `0x41744F`/`0x417462`) - the SAME per-tribe,
+per-frame routine already confirmed to rebuild the camera matrix pointer - plus a handful of other
+call sites not individually checked this session (`0x417967`, `0x41C98D`, `0x41C9A1`, `0x4A4B5B`).
+So this isn't a flyby-specific write at all; it runs every frame regardless, for whichever tribe is
+being updated, which is exactly why none of the five flyby channels (or the tooltip pipeline) were
+ever found writing it directly - they don't need to. They only have to move the render block's own
+`+0x20`/`+0x8` fields (which `0x41C700` already does, confirmed), and this copy function mirrors
+whatever those currently are into the tribe's own saved state every frame, unconditionally.
+
+**This resolves "remaining lead (b)" from the old open-questions list exactly** ("`+0x2c` as a
+passively-updated mirror of [...] some other already-tracked value computed once per frame
+elsewhere, independent of any flyby channel") - just not of `D`; of the render block's own
+`+0x20`/`+0x8`, two fields that were already-named-but-unconnected-to-tribe_struct `0x41C700`
+outputs. The `TOOLTIP`-timing correlation ("INT_POINT and TOOLTIP channels" above) is explained the
+same indirect way: both `+0x2e`'s motion and the tooltip windows happen to fall inside the flyby's
+own ZOOM-channel-driven preset blend, with no direct causal link between tooltips and the camera -
+consistent with that section's own finding that the tooltip pipeline never touches any camera field.
+
+**New, smaller leads opened by this trace, not pursued further this session**: `set_player_transform_matrix`
+also conditionally calls `rotate_main_cam`/`0x4429C0` (own row) with a delta read from a global
+object's own `+0x88` byte, gated on flag `0x89D17C`&0x2 being CLEAR and a global pointer `0x96AA70`
+being non-null - looks like some kind of automatic/scripted camera-nudge path distinct from both the
+manual mouse-drag handlers and the flyby channels, not identified. It also calls `0x42A070` and
+`0x47FAB0` (twice, with the current yaw `tribe_struct+0x32` and the negated `+0x2e` value as
+arguments) - neither traced this session.
+
 ## The `0x44A070` ease-setup helper (open question #7, mostly solved)
 Traced statically (pure disassembly + reading the two literal float constants it multiplies by out of
 the exe's `.rdata`, no live memory needed) - the shared "ease toward a target" setup every flyby channel's
@@ -512,23 +576,15 @@ call `0x4e6a70` - it's a different operation (see below).
    lead (see "The intro message dialog pauses..." above): a before/after matrix yaw vs. the
    script's final `ANGLE` keyframe lined up ~180° apart in one capture - check this properly
    against `cam5.txt`'s per-turn data.
-6. **What actually writes `tribe_struct+0x2c`, still unsolved - the "zoom while a popup is open" theory is
-   now RULED OUT too.** All FIVE channels (ZOOM, POS, ANGLE, INT_POINT, TOOLTIP) and the entire tooltip/
-   notification pipeline on BOTH the creation side (`0x44D7F0`/`0x44A030`) and the rendering side
-   (`render_land_ui_1`/`0x44A34D`) are now confirmed to never touch it, the render-block D field, or the
-   `0x89CE34` transition counter - see "INT_POINT and TOOLTIP channels" above. The `TOOLTIP`-timing
-   correlation itself still stands (unexplained), but its most plausible mechanism doesn't exist in code.
-   Remaining leads, genuinely open: (a) a live hardware write-watchpoint on the computed `tribe_base+0x2c`
-   address during a fresh flyby run - static grepping for a combined-immediate access to it found nothing,
-   suggesting the access is split across instructions in a way that doesn't show up as a single recognizable
-   literal, so a live watch may be faster than more static searching; (b) treat `+0x2c` as a passively-updated
-   mirror of the render block's own D (or some other already-tracked value) computed once per frame
-   elsewhere, independent of any flyby channel; (c) the correlation could be coincidental - with `FLYBY_START`
-   now exact, a fresh `cam*.txt`-style capture would at least let this be checked against a 2nd, independent
-   flyby run (different timing noise) rather than the two already-captured ones (which may share a common
-   capture-session artifact). With `FLYBY_START` now exact, a fresh capture would also finally let the `ZOOM`/
-   `POS`/`ANGLE` channels' own scale/offset (still only "right shape" R²~0.1-0.6, "Joint fit" above) be fit
-   properly against clean, correctly-aligned turn numbers instead of a grid search over the start turn too.
+6. ~~What actually writes `tribe_struct+0x2c`~~ **SOLVED/CLOSED, a later session**: it isn't a real
+   field - `--scan-tribe`'s "+0x2c dword" is an aliasing artifact of two adjacent, independently-written
+   fields (`+0x2a` dword and `+0x2e` word), both straight per-frame copies of already-tracked render-block
+   fields, made by a newly-found function (`set_player_transform_matrix`/`0x47F480`) called from
+   `update_vfconfig`. Found via a live GDB hardware watchpoint (`scripts/watch_addr.py`, new generic tool).
+   See "`tribe_struct+0x2c` solved" above for the full mechanism - lead (b) from the old list here turned out
+   to be exactly right, just not about `D`. With `FLYBY_START` now exact, a fresh capture would still let the
+   `ZOOM`/`POS`/`ANGLE` channels' own scale/offset (still only "right shape" R²~0.1-0.6, "Joint fit" above) be
+   fit properly against clean, correctly-aligned turn numbers instead of a grid search over the start turn too.
 7. ~~Trace `0x44A070`~~ **MOSTLY SOLVED**, a later session: it's a generic kinematic ease-setup shared by
    every flyby channel's `start` callback (ZOOM/POS/ANGLE/INT_POINT all call it) - see "The `0x44A070`
    ease-setup helper" below. The outer shape (duration scaling, stopping-distance branch, one-phase vs.
