@@ -1,13 +1,14 @@
 ---
 name: original-game-spec
-description: Turn an understanding of the original Populous The Beginning (from D3DPOPTB.EXE disassembly, the Ghidra export, constant tables, live memory) into an implementable spec in open-populous docs/specs/pop3-rev-analysis.md, and update open-populous TODO.md (and the affected spec) where our implementation differs. Use when the user wants the reimplementation's behaviour documented — e.g. "document, for the reimplementation, how X works", "write the spec for X", "what should our implementation do for X" — not a purely exploratory answer (for that, use exe-function-map instead).
+description: Turn an understanding of the original Populous The Beginning (from D3DPOPTB.EXE disassembly, the Ghidra export, constant tables, live memory) into an implementable spec in open-populous docs/specs/pop3-rev-analysis.md, and update the matching open-populous docs/todo/<slug>.md backlog file (and the affected spec) where our implementation differs. Use when the user wants the reimplementation's behaviour documented — e.g. "document, for the reimplementation, how X works", "write the spec for X", "what should our implementation do for X" — not a purely exploratory answer (for that, use exe-function-map instead).
 ---
 
 # Original game spec from the exe
 
 Goal: answer "how does the original do X" from the executable, record it as an implementable spec in
 `/home/laurent/compile/open-populous/docs/specs/pop3-rev-analysis.md`, and turn every difference with our
-implementation into a `TODO.md` item.
+implementation into an item in the matching `docs/todo/<slug>.md` backlog file (see "Updating the TODO backlog"
+below).
 
 ## Paths
 - Exe (Direct3D build, the only one the addresses fit): `~/.wine/drive_c/Program Files (x86)/Bullfrog/Populous - A l'aube de la création/D3DPOPTB.EXE`.
@@ -20,7 +21,9 @@ implementation into a `TODO.md` item.
   −0x31748; code has no single shift (look the function up).
 - Ghidra export (names are a previous analyst's guesses, often wrong or shifted): `pop3-rev/backup/backup.xml`.
 - Spec to write: `open-populous/docs/specs/pop3-rev-analysis.md`. Our specs: `open-populous/docs/specs/*.md`.
-  Our backlog: `open-populous/TODO.md`.
+  Our backlog: one file per roadmap topic, `open-populous/docs/todo/<slug>.md` (see "Updating the TODO backlog"
+  below) — `open-populous/TODO.md` is just a priority-tiered index into them, same tiers as
+  `open-populous/docs/roadmap.md`.
 
 ## Setup (once per session)
 `bash .claude/skills/original-game-spec/scripts/setup.sh` builds in `$WORK` (default `/tmp/pop3-spec`, or the
@@ -104,16 +107,40 @@ columns/conventions. `pop3-rev-analysis.md`'s own prose should point at these fi
 list rather than re-deriving or re-listing it inline; these are three separate numbering spaces, so always say
 which class a bare "state N" belongs to.
 
-## Updating TODO.md and our specs
+## Updating the TODO backlog and our specs
+The backlog is one file per roadmap topic, not one `TODO.md`: `open-populous/docs/todo/<slug>.md`, where `<slug>`
+is the kebab-case of that topic's own `### ` heading text in `TODO.md`/`docs/roadmap.md` (markdown link and
+trailing spec pointer stripped, any parenthetical kept, spaces/slashes to hyphens, lowercase, drop other
+punctuation). `open-populous/TODO.md` itself stays a short index only — one line + link per topic, grouped under
+the same `## Priority N` tiers as `docs/roadmap.md` — never add a checklist item directly under `TODO.md`.
+
+Mapping from `TODO.md`'s existing `### ` headings (use this until the one-time migration below has run; derive
+any newer topic's slug the same way):
+`combat`, `the-tick`, `units`, `spells`, `mana`, `buildings`, `wood`, `praying-worship`, `tribes`,
+`level-scripting-triggers`, `computer-players-ai`, `terrain`, `winning-and-losing`, `things-and-level-data`,
+`ui-and-editor`, `tooltips`, `menu-and-sandboxes`, `camp-fire`, `performance-60-fps`, `sound`, `art`,
+`original-sprites-and-blending`, `multiplayer`.
+
 - Compare with our implementation (read the spec and, when needed, the code in `open-populous/crates`).
+- Find the file for the topic you're updating. If `docs/todo/<slug>.md` doesn't exist yet, create it (same
+  `- [ ] ...` item style the old `TODO.md` used, one `# <Topic>` heading, a pointer back to its
+  `docs/specs/*.md`/`docs/roadmap.md` row) and add its index line into `TODO.md` under the matching priority tier.
 - Rewrite the matching `- [ ] ...` item with the original's concrete rule and a pointer to the analysis
   section, or add one in the right section; do not tick or delete items.
 - Fix statements in our specs that the analysis proves wrong (e.g. "unknown" values now known), keeping the spec's
   description of our own behaviour.
-- No memory addresses outside pop3-rev-analysis.md: `TODO.md` and the other `docs/specs/*.md` files point to a
-  section name (`pop3-rev-analysis.md "Preacher conversion"`), never a raw address or offset; those live only in
-  the analysis file, which is the addressable reference.
+- No memory addresses outside pop3-rev-analysis.md: the topic TODO files and the other `docs/specs/*.md` files
+  point to a section name (`pop3-rev-analysis.md "Preacher conversion"`), never a raw address or offset; those
+  live only in the analysis file, which is the addressable reference.
 - Do not touch code, do not commit: report what changed in each file.
+
+### One-time migration
+As of this change, `TODO.md` still holds every topic's checklist inline under its own `### ` heading (the split
+hasn't run yet). The first session that reaches "Updating the TODO backlog" after this change should do the
+split before adding anything new: for each `### ` section, move its items verbatim into a new `docs/todo/<slug>.md`
+(slug from the mapping above, or derived the same way for a section not yet listed), replace that section in
+`TODO.md` with a single index line under its existing `## Priority N` tier, and report the split in full (old
+line count, new file list) rather than folding it quietly into an unrelated finding.
 
 ## Report to the user
 A short answer to the question first (the rule, the numbers, the seconds), then what was documented where, what is
