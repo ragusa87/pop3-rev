@@ -317,3 +317,21 @@ reference to wood/lumber data found, just the triggering context and shape).
   (`0x4f6440`/`0x4359b0(-1,-1,-1)`/`0x418ce0(tribe,0xe)`) - this 3-call tail is now confirmed used by at least 3
   different task types (5, 0, 1), clearly a generic "I'm done with/moving on from this target" primitive worth
   implementing once and reusing, not per-task.
+
+### 6e. Follow-up (2026-10-30, same day): task 9 is a probabilistic cross-task dispatcher, not a no-op
+
+Earlier sessions guessed task 9 (`0x4c5cf0`) was "a lightweight reschedule... not real work" since it calls
+almost nothing but shared AI primitives. Traced it fully this session and that guess was wrong: **task 9 is a
+"something changed near our base, decide how to react" dispatcher** that can, as pure side effects:
+
+- Enqueue task 8 (the reactive counter-attack task, `0x4c5f70`'s row - confirmed last session as triggered by
+  an "avenge me" per-unit flag) when its own local trigger field is set.
+- Separately, roll a die and enqueue EITHER task 11 or task 15 (both untraced) depending on a `tribe_num`/
+  difficulty-indexed byte and the roll's outcome.
+
+Its own trigger (`0x4e5b60`'s evaluator, own row, also updated) reads from the exact same per-tribe "anchor
+point" fields (`tribe+0x5b4`/`+0x36c`) `CONSTRUCT_BUILDING` populates once it's picked a base-adjacent site -
+another concrete cross-system link, not a coincidence of shared offsets. **For `open-populous`**: don't model
+task 9 as inert bookkeeping; it's a real decision point feeding at least 3 other behaviours. Tasks 11 and 15
+are now the natural next targets if continuing this - unlike most other untraced tasks, these two are reached
+by name from a session that specifically traced their trigger, not just found in the raw dispatch table.
