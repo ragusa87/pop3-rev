@@ -335,3 +335,32 @@ another concrete cross-system link, not a coincidence of shared offsets. **For `
 task 9 as inert bookkeeping; it's a real decision point feeding at least 3 other behaviours. Tasks 11 and 15
 are now the natural next targets if continuing this - unlike most other untraced tasks, these two are reached
 by name from a session that specifically traced their trigger, not just found in the raw dispatch table.
+
+### 6f. Follow-up (2026-10-30, same day): tasks 11 and 15 traced - "wander/patrol near our anchor"
+
+Per the user's "keep going into 11/15" - both fully traced via their own dispatch tables (`0x4c8c50`/`0x4c8fe0`,
+updated rows). They're close siblings, confirming and extending an earlier session's partial guess ("the
+height+LOS pairing suggests a pick/validate-a-destination-point goal"):
+
+- Both derive a search radius from the SAME per-tribe "anchor" byte (`tribe+0x36c`) `CONSTRUCT_BUILDING`/task 9
+  also use, versus a `tribe_num`/difficulty-indexed table entry, then roll up to 24 random nearby offsets,
+  validating each via `calc_point_height` (`0x44e940`, already a confirmed name from an earlier session) and a
+  line-of-sight check (`0x518200`) until a usable cell is found.
+- **Task 11** ("send a unit to wander there"): takes a unit directly via its own `param_a` (or, when spawned
+  with `param_a=0` as task 9 does, presumably picks implicitly - the exact fallback wasn't nailed down), sends
+  it to the chosen point, optionally also finds and sends a second "escort" unit nearby.
+- **Task 15** ("post a spare defender there"): the key difference from task 11 - gated by an explicit quota
+  check, `((tribe+0xa33)+(tribe+0xa2d))/2 - 0x4f3ff0(tribe)` (two unidentified per-tribe counts, probably
+  desired vs. trained defenders, minus however many are already posted) - only sends someone if the result is
+  positive. Reads as a genuine "defend base" style behaviour, distinct from task 11's more generic "wander."
+- Both are now the FIFTH confirmed distinct context for person state 14 as a generic "committed to a job, no
+  longer idle" marker (after just-converted, construction-worker, resource-gathering-worker, and now these) -
+  strong enough pattern that `open-populous` can treat it as the engine's universal "pulled out of default
+  behaviour and given something to do" transition, not something needing a dozen special cases.
+- Neither maps cleanly onto a named `ai-scripts.md` `DO` command - both are good candidates for the internal
+  states that doc lists as having "no token" (`GUARD_AT_MARKER`, `BOAT_PATROL`, `DEFEND_SHAMEN`,
+  `SEND_ALL_TO_MARKER`), not confirmed which.
+- 4 new functions.tsv rows for the shared callees (`0x49c890` offset-to-position, `0x518200` LOS check,
+  `0x4f3ef0` cell-blocked check, `0x4f3ff0` committed-defender count) - all still only named, not traced; of
+  these `0x49c890` is the highest remaining value (it's the one piece of "how does a random point actually get
+  picked" not yet understood).
