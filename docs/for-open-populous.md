@@ -21,19 +21,38 @@ independent landmarks (`process_tribe_cmd`/0x43e8e0, the `process_cmd` switch at
 `switchD_00d1138f`), but not exhaustively verified. Low risk, but worth re-confirming against the
 exact pinned build before anything here is treated as final.
 
-## 1. Five new `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x28, 0x29, 0x5f)
+## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED, mostly not actionable
 
-Found this session via `docs/commands.tsv`'s new `ui_cmd` rows (0x10, 0x14, 0x3e/0x3f, 0x40-0x42,
-0x44, 0x49-0x4e, 0x97). Only the QUEUEING side is traced (which `ui_cmd` pushes which opcode with
-which literal args into `set_tribe_command`) - nobody has read `process_tribe_cmd`'s own
-`switchD_0043e922` handler for any of these 7 raw tribe_cmd ids yet, the way existing rows like
-tribe_cmd 0x31/0x76/0x45 were traced end-to-end.
+Update (2026-10-30, later same day): all 7 original handlers (plus a newly-found companion,
+0x20) have now been traced in `docs/commands.tsv`. Net result - **none of this looks like a
+missing player-facing feature**:
 
-**Before writing anything to `open-populous`**: a pop3-rev session should trace these 7 handlers
-in `process_tribe_cmd` first. Only then is it possible to say whether `open-populous` is missing
-a feature (needs a TODO.md entry + spec section) or whether these are more of the same
-debug/cheat-cluster machinery already noted as probably-out-of-scope (see tribe_cmd 0x31's own
-row and section 5 below).
+- **0x14**: calls a 1-byte `ret` stub - a genuine no-op, nothing to port.
+- **0x28 / 0x29**: their predicate helpers (`0x442f40`/`0x443260`) both build a message using
+  template `0x5999ec` via `0x4fffe0` - the EXACT template/helper `ui_cmd 0x51`'s row already ties
+  to the hidden "BYRNE" cheat text-entry overlay. Very likely more of that same cheat subsystem,
+  not a "game speed" setting as `tribe_cmd 0x29`'s own 0-4 threshold byte might otherwise suggest.
+  Matches this file's section 5 prediction.
+- **0x1f / 0x20**: a clean start/stop pair showing a banner via the shared `0x479f00` dispatcher -
+  plausible real feature, but no banner text/trigger was identified, so still unclear if it's
+  worth anything to `open-populous`.
+- **0x15**: a stepper (range 0-4 or 0-32 depending on a flag) that announces the new selection by
+  name via a message table - plausible real feature (e.g. cycling some list), but what's actually
+  being selected wasn't identified.
+- **0x17**: the one genuinely open lead - its callee `0x443520` indexes a 0x34-byte-stride table
+  at `0x5a8ab8` (the list `ui_cmd 0x49-0x4e`'s "select next/previous" cluster cycles through) with
+  a type-tag sub-dispatch not yet read. Worth a dedicated pop3-rev session before concluding
+  anything.
+- **0x5f**: a clean, fully round-tripped per-tribe flag toggle (`tribe_struct+0x93d` bit 0x80,
+  sibling to tribe_cmd 0x41's "all mana" bit 0x8) - functionally simple, but what the flag
+  controls isn't confirmed, so still nothing concrete to port.
+
+**Conclusion for `open-populous`**: nothing here currently warrants a TODO.md entry - the two
+items with the clearest cheat/debug signature (0x28/0x29) are probably skippable the same way
+section 3's UI-state bitmask is, and the remaining ones (0x15/0x17/0x1f/0x20/0x5f) need their
+*purpose* identified (what list, what mode, what flag) before they're spec-ready, not just their
+mechanics. Leaving this section in as a pointer rather than removing it, in case a future session
+resolves `0x443520`'s table and it turns out to be something `open-populous` actually needs.
 
 ## 2. Notification "clear/dismiss all" (ui_cmd 0xb7 / 0xb8)
 
@@ -63,11 +82,10 @@ has a working log of camera/flyby tribe_struct fields - a pop3-rev session shoul
 these globals overlap with anything already found there before this goes anywhere near
 `open-populous`.
 
-## 5. More debug/cheat-cluster candidates (ui_cmd 0x3e/0x3f, 0x40-0x42)
+## 5. More debug/cheat-cluster candidates (ui_cmd 0x3e/0x3f, 0x40-0x42) - partly confirmed
 
-`ui_cmd 0x3e/0x3f` queue tribe_cmd 0x15 (a +1/-1 "cycle" stepper); `ui_cmd 0x40-0x42` queue
-tribe_cmd 0x28/0x29, gated the same way as the existing BYRNE cheat cluster (tribe_cmd
-0x31/0x76/0x45/0x41/0x44/0xc/0x1c - see those rows). Likely more of the same "probably not needed
-for a clean reimplementation" cheat/debug family already flagged in `docs/commands.tsv`, but
-should be traced (section 1) before being written off - if any of these turn out to be a real
-exposed feature rather than a cheat, that changes the answer.
+Resolved by section 1's update: `ui_cmd 0x40-0x42` (-> tribe_cmd 0x28/0x29) are now fairly
+strongly tied to the BYRNE cheat text-entry subsystem (shared message template with `ui_cmd
+0x51`), so likely safe to skip for `open-populous`. `ui_cmd 0x3e/0x3f` (-> tribe_cmd 0x15, the
+stepper) did NOT show the same cheat-template signature - still an open question whether it's a
+real feature, see section 1.
