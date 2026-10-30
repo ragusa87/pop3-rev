@@ -89,3 +89,58 @@ strongly tied to the BYRNE cheat text-entry subsystem (shared message template w
 0x51`), so likely safe to skip for `open-populous`. `ui_cmd 0x3e/0x3f` (-> tribe_cmd 0x15, the
 stepper) did NOT show the same cheat-template signature - still an open question whether it's a
 real feature, see section 1.
+
+## 6. AI-script interpreter (`interpret_script`) vs. `ai-scripts.md` (2026-10-30)
+
+Follow-up to the user's "check how the AI works" question: `open-populous3`'s `docs/specs/ai-scripts.md`
+(community-sourced - PopScript Wiki, the ALACN editor, `popscript-upgrader`'s Lua converter - cross-checked
+against the 58 shipped `cpscrNNN.dat` files) already documents essentially the whole PopScript language and
+its ~200 opcodes. This session read ~30 of `interpret_script`'s (`0x48CC60`, `docs/functions.tsv`) opcode case
+handlers directly in the disassembly to check that community-sourced doc against the real exe. Read-only
+reference clone used for comparison only, at `/home/user/ragusa87/open-populous3` (not written to). Full detail
+is in each opcode's own `functions.tsv` row (`0x48cc94` onward); summary for whoever ports this:
+
+- **Confirms `ai-scripts.md`'s id/parameter tables exactly** for every opcode read: all ~24 `STATE_*` toggles,
+  `ATTACK`'s 13-parameter signature, `SPELL_ATTACK`, the whole marker/base-marker/drum-tower cluster,
+  `SET_SPELL_ENTRY`, `SET_MARKER_ENTRY`/`MARKER_ENTRIES`, `DISABLE/ENABLE_USER_INPUTS`, `NAV_CHECK`,
+  `SET_BUCKET_COUNT_FOR_SPELL`. No corrections to the opcode table itself.
+- **New: the `STATE_*` storage mechanism**, undocumented before (community sources never had the exe). Every
+  plain on/off state (all but `SPELL_DEFENCE`, which takes extra `x z` operands) sets or clears one bit of a
+  single 32-bit flags word at `tribe_struct+0x59a` - bit index = the internal state number the wiki/Lua
+  `CP_AT_TYPE_*` numbering already uses (0 = `CONSTRUCT_BUILDING` ... 23 = `BUILD_OUTER_DEFENCES`). If
+  `open-populous`'s own tribe/AI data doesn't yet have an equivalent per-tribe 24-bit (round up to 32) states
+  field, this is the concrete layout to add one from.
+- **New: `SET_BUCKET_COUNT_FOR_SPELL` resolved.** This is the single highest-use DO command in the entire
+  corpus (1502 uses across 47 files - more than double any other command) but `ai-scripts.md` marks it totally
+  unknown. It's simple: `target_struct[spell_id*4 + 0x53f] = n` (a byte, 4-byte stride, per spell model).
+  Almost certainly what `SET_BUCKET_USAGE` (1172, not traced) gates - the per-spell share of the AI's mana
+  "bucket" spend. Worth a TODO.md entry once `open-populous`'s own mana-economy AI exists: every real script
+  calls this once per spell at setup, so it's load-bearing for matching the original's spell-casting mix, not a
+  minor/debug knob.
+- **New: several "0 uses in the shipped files" opcodes are real, not dead.** `ai-scripts.md` lists
+  `RESET_BASE_MARKER`, `SEND_GHOST_PEOPLE`, `GUARD_AT_MARKER`, `RESET_CONVERT_MARKER` and `SET_CONVERT_MARKER`
+  as 0/0 uses; all five have genuine non-stub handlers in the exe (confirmed NOT the shared "unknown opcode"
+  bailout at `0x48e763`), unlike the opcodes that really are absent (`STATE_SHAMAN_DEFEND`, the `SPARE*`/
+  `ATTACK_BLUE/RED/YELLOW/GREEN` block, which DO hit that bailout). These are genuine unused features worth
+  modelling if/when `open-populous` builds out the rest of PopScript, not opcodes to skip as dead.
+- **New: `ai-scripts.md`'s open item, "what `SET_ATTACK_VARIABLE` receives," has a lead but isn't resolved.**
+  `ATTACK` itself (`0x48cd07` -> `0x48fc50`) was traced in full down to the call into `0x4e5fd0`; the other 12
+  ATTACK parameters' exact mapping onto the task record wasn't decoded, so this is still open.
+- **Biggest finding: PopScript's `ATTACK` and the computer player's own autonomous AI are the SAME mechanism,
+  not two parallel systems.** `0x4e5fd0` (ATTACK's real worker, reached via `0x48fc50`) turned out to already
+  be catalogued, from an earlier unrelated session, as one of ~21 small "AI goal evaluator" functions
+  (`0x462790`'s row) that the native AI's own "decide on a new goal" tick (`0x4625E0`, fires ~1/64 turns per
+  tribe) calls to conditionally enqueue a task into one of the tribe's 10 round-robin AI task slots. Tracing
+  `0x4e5fd0` this session found it ends by enqueueing task type `0x14` (20) - which is EXACTLY task id 20 of
+  `maybe_ai_func_1`'s (`0x4623E0`) per-turn task dispatcher, whose handler `0x4CB400` was independently traced
+  in yet another earlier session as "a per-tribe-person sweep issuing ordinary attack orders." So: a script's
+  `DO ATTACK` doesn't bypass the native AI or duplicate its logic - it just manually fires one of the same
+  internal "should I attack" evaluator functions the AI's own goal-picking tick calls on its own, which
+  enqueues into the exact same task queue, executed by the exact same per-person sweep that would also run for
+  an autonomously-decided attack. **For `open-populous`**: if/when the native computer-player AI and PopScript
+  are both implemented, this says they should share one task-queue data structure and one "give this tribe an
+  attack order" function, with PopScript's `ATTACK` command and the AI's autonomous attack-goal check being two
+  different CALLERS of that one function - not two separate attack-order code paths that both need maintaining.
+  This matches `ai-scripts.md`'s own "What this means here" section, which already recommends keeping AI
+  behaviours as plain simulation data a script sets - this extends that to "and the native AI reads/writes the
+  same data/queue a script would."
