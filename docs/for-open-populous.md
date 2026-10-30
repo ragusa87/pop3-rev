@@ -290,5 +290,30 @@ own dispatch table at `0x4c7348`). Confirms the user's intuition exactly, with c
 7. **Abandon/cleanup** (state 9): releases the task slot via the same generic pair every task handler uses.
 
 Remaining open threads for a future session: `0x4f7aa0` (the actual site-search algorithm - highest value),
-`0x4f5d20`/`0x4f8490` (worker selection criteria), and 8 more untraced task-type handlers (ids 1,3,4,6,7,8,9,11
-all still only "named," not traced) if the same depth is wanted for fetch-wood/train/defend/etc.
+`0x4f5d20`/`0x4f8490` (worker selection criteria), and 7 more untraced task-type handlers (ids 3,4,6,7,8,9,11
+all still only "named," not traced) if the same depth is wanted for train/defend/etc.
+
+### 6d. Follow-up (2026-10-30, same day): task type 1 (resource-gathering, likely FETCH_WOOD) traced
+
+Continuing "keep digging each task" - traced task type 1's handler (`0x4c7a60`, updated row) in full via its
+own 10-state dispatch table. This is the task `CONSTRUCT_BUILDING`'s own monitor loop spawns as a side effect
+(see 6c) once its internal "need" counter passes 200 - matching `CONTEXT.md`'s documented "fetch wood -> build
+up" pipeline closely enough that FETCH_WOOD is the leading candidate, though not textually confirmed (no direct
+reference to wood/lumber data found, just the triggering context and shape).
+
+- Searches for up to 2 workers (hard cap, `+0xb < 2`) to send to a target: a fresh idle candidate via one
+  finder (`0x4f7dc0`), or - if none available - BORROWS an occupant from a nearby building whose own
+  stock/pieces count (`+0x9a`) exceeds 2, walking up to 20 of its worker-list entries (`+0x6a`). Either way,
+  the chosen unit is forced into person state 14, the SAME transition `CONSTRUCT_BUILDING`'s own worker-assign
+  step uses - third confirmed context for that state (just-converted, construction-assigned, resource-task-
+  assigned), reinforcing that it's a generic "committed to a job, no longer idle" marker rather than literally
+  meaning idle.
+- `0x4f7dc0`'s argument shape (`tribe, 2, 2, -1, 1, model, 0x20`) matches `CONSTRUCT_BUILDING`'s own
+  `0x4f8490`'s leading arguments (`tribe, 2, 2, -1, 1, ...`) closely enough that both are very likely thin
+  wrappers around one shared "find N eligible workers near X" primitive - a good `open-populous` implication:
+  implement this as one parameterised worker-finder, not per-task duplicate logic.
+- Finishing (states 8/9, near-duplicate code) recomputes the exact snapped target position and broadcasts TWO
+  notifications (categories 3 and 9) plus the same "commit/refocus" trio seen in two other tasks now
+  (`0x4f6440`/`0x4359b0(-1,-1,-1)`/`0x418ce0(tribe,0xe)`) - this 3-call tail is now confirmed used by at least 3
+  different task types (5, 0, 1), clearly a generic "I'm done with/moving on from this target" primitive worth
+  implementing once and reusing, not per-task.
