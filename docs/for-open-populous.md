@@ -293,6 +293,106 @@ Remaining open threads for a future session: `0x4f7aa0` (the actual site-search 
 `0x4f5d20`/`0x4f8490` (worker selection criteria), and 7 more untraced task-type handlers (ids 3,4,6,7,8,9,11
 all still only "named," not traced) if the same depth is wanted for train/defend/etc.
 
+## 7. Angel of Death spell - full cast-to-expiry behaviour (2026-10-30)
+
+This section WAS also written directly into `open-populous/docs/specs/pop3-rev-analysis.md` (the "Angel of Death
+mechanics" section) and `open-populous/TODO.md` this session, since that repo happened to be attached - but
+those edits are sitting uncommitted in that repo's own working tree (AGENTS.md: no commits in `open-populous`),
+so nothing durable exists yet if that container is ever reset before a human commits them by hand. This section
+is the safety copy, written the way the user actually wants it read: as a plain description of the BEHAVIOUR a
+clean-room implementation needs to reproduce, not a dump of exe addresses. The exe references are kept to a
+short parenthetical per paragraph for anyone who wants to re-verify a claim - `functions.tsv`/`person_states.tsv`/
+`effect_states.csv`/`sound.tsv` carry every address, offset and byte-level detail this write-up deliberately
+leaves out.
+
+**What casting it actually looks like.** Nothing happens on screen the instant the spell is cast - two sounds
+play, nothing is drawn. A short time later, something falls from the sky toward the target point. That falling
+object has **no shape of its own** - it is invisible - but it's trailed by a scatter of small glowing sparks, so
+what the player actually sees is a loose shower of embers dropping out of the sky, not a solid meteor. The
+instant that invisible object reaches the ground, the ground itself visibly reacts: a ring expands outward from
+the impact point, lifting the terrain as it passes and settling it back down behind it, over about three-quarters
+of a second, with an impact sound. This is a real, physical height change to the landscape, not a decal or a
+particle effect laid over flat ground - **it is mechanically the same idea as a drop hitting the surface of
+water, just implemented as an actual terrain ripple and shown on dry land.** Only after that ripple finishes does
+the real creature appear, and its own appearance comes with a second, separate burst: a small shower of debris
+(as if something nearby shattered) and a genuine damaging blast at the landing point, identical in strength and
+push to the ordinary Blast spell. So the full sequence a player sees is: two sounds, falling sparks, a ground
+ripple with an impact sound, then the creature appears already flying, accompanied by its own debris-and-blast
+flourish. (exe refs: `effect_aod` 0x5121C0/0x512240, meteor 0x50A3E2/0x514F60, ground ripple 0x514970/0x5149F0,
+`create_aod` 0x4DD700 - `functions.tsv`.)
+
+**What kind of thing it is.** The Angel of Death is a new kind of person-like unit, distinct from the seven
+ordinary ones (shaman, brave, warrior, preacher, spy, firewarrior, wildman). It belongs to the tribe that cast
+it, but the player never controls it directly: nothing in the exe lets it be clicked, boxed, or given an order,
+and it never enters a building. It is airborne for its entire existence - there is no code path anywhere that
+lets it touch down, so "never lands" is a flat guarantee, not just a design intention. From the moment it
+appears, it runs on its own built-in behaviour, independent of the normal player-order system entirely.
+
+**How it hunts.** Every time it needs a new target, it first checks for a nearby ENEMY Angel of Death anywhere on
+the map - if one exists, that becomes the target, overriding anything else it might otherwise go after. Only if
+no rival angel is around does it fall back to looking for an ordinary enemy, and when it does, there is no
+protection for anyone: it can target a shaman exactly like any other follower, something no other attacker in the
+game can do (shamans are normally a protected target type). The one thing it explicitly leaves alone is a person
+who is mid-way through being converted by a preacher.
+
+**Fighting an ordinary target.** Once it locks onto a victim, it closes the distance and keeps a little more
+space if that victim happens to be inside a tower than if they're out in the open, then moves in to grab them.
+Grabbing a victim who is inside ANY building pulls them out of it first, the same way an ordinary melee attacker
+would. Once grabbed, the victim is completely immobilised - they do not act on their own at all, they are simply
+carried wherever the angel flies. The carry itself lasts a fixed stretch of time (about two and a half seconds),
+during which the angel visibly climbs and weaves rather than flying in a straight line. Near the end of that
+carry, the angel throws the victim forward, in the direction the VICTIM was already facing, and the victim then
+falls and dies exactly the way anyone falling from a height dies in this game - **there is no special killing
+blow belonging to the angel itself; the fall is what kills, through the same mechanism Whirlwind's own lifted
+victims die from.** No sprite exists for "being held in the angel's mouth or claws" - the victim most likely just
+keeps whatever pose they already had while being dragged along, rather than switching to a dedicated carried
+pose. (exe refs: person state 28/0x4DB980, the carry/release step 0x4E0A30, the held-victim state 40/0x4E0760 +
+0x4E05E0 - `person_states.tsv` rows 28 and 40.)
+
+**Fighting another Angel of Death.** This is NOT a choreographed duel - there's no grappling, no distinct
+attack animation, no circling. It's a straightforward, repeated exchange where each angel's current health is
+compared, the healthier one deals damage to the weaker one (scaled so the stronger side snowballs toward
+winning), and the loser gets shoved backward hard, staggering for a while before it can re-engage. Visually this
+should read as the two creatures repeatedly colliding and bouncing off each other violently, with the losing one
+getting knocked further and further away each time, rather than two creatures trading scripted blows. (exe ref:
+`0x4E0830` - `functions.tsv`.)
+
+**Affecting bystanders.** Completely independent of whichever target it's actively hunting, the angel also
+frightens anyone else nearby just by being close to them: every tick, anyone within a modest radius who is
+eligible (ordinary followers, not shamans and not another angel) gets forced into a panicked run, the same panic
+state Insect Plague's own sting causes. So even people it is never going to grab can be seen fleeing simply
+because the angel flew near them. (exe ref: `0x4DB5E0` - `functions.tsv`.)
+
+**What it's immune to.** It shrugs off most things a player might try against it. A firewarrior's ranged shot
+still hurts it, but only for a small fraction of the damage it would do to an ordinary follower - noticeably
+weaker, not harmless. Whirlwind cannot lift it the way it lifts everyone else. Other spells' exemption rules for
+it were not individually re-verified this session, but existing documentation already lists it alongside shamans
+as excluded from Lightning's kill, Insect Plague's sting, Hypnotism's capture and Magical Shield's own
+protection-granting list - i.e. the pattern across the game is consistently "shamans and angels are both
+untouchable by ordinary spell effects," with the firewarrior's partial damage being the one confirmed exception.
+
+**What was looked for but not found.** No dedicated fire-breath attack exists anywhere in its behaviour - the
+"breathes fire" impression most likely comes from the one-off blast that happens when it first appears, not an
+ongoing attack. No code was found that lets it pull a building's remaining occupants out one by one the way it
+grabs a lone victim in the open, nor any rule that spares specific building types (the user has reported prison
+and totem/pyramid buildings as safe from it, but no such exception was located in what was read this session -
+it may simply not attack buildings as objects at all, only the people standing near them). Nothing was found that
+lets it grab someone riding inside a boat or balloon. And the exact mechanism that eventually ends its life - it
+is documented elsewhere as lasting at most 2500 turns or 40 kills, whichever comes first - was not pinned down in
+code; the leading guess is that each kill costs it some of its own health rather than a literal counter, but this
+is unconfirmed.
+
+**What this means for implementing it.** A new, player-uncontrollable flying unit kind that is spawned by a
+multi-stage cast effect (an invisible falling object, a real terrain-ripple impact, then the creature itself with
+its own small blast), runs its own built-in AI loop instead of going through the normal order system, can never
+land or be selected, grabs and carries a single victim at a time before releasing it to die by ordinary fall
+physics, fights a rival angel through a pure health-comparison-and-knockback exchange rather than a scripted
+fight, and should be exempted from the same "shaman-and-angel-proof" spell-damage list every other immune-type
+exemption in the game already uses, with one partial exception for firewarrior fire. The open questions above
+(building exclusions, vehicle grabbing, the literal expiry counter, exact sprite frame count) are implementation
+details that can reasonably be decided by our own judgement if a future session doesn't resolve them first -
+nothing about them is load-bearing for the spell reading correctly in play.
+
 ### 6d. Follow-up (2026-10-30, same day): task type 1 (resource-gathering, likely FETCH_WOOD) traced
 
 Continuing "keep digging each task" - traced task type 1's handler (`0x4c7a60`, updated row) in full via its
