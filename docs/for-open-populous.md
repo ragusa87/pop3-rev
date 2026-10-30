@@ -364,3 +364,19 @@ height+LOS pairing suggests a pick/validate-a-destination-point goal"):
   `0x4f3ef0` cell-blocked check, `0x4f3ff0` committed-defender count) - all still only named, not traced; of
   these `0x49c890` is the highest remaining value (it's the one piece of "how does a random point actually get
   picked" not yet understood).
+
+### 6g. Follow-up (2026-10-30, same day): sweeping the remaining task types, starting with TRAIN_PEOPLE
+
+Per the user's request to keep digging each task type and commit per task. **Task 26 (`0x4cf4c0`) is
+TRAIN_PEOPLE**, correcting an earlier session's "48 bytes, no calls, coded no-op" read - that 48 bytes was only
+the entry dispatcher; the real 7-entry switch table points to state bodies laid out separately (a Ghidra
+function-boundary gotcha already seen for several other tasks, worth remembering before writing off any small
+task handler as a no-op without checking its own switch table for out-of-bounds targets).
+
+Confirms `ai-scripts.md`'s `INT_ATTR_PREF_*_PEOPLE` attributes directly: computes 5 per-type training quotas as
+literal percentages (`byte * budget / 100`) of a training-capacity budget, trims them fairly if capacity falls
+short, then assigns braves to the right training building (building-type constants `2,3,6,4,5` for the 5 unit
+types, `docs/unit_types` would pin down which is which) via the same worker-finder (`0x4f8490`) `CONSTRUCT_BUILDING`
+uses, plus a separate path specifically for training the shaman. Loops until the whole quota is filled across
+possibly several ticks. 4 new functions.tsv rows for its callees (target-resolve, capacity-read, two validity
+checks), all still named not traced.
