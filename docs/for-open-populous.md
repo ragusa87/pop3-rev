@@ -258,3 +258,37 @@ the exact same priority order**, trying each until one does something:
 - Two more per-tribe arrays zeroed at init but not yet identified: `tribe+0x476` (10 entries × 8 bytes) and
   `tribe+0x4ce` (8 entries × 12 bytes) - good candidates for `SET_MARKER_ENTRY`'s and `SET_SPELL_ENTRY`'s own
   storage respectively (slot counts/record sizes line up plausibly), not confirmed.
+
+### 6c. Follow-up (2026-10-30, same day): CONSTRUCT_BUILDING traced end to end
+
+Per the user's follow-up ("construct building should look for a spot, assign braves etc") - fully traced task
+type 0's handler (`0x4c6da0`, updated row - was a stub, now the full 10-state lifecycle read directly from its
+own dispatch table at `0x4c7348`). Confirms the user's intuition exactly, with concrete mechanism:
+
+1. **Pick siting parameters by building model** (state 0): facing (a difficulty-table byte or random 0-3,
+   matching `INT_ATTR_RANDOM_BUILD_SIDE`), search radius and retry budget - model 4 and models 13-14 get their
+   own special-cased radius/retries, everything else gets a default (radius 2000 cells, 40 retries).
+2. **Look for a spot** (states 0/2): calls a dedicated spot-finder (`0x4f7aa0`, not traced further - the next
+   natural target if `open-populous` wants the exact placement algorithm) in a retry loop until it reports
+   found or failed.
+3. **(model 4 only) resolve a shared anchor** (state 3): a one-time-per-tribe reference position cached from
+   whatever's already at the target cell.
+4. **Assign braves** (state 5): finds and claims available workers near the site (`0x4f5d20`+`0x4f8490`, not
+   traced further), forcing each one into person state 14 ("committed to this job" - a second, non-idle use of
+   that state beyond the "just converted" one found last session, worth a `person_states.tsv` update if a
+   future session nails down the distinction precisely).
+5. **Commit to the site** (state 7): re-verifies the target is still valid, then runs the exact same 4-call
+   "broadcast/refocus" sequence (notification, marker-clear, a `0x418ce0` call) task 5's handler also uses -
+   confirmed as a genuinely shared, reusable "I'm committing to this target" primitive across task types.
+6. **Ongoing staffing monitor** (state 8): the task's steady state for the rest of construction - keeps
+   checking build progress and worker headcount, topping up as needed. **Side finding**: this state also calls
+   `0x4f6320` - literally task type 1's OWN top-level evaluator function (`0x462790`'s "~21 evaluators" list) -
+   as a plain subroutine, and can independently spawn a brand-new task type 1 once an internal counter exceeds
+   200. **Concrete proof this AI is built from reused primitives cross-calling each other, not a clean
+   hierarchy** - worth keeping in mind for `open-populous`'s own AI architecture: don't assume each task type
+   is only ever triggered from one place.
+7. **Abandon/cleanup** (state 9): releases the task slot via the same generic pair every task handler uses.
+
+Remaining open threads for a future session: `0x4f7aa0` (the actual site-search algorithm - highest value),
+`0x4f5d20`/`0x4f8490` (worker selection criteria), and 8 more untraced task-type handlers (ids 1,3,4,6,7,8,9,11
+all still only "named," not traced) if the same depth is wanted for fetch-wood/train/defend/etc.
