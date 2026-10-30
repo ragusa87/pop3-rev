@@ -92,6 +92,18 @@ real feature, see section 1.
 
 ## 6. AI-script interpreter (`interpret_script`) vs. `ai-scripts.md` (2026-10-30)
 
+**Status (2026-10-30, later session): ported into `open-populous`, not yet trimmed here.** `open-populous` was
+attached in that later session, so this whole section (6 through 6h) was written up as plain-prose findings
+directly into `open-populous/docs/specs/pop3-rev-analysis.md` (new section "Native AI: how a computer-controlled
+tribe actually decides what to do") and `open-populous/TODO.md`, and two concrete errors in
+`open-populous/docs/specs/ai-scripts.md` were corrected there (the `EVERY n m` timing formula was missing the
+confirmed per-tribe phase; `GIVE_UP_AND_SULK` was mischaracterised as "everyone guards the shaman" when the exe
+shows it sets a generic force-success flag instead). **Those edits are sitting UNCOMMITTED in `open-populous`'s
+own working tree** (AGENTS.md: no commits there) - this section is deliberately being LEFT IN PLACE, not trimmed
+per this file's own usual "port then trim" rule, until a human has actually committed them on the `open-populous`
+side; trim it at that point, not before, so this detailed byte-level version stays the only durable copy in the
+meantime.
+
 Follow-up to the user's "check how the AI works" question: `open-populous3`'s `docs/specs/ai-scripts.md`
 (community-sourced - PopScript Wiki, the ALACN editor, `popscript-upgrader`'s Lua converter - cross-checked
 against the 58 shipped `cpscrNNN.dat` files) already documents essentially the whole PopScript language and
