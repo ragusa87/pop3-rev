@@ -230,12 +230,26 @@ the exact same priority order**, trying each until one does something:
   called from two not-yet-identified sites (`process_flatten_land`/`0x50cabe` - surprising name for this, and
   `FUN_00512350`/`0x51256c`) - worth checking if either is a different mechanic that also creates "just
   converted" units and would likewise feed this cleanup category.
-- **So the user's actual observed behaviour is still unexplained** - it isn't task 5, and none of this
-  session's traced categories (position 0 "build", position 11 "integrate converts") are it either. Next place
-  to look: the 9 remaining untraced priority-template positions (1-10, category ids 0,3,4,5,6,7,8,9,2,0xb -
-  `0x59d878`'s row has all 11 remaining function addresses) or the `INT_ATTR_RETREAT_VALUE`/
-  `INT_ATTR_BASE_UNDER_ATTACK_RETREAT` attributes (`ai-scripts.md`'s own attribute table, both still "?") -
-  neither was reached this session.
+- **Checked the rest of the priority list and found the real answer: it's architectural, not a missing
+  function.** Read 7 more of the 12 priority categories this session (`0x59d878`'s row now has task-type
+  mappings for 8 of the 12 positions) - position 9 turned out to be "find a defensive tower that needs
+  (re)garrisoning, preferably with firewarriors" (`0x4e5bf0`/`0x4f5f70`, new rows), not combat-related either.
+  **Across all 12 top-level priority categories AND all ~21 goal-sub-evaluators checked this session, NONE of
+  them enqueue the ATTACK task (type 20) except `ATTACK`'s own PopScript opcode handler (`0x4e5fd0`).** This
+  means **the native computer-player AI never autonomously decides to attack - `DO ATTACK` from a tribe's own
+  script is the ONLY way an attack is ever queued.**
+- **Resolves the user's question, with a hypothesis in place of a direct trace**: since the engine itself has
+  no "attack when losing" code path at all, the "tribe nearly wiped out -> send everyone to attack" behaviour
+  the user described almost certainly lives in INDIVIDUAL LEVEL SCRIPTS, not the engine - e.g. an
+  `IF (INT_MY_NUM_PEOPLE < N) { DO ATTACK ... 999(to-the-death) ... }` inside an `EVERY` block, both valid
+  PopScript per `ai-scripts.md`'s own grammar. That would also explain the user's own observed "with a few
+  edge cases for vehicles" - level-script variation, not a single hardcoded engine rule, is exactly the kind of
+  thing that would differ script to script. **Not independently confirmed**: no `cpscrNNN.dat`/level data was
+  available in this session to find a literal example - a future session with the actual level files (or
+  `open-populous3`'s own `pop3-ai-script` crate run against one) could decompile a likely late-game/
+  losing-condition script and check directly. For `open-populous`: this means a native "desperation attack"
+  AI behaviour should NOT be hardcoded into the engine - if it's needed, it's script data, the same place every
+  other scripted `ATTACK` call already lives.
 - Smaller bonus find in `0x461d70`: pinned down where the raw `cpscrNNN.dat` bytecode actually lives once
   loaded - a flat 4×12552-byte buffer at `0x95f7b2` (one slot per tribe_num), pointed to by a 4-entry table at
   `0x9608b2`. Also found a tiny synthetic "empty script" (`{ } SCRIPT_END`, 6 bytes) written per tribe_num near
