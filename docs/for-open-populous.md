@@ -189,3 +189,51 @@ the user described.
   behaviour, including combat) is confirmed by this session's findings; the specific "desperate last stand"
   behaviour needs a dedicated future session tracing the untraced task ids (0x462568's dispatch table, one row
   per id) or `0x41ca10` (`GIVE_UP_AND_SULK`'s own callee) to pin down.**
+
+### 6b. Follow-up (2026-10-30, same day): the AI's actual priority list found; last-resort mechanism traced
+
+Found the structure answering "what order does the AI try things in." The per-tribe AI init function
+(`0x461d70`, called from `clear_tribe` when a tribe is set computer-controlled - new row) copies a **fixed
+240-byte TEMPLATE from a global at `0x59d878`** into every computer tribe's own 12-entry goal-category table
+(`tribe+0x36e`, the table `0x4625E0`'s "decide a new goal" tick loops over). Dumped that template in full
+(`0x59d878`'s own `functions.tsv` row) - **every computer tribe runs through the exact same 12 categories in
+the exact same priority order**, trying each until one does something:
+
+- **Position 0 (tried first, every tick): "construct essential buildings"** (`0x4e5580`, category id 1) -
+  confirms `ai-scripts.md`'s `STATE_CONSTRUCT_BUILDING` really is the AI's top automatic priority, not just a
+  switch with no special precedence. Gated by per-tribe-num/difficulty threshold bytes, it checks several
+  building types (literal ids 4/13/15 plus a data-driven list) against how many it already has, and enqueues a
+  now-confirmed **generic, parameterised "build a building of model N" task (task type 0)** for whichever is
+  short. Nice `open-populous` implication: task type 0 isn't "build a hut" specifically, it's "build model N" -
+  one task type, many building models, matching a config-driven building-priority list rather than hardcoded
+  per-building logic.
+- **Position 11 (tried LAST, only if all 10 others declined): the AI's one last-resort category** (`0x4e58b0`,
+  category id 0xa) - gated by a single condition (`0x4f5f40`, own row): walk every person in the tribe
+  (`tribe+0x881`'s list) and check whether ANY of them has bit `0x40000` set in their own `+0x10` flags field.
+  If so, fires task type 5 - a task otherwise **unreachable from anywhere else in the entire AI** (checked
+  across all 20 other goal-evaluator functions this session catalogued).
+- **Task 5's handler** (`0x4c8070`, updated row - was a stub from an earlier session, fully traced now): sweeps
+  every flagged person, clears the flag, and forces each one into **person state 14** ("idle/fidget" per
+  `person_states.tsv`, though that row itself already flags ambiguity - `0x434610` separately ties state 0xE to
+  "just finished entering a building"). Then does tribe-wide follow-up: clears marker targets (`-1,-1,-1`, the
+  same convention `ATTACK`'s own unused markers use), something notification-shaped (`0x435730`, args resemble
+  the `0x44d7f0` category-based notification system), and writes a likely cooldown (`tribe+0x5b1 = 20`).
+- **Verdict on the user's "tribe nearly wiped out -> all units attack" hypothesis: structurally very plausible
+  (lowest priority, population-wide, triggered by a per-unit flag, exactly the shape a "desperation" mechanic
+  would have), but NOT confirmed** - state 14 being "idle" rather than a combat/rally state cuts against the
+  literal "send everyone to attack" reading. Two live possibilities: (a) the `+0x10` bit `0x40000` flag doesn't
+  mean "in danger" at all - it could mean "this person's fight just ended, reset them" (a mundane post-combat
+  cleanup sweep, which would also explain why it's checked dead last: there's always something more productive
+  to do first unless literally nothing else is happening); or (b) it does mean something distress-related and
+  state 14 has a not-yet-understood second meaning in this context. **To settle it**: find what sets `+0x10`
+  bit `0x40000` on a person (not located this session - likely in combat/death code) and re-examine `0x435730`/
+  `0x418ce0`/`0x4359b0` (task 5's other, untraced calls) for anything that looks like a group `order_set`/
+  `group_alloc` call (the pattern `0x4CB400`'s ATTACK sweep uses) rather than pure notification/bookkeeping.
+- Smaller bonus find in `0x461d70`: pinned down where the raw `cpscrNNN.dat` bytecode actually lives once
+  loaded - a flat 4×12552-byte buffer at `0x95f7b2` (one slot per tribe_num), pointed to by a 4-entry table at
+  `0x9608b2`. Also found a tiny synthetic "empty script" (`{ } SCRIPT_END`, 6 bytes) written per tribe_num near
+  `0x95d7b4` - likely what a computer tribe with no real script assigned runs, one level more primitive than
+  the on-disk 34-word stub scripts `ai-scripts.md` already documents for multiplayer levels.
+- Two more per-tribe arrays zeroed at init but not yet identified: `tribe+0x476` (10 entries × 8 bytes) and
+  `tribe+0x4ce` (8 entries × 12 bytes) - good candidates for `SET_MARKER_ENTRY`'s and `SET_SPELL_ENTRY`'s own
+  storage respectively (slot counts/record sizes line up plausibly), not confirmed.
