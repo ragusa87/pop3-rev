@@ -144,3 +144,48 @@ is in each opcode's own `functions.tsv` row (`0x48cc94` onward); summary for who
   This matches `ai-scripts.md`'s own "What this means here" section, which already recommends keeping AI
   behaviours as plain simulation data a script sets - this extends that to "and the native AI reads/writes the
   same data/queue a script would."
+
+### 6a. Follow-up (2026-10-30, same day): EVERY's exact timing resolved; task-queue architecture mapped
+
+Direct answer to the user's architecture question ("the script gives direction, the engine has its own
+build/train/convert logic and decides combat") - **confirmed by the exe**: PopScript runs through two layers.
+`interpret_script_upper` (`0x48c730`, new row) is the statement-level interpreter (`IF`/`EVERY`/`SET`/etc.);
+it calls `interpret_script` (`0x48CC60`) only for `DO` commands, which in turn either write directly into the
+tribe's own flags/attributes/tables (`STATE_*` bits, `SET_BUCKET_COUNT_FOR_SPELL`, `SET_SPELL_ENTRY`, marker
+records - all queued from section 6 above) or - for `ATTACK` specifically - plug into the SAME native
+per-tribe task-queue the autonomous AI tick (`process_tribe_2`/`0x461662` -> `maybe_ai_func_1`/`0x4623E0`,
+10 round-robin task slots per tribe) uses for its own decisions. That queue, its ~24 task types, and the
+engine's own economy logic (build/house/train/convert, the `STATE_*` flags presumably gate) are what actually
+drives the AI turn to turn - the script mostly configures it rather than running it directly, exactly the split
+the user described.
+
+- **`EVERY n [m]`'s exact formula, settling an open item in `ai-scripts.md`/`open-populous` `TODO.md` ("the
+  EVERY off-by-one and whether there is a per-tribe phase")**: confirmed as `(turn + tribe_num + m) % n == 0`
+  (as a bitwise AND against the stored `n-1` mask, see `0x48c730`'s row for the exact mechanism), where
+  `tribe_num` is a real per-tribe-struct byte (`tribe_struct+0xc22`, `backup.xml`'s own name) - **the original
+  exe DOES add a per-tribe phase**, the same way `ai-scripts.md` only knew the Reincarnated Lua converter to
+  do. Safe to port this exact formula when implementing `EVERY` timing.
+- **Task-queue architecture, mapped but not fully decoded**: all 20 of the native AI's ~21 "goal evaluator"
+  functions (each a potential entry of a 12-slot-per-tribe prioritized dispatch at `tribe+0x36e`, called from
+  `0x4625E0`'s "decide a new goal" tick) were matched to the literal task-type id each one enqueues - table in
+  `0x462790`'s (`set_sub_struct`) `functions.tsv` row. Only 2 of ~24 task ids have a traced HANDLER (what
+  actually happens once dispatched): id 20 = the attack sweep (`0x4CB400`, shared with PopScript's own
+  `ATTACK`), id 9 = a lightweight reschedule/no-op-ish task (`0x4C5CF0`). The other ~13 confirmed-real ids
+  (0,1,4,6,7,8,11,14,24-28) are unidentified - this is where "convert wildmen first, then build houses, etc."
+  and any population-triggered behaviour would live, but none of it is traced yet.
+- **Checked specifically for the user's "tribe nearly wiped out -> send everyone to attack" claim - not
+  confirmed, no counter-evidence either.** None of the 20 evaluators were found pushing task id 20 (the known
+  attack task) except `ATTACK`'s own script-side evaluator (`0x4e5fd0`) - so if this behaviour exists, it's
+  either one of the ~13 untraced task ids (most likely one of the higher, less-common ones, 24-28, found only
+  this session and not yet in any doc), or it lives in code this session didn't reach at all (the per-evaluator
+  CONDITIONS, which appear to live in the 12-entry table's own callers/setup rather than inside the evaluator
+  functions themselves - only one evaluator, `0x4e6440`, was read in full, and it was unconditional). Also
+  checked `GIVE_UP_AND_SULK` (1221, the one scripted "give up" command) as the closest documented analogue:
+  **corrects `ai-scripts.md`'s "everyone guards the shaman" framing** - it actually sets a generic tribe
+  "force success" flag (`tribe_struct+0x941` bit `0x40`) ALSO used elsewhere to force preacher-conversion rolls
+  (`0x4D83B0`'s row) and other level-script-forced outcomes (`0x41CC20`) - broader than a self-contained
+  retreat routine, and still framed as giving up/defensive, not an all-out attack. **Net: the user's general
+  model (script sets goals, engine's own continuous tick runs the economy and decides moment-to-moment
+  behaviour, including combat) is confirmed by this session's findings; the specific "desperate last stand"
+  behaviour needs a dedicated future session tracing the untraced task ids (0x462568's dispatch table, one row
+  per id) or `0x41ca10` (`GIVE_UP_AND_SULK`'s own callee) to pin down.**
