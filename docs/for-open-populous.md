@@ -218,17 +218,24 @@ the exact same priority order**, trying each until one does something:
   "just finished entering a building"). Then does tribe-wide follow-up: clears marker targets (`-1,-1,-1`, the
   same convention `ATTACK`'s own unused markers use), something notification-shaped (`0x435730`, args resemble
   the `0x44d7f0` category-based notification system), and writes a likely cooldown (`tribe+0x5b1 = 20`).
-- **Verdict on the user's "tribe nearly wiped out -> all units attack" hypothesis: structurally very plausible
-  (lowest priority, population-wide, triggered by a per-unit flag, exactly the shape a "desperation" mechanic
-  would have), but NOT confirmed** - state 14 being "idle" rather than a combat/rally state cuts against the
-  literal "send everyone to attack" reading. Two live possibilities: (a) the `+0x10` bit `0x40000` flag doesn't
-  mean "in danger" at all - it could mean "this person's fight just ended, reset them" (a mundane post-combat
-  cleanup sweep, which would also explain why it's checked dead last: there's always something more productive
-  to do first unless literally nothing else is happening); or (b) it does mean something distress-related and
-  state 14 has a not-yet-understood second meaning in this context. **To settle it**: find what sets `+0x10`
-  bit `0x40000` on a person (not located this session - likely in combat/death code) and re-examine `0x435730`/
-  `0x418ce0`/`0x4359b0` (task 5's other, untraced calls) for anything that looks like a group `order_set`/
-  `group_alloc` call (the pattern `0x4CB400`'s ATTACK sweep uses) rather than pure notification/bookkeeping.
+- **Verdict on the user's "tribe nearly wiped out -> all units attack" hypothesis: settled, and it's not this.**
+  Found what actually sets the `+0x10` bit `0x40000` flag `0x4f5f40` scans for: it's the exact same **"just
+  converted" flag `0x4D83B0`'s own row already documents** on the preacher-conversion success path ("sets two
+  'just converted' flags on the new unit, `+0x10` bit `0x40000`, `+0x14` bit `0x1000000`") - confirmed by
+  matching disassembly byte for byte. So this whole last-resort category is the AI's **"integrate freshly
+  converted/replaced followers" cleanup sweep** (reset them to idle, state 14, clear stale markers, notify,
+  set a cooldown) - not a population-crisis attack trigger at all. It makes sense as the AI's lowest priority:
+  processing new recruits is housekeeping that should never preempt building/attacking/defending. Also found a
+  SECOND place that sets the same flag, a standalone "kill old unit, allocate replacement" helper (`0x4d7fd0`)
+  called from two not-yet-identified sites (`process_flatten_land`/`0x50cabe` - surprising name for this, and
+  `FUN_00512350`/`0x51256c`) - worth checking if either is a different mechanic that also creates "just
+  converted" units and would likewise feed this cleanup category.
+- **So the user's actual observed behaviour is still unexplained** - it isn't task 5, and none of this
+  session's traced categories (position 0 "build", position 11 "integrate converts") are it either. Next place
+  to look: the 9 remaining untraced priority-template positions (1-10, category ids 0,3,4,5,6,7,8,9,2,0xb -
+  `0x59d878`'s row has all 11 remaining function addresses) or the `INT_ATTR_RETREAT_VALUE`/
+  `INT_ATTR_BASE_UNDER_ATTACK_RETREAT` attributes (`ai-scripts.md`'s own attribute table, both still "?") -
+  neither was reached this session.
 - Smaller bonus find in `0x461d70`: pinned down where the raw `cpscrNNN.dat` bytecode actually lives once
   loaded - a flat 4×12552-byte buffer at `0x95f7b2` (one slot per tribe_num), pointed to by a 4-entry table at
   `0x9608b2`. Also found a tiny synthetic "empty script" (`{ } SCRIPT_END`, 6 bytes) written per tribe_num near
