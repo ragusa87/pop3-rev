@@ -380,3 +380,66 @@ types, `docs/unit_types` would pin down which is which) via the same worker-find
 uses, plus a separate path specifically for training the shaman. Loops until the whole quota is filled across
 possibly several ticks. 4 new functions.tsv rows for its callees (target-resolve, capacity-read, two validity
 checks), all still named not traced.
+
+### 6h. The full AI task sweep and two key helpers (2026-10-30, continuing session)
+
+Per the user's request to dig into each remaining task and commit per task, then the standalone helpers. All
+24 non-no-op AI task types (`maybe_ai_func_1`'s dispatch, `0x4623E0`) are now traced to at least a substantial
+level - summary table (own `functions.tsv` row has the full state-machine detail for each):
+
+| Task | Role (confidence) |
+|---|---|
+| 0 | `CONSTRUCT_BUILDING` - full lifecycle (confirmed) |
+| 1 | Resource-gathering, likely `FETCH_WOOD` (confirmed shape, name inferred) |
+| 2 | Shaman positioning + a reused ghost-escort step (partial, multi-purpose) |
+| 3 | Synchronization primitive - releases state-14-parked workers once a target building is ready |
+| 4 | `DEFEND_SHAMEN` gathering feeding a `STATE_SEND_GHOSTS` phase (confirmed shape) |
+| 5 | Integrates freshly-converted followers (confirmed, corrects a "desperation" false lead) |
+| 6 | Assembles a themed group (spy/firewarrior/shaman/angel) around a specialist unit (shape confirmed, label open) |
+| 7 | Type-aware garrison staffing with active eviction (candidate: native `PUT_PERSON_IN_DT`) |
+| 8 | Reactive counter-attack, triggered by an "avenge me" per-unit flag |
+| 9 | Probabilistic dispatcher - spawns task 8, or randomly task 11 or 15 (confirmed, corrects "no-op" misread) |
+| 11 | "Wander" - sends a unit (+ optional escort) to a random point near the tribe's anchor |
+| 13 | Enemy-spotted alert sequence (candidate: spy/intrusion detection) - no combat order issued |
+| 14 | The shaman's automatic spell-cast execution (candidate: native `SET_SPELL_ENTRY`) |
+| 15 | "Post a defender" - same destination search as 11, gated by a spare-defender quota |
+| 16 | Fills a targeted building's garrison to capacity (candidate: `POPULATE_DRUM_TOWER`) |
+| 17 | Recovers a unit/vehicle that can't path home (candidate: `FETCH_LOST_PEOPLE`/`FETCH_LOST_VEHICLE`) |
+| 18 | Resolves a vehicle, searches for a home-anchored spot (candidate: `BOAT_PATROL`/`VEHICLE_PATROL`) |
+| 19 | Vehicle-hut dispatch/positioning (large handler, partial) |
+| 20 | `ATTACK` - script-exclusive, confirmed no native autonomous trigger |
+| 24 | Native execution of `SET_MARKER_ENTRY`/`MARKER_ENTRIES` patrol groups (confirmed shape) |
+| 25 | Unconditional mass rally to a random nearby point (candidate: `STATE_DEFEND`) |
+| 26 | `TRAIN_PEOPLE` (confirmed, corrects a "coded no-op" misread from a tiny-looking entry dispatcher) |
+| 27 | Class-4-object garrison coordination + (per an earlier session) vehicle management (largest handler, partial) |
+| 28 | A training-quota sibling of task 26 (confirmed shape, exact distinction from 26 open) |
+
+**Cross-cutting findings that matter more than any single task**:
+- **Person state 14 is the engine's universal "pulled from default behaviour, committed to a job" marker** -
+  confirmed at least 15 separate times across unrelated tasks (conversion, construction, resource gathering,
+  wandering, defending, training, garrisoning, patrol groups...). `open-populous` should model this as one
+  generic transition, not per-feature special-casing.
+- **A small set of primitives get reused constantly**: a "find N eligible workers" family (`0x4f8490`/`0x4f7dc0`
+  and siblings, all sharing a `team,team,-1,1,...` argument shape), a 3-4-call "commit/refocus" tail
+  (`0x4f6440`+`0x4359b0(-1,-1,-1)`+`0x418ce0(tribe,0xe)`, sometimes plus a `0x435730` notification) now seen in
+  at least 8 different tasks, and two generic "wait N ticks" helpers (`0x4f5c80`/`0x4f5d10`) that appear to own
+  their own substate-advance internally.
+- **Two Ghidra function-boundary traps** cost real time this session and are worth remembering for any future
+  dig: (1) several "48-byte, no calls" task handlers (26, 28) were actually just their own entry dispatcher,
+  with the real body laid out as separate unlinked chunks after the jump table - always check a small handler's
+  own switch table for out-of-bounds targets before calling it a no-op; (2) task bodies interleave multiple
+  logically-distinct phases (tasks 2, 19, 27) that don't cleanly map to one `ai-scripts.md` behaviour each -
+  some of these handlers may legitimately implement more than one named AI behaviour.
+- **Resolved `0x49c890`** (own row): the exe's generic "convert a 1D magnitude into a 2D point" primitive, built
+  on a growing-square-ring (spiral) layout - every "pick a random/sequential nearby point" search in the AI
+  (tasks 2/11/15/18/19/25) goes through this one function.
+- **Resolved `0x4f7aa0`**, `CONSTRUCT_BUILDING`'s own site-search: deterministic terrain + footprint checks via
+  the spiral generator, with an extra water-adjacency-shaped check specifically for building types 13-14 -
+  confirms those two types (previously guessed as "stricter siting needs") are very likely the boat/airship
+  huts. Not a flood-fill or real pathfinding search - a bounded number of spiral guesses per tick.
+
+**For `open-populous`**: the task-queue/evaluator architecture (`0x462790`'s row) plus this now-fairly-complete
+task catalog is probably enough to design the AI subsystem's data model directly, even before every single
+callee (still ~40 `named`-but-not-`traced` helper rows) is individually read. The remaining highest-value
+targets, if continuing: `0x4f8490`/`0x4f7dc0` (the shared worker-finder's exact selection criteria), `0x4ea920`
+(the move/build order primitive several tasks call), and finishing tasks 2/19/27's un-read remainder.
