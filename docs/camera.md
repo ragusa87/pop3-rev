@@ -500,13 +500,39 @@ facts - don't treat raw fitted constants as drop-in. One concrete instance alrea
 matrix's pitch sign came out flipped relative to how `pop3-rev-analysis.md`'s "Landscape projection"
 used to state the pitch constants (now corrected there).
 
-## Flyby cancel (unresolved)
-Space-cancelling mid-flyby (`cam3.txt`) shows a sharp one-step matrix discontinuity at turn 257 right
-after a brief hold near 108°, then erratic movement (257-283, likely the user's own arrow-key taps)
-before a final hold ~107.8° (284-300, capture end). User reports the camera visibly jumped back
-toward the start position right after cancelling, before touching the arrow keys - not yet precisely
-correlated against the raw matrix trace. Needs a re-run with Ctrl+C'd exact turn numbers noted by eye
-for the cancel press, to cleanly separate script-driven vs. manual segments.
+## Flyby cancel - RESOLVED: cancel fast-forwards to the flyby's own end state, not back to the start
+Live re-test, this session (headless Docker/Xvfb, `scripts/docker/*.sh`, level 1, hands off the
+keyboard after the Space press - `cam9.txt`): cancelled cleanly mid-dive this time (Space sent at
+turn ~157-158, `K=9` i.e. deep in the dive, matrix mid-rotation - unlike the earlier `cam3.txt` test
+which happened to cancel much later, near-idle-ish `K` values, which is why that capture looked like
+a hard one-tick snap). With a real mid-dive starting point the recovery is clearly visible as a
+**smooth, monotonic ease, not a snap**: `K` climbs `9 -> 253 -> 832 -> ... -> 46000` and the matrix's
+pitch component (`m4`) climbs `9310 -> ... -> 15357` in lockstep, both reaching their exact
+idle-default values (`K=46000`, `m4=15357` - "Manual zoom" table above) at the same turn (~195),
+**~37 turns / ~3.0 real seconds after the Space press**. `D`/`S` never moved (6500/11 throughout,
+confirming "never a distance dolly" holds for cancel too).
+
+**The key new finding is the yaw it eases to.** The settled matrix is `m0=-4853 m2=15648 m3=-5452
+m4=15357 m5=-1691 m6=-14668 m7=-5708 m8=-4548`, decoding (`atan2(m2,m0)`) to yaw **~107.2 deg**.
+That is, within half a degree, **the exact same yaw** (`~107.8 deg`) that "The intro message dialog
+pauses..." above already measured for a flyby left to run to its own **natural**, uncancelled
+completion (a completely separate capture, `cam6.txt`, cancelled nowhere, different session). Two
+independent captures - one let the script finish on its own, one Space-cancelled it mid-dive at a
+totally different turn - converge on the same final orientation. The only sane reading: **Space
+doesn't abort the flyby back to some neutral/idle view or the pre-flyby start orientation (the
+315-degree idle-hold yaw documented elsewhere in this file) - it skips the rest of the scripted
+camera path straight to the flyby's own scripted end keyframe**, then the same
+accel/decel/eases-toward-idle-pitch tail plays out either way (cancelled or not). Functionally,
+Space-cancel behaves like "jump to the end of this flyby," not "undo/return home."
+
+**Still not captured**: the real focus position (`tribe_struct+0x24`) through a cancel - this test
+used the plain `FIELDS` mode (reliable, matches `cam3.txt`'s proven method) rather than
+`--scan-tribe` (which hung mid-capture earlier this session, cause not diagnosed - a blocked
+`mem.read()` inside the container, possibly worth revisiting before relying on `--scan-tribe` for a
+long unattended capture again). `cam_x`/`cam_z` are the known-dead debug fields (see "Ruled out"
+above), so position parity between a cancelled and natural-completion run is still open, though given
+the orientation result above it would be surprising if position didn't follow the same "skip to the
+end" rule.
 
 ## `0x4e6a70` traced - not the flyby interpolator (dead end for timing)
 `0x4e6a70` (`docs/functions.tsv`, Ghidra's own name `move_pos_angle_length`) is a generic
@@ -571,7 +597,11 @@ call `0x4e6a70` - it's a different operation (see below).
    it (hysteresis/accumulator state, or an unrelated field at the same shared offset).
 3. ~~Decode the `POS` waypoints' own coordinate units~~ **SOLVED** this session: plain 0-255 cell indices,
    world units = `(cell+1)*256` - see "POS and ANGLE channels" above.
-4. Re-run the cancel capture with precisely-timed Ctrl+C'd turn numbers (see "Flyby cancel" above).
+4. **RESOLVED**, a later session (live re-test, `cam9.txt`): Space-cancel is not an abort-to-idle -
+   `K`/pitch eases smoothly (~3s) to the idle default, and the matrix's yaw converges to the exact
+   same end orientation (~107.2-107.8 deg) that an uncancelled flyby reaches on its own - cancel
+   skips to the flyby's own scripted end state rather than returning to the start. See "Flyby
+   cancel" above. Only the real focus position (`+0x24`) through a cancel remains unverified.
 5. Apply the D3D axis caveat once position/angle values are solid enough to change `flyby.rs`. New
    lead (see "The intro message dialog pauses..." above): a before/after matrix yaw vs. the
    script's final `ANGLE` keyframe lined up ~180° apart in one capture - check this properly
