@@ -558,6 +558,300 @@ facts - don't treat raw fitted constants as drop-in. One concrete instance alrea
 matrix's pitch sign came out flipped relative to how `pop3-rev-analysis.md`'s "Landscape projection"
 used to state the pitch constants (now corrected there).
 
+## D3D axis caveat for YAW - RESOLVED for the ANGLE channel: `open-populous`'s existing mirror convention is already correct
+Open question 5 (apply the D3D axis caveat to yaw) is now answered for the flyby `ANGLE` channel specifically,
+using a model the user proposed (`yaw_true = s * raw * 360/2048 + c`, needing >=2 independent raw/true-yaw pairs
+to pin down `s` and `c` - one point can't separate scale from offset) and data already on hand, no new live
+session needed.
+
+**Why the earlier "~180 deg apart" note (under "The intro message dialog pauses...", above) was inconclusive,
+not wrong**: that comparison used the raw NAIVE conversion (`raw * 360/2048`, no sign flip) against the one
+live-measured final yaw (~107.8 deg) and eyeballed a rough 180 deg gap - exactly the single-point situation the
+user's model describes, where a scale/sign error and an offset error look alike. It was never a screenshot/focus
+comparison (it compares the real exe's OWN live matrix yaw to the script's OWN raw angle number, nothing about
+`open-populous`'s rendering or focus position), so the recent POS/focus-scale fix (two sections above) doesn't
+apply here and can't make this discrepancy "disappear" the way it might for a screenshot-based comparison -
+it needed real resolution, not a re-check.
+
+**Resolution**: re-parsed `cam7.txt` and `cam5.txt` (both already-captured, turn-anchored full-flyby runs,
+independent sessions) for the matrix's own decoded yaw (`atan2(M02, M00)`, unwrapped/accumulated across turns
+to avoid false wrap-artifacts) and found genuine flat holds (slope < 0.15 deg/turn over >=4 samples - stricter
+than a simple "small window variance" test, which false-positives on slow continuous creep) at four points each,
+landing **in the same order as the script's own six `FLYBY_SET_EVENT_ANGLE` keyframes** (`ai-scripts.md`'s
+worked example: raw 0, 1072, 681, 744, 54, 1438 - the middle two, 1072 and 54, only ever get a brief partial
+approach before the next keyframe preempts them, consistent with their own 1-turn script gaps, too tight to
+fully settle; the other four get a real multi-turn hold):
+
+| raw (script) | predicted, `s=-1, c=0` (`-raw * 360/2048 mod 360`) | `cam7.txt` observed (turns) | `cam5.txt` observed (turns) |
+|---|---|---|---|
+| 0 | 0.00 | 359.65 (127-137) | 357.89 (119-128) |
+| 681 | 240.29 | 244.31 (248-258) | 237.30 (232-243) |
+| 744 | 229.22 | 232.20 (296-302) | 227.98 (271-280) |
+| 1438 (final) | 107.23 | 106.52 (426-438) | 107.75 (392-404) |
+
+Every point lands within **~0.5-4 deg** of `s=-1, c=0` in BOTH independent captures - i.e. **`yaw_true = -raw *
+360/2048 (mod 360)`**, a pure sign flip, no offset. The `s=+1` (no flip) hypothesis is decisively refuted by the
+same data: it predicts 119.71/130.78/252.77 deg for the three non-trivial points, 100-150 deg off every single
+one (this is exactly the stale "~180 deg apart" observation, now explained: the naive conversion is just the
+wrong sign). The residual few-degree spread between the two captures (e.g. 244.31 vs 237.30 for raw=681) is
+consistent with "approaching but not perfectly settled when sampled" (the still-unsolved two-phase kinematic
+ease, "The `0x44A070` ease-setup helper" above) rather than an unmodeled constant offset - `c=0` already fits
+the trivial `raw=0` point and the unambiguous final hold (`raw=1438`, nothing queued after it, no preemption
+possible) equally well in both captures.
+
+**This confirms `open-populous`'s EXISTING code is already right, no fix needed**: `game-client/src/flyby.rs`'s
+`render_yaw` calls `nature::angle_yaw(raw).render()`, and `GameYaw::render()` (`game_frame.rs`) already negates
+(`-self.0`) as the documented general left-handed-to-right-handed mirror ("the files, `game-core` and the
+original models use [the game's left-handed frame]... Bevy is right-handed... these types... mirror z"). That
+generic convention, applied to the flyby's `ANGLE` channel specifically, is exactly the `s=-1, c=0` this session
+derived from live data - a genuine cross-check (the mirror convention was derived independently, for a different
+reason, long before this session), not a coincidence tuned to fit. **Step 1 of the user's own methodology
+(settle mirroring first, from landmark ordering) is answered the same way, just via live-memory numbers instead
+of a screenshot**: the mirror is confirmed real and already implemented correctly for yaw.
+
+Not re-checked: whether the SAME left-handed/right-handed mirror convention needs applying anywhere else this
+investigation's candidates touch (position/focus does not - "Correction: POS/TOOLTIP/end-target..." above
+already covers the only remaining x/z scale issue, and cell coordinates don't carry a handedness sign the way
+an angle does). Pitch's sign was already separately corrected ("Landscape projection", above).
+
+## `flyby.rs::zoom_to_pitch` calibrated against the same traces - the script's -100..100 does NOT span `PITCH_RANGE`
+Same extraction pipeline as the `ANGLE` cross-check above (flat-hold detection, slope < 0.15 deg/turn over >=4
+samples), run against `cam5.txt`/`cam7.txt`'s matrix pitch (`M21` at `+0x1c`, `pitch = asin(M21/16384)`) instead
+of yaw, matched in temporal order to level 1's own four `FLYBY_SET_EVENT_ZOOM` keyframes
+(`-100 10 35`, `10 67 25`, `80 165 36`, `0 202 63`, from `ai-scripts.md`'s worked example):
+
+| zoom (script) | `cam7.txt` observed hold (turns) | `cam5.txt` observed hold (turns) |
+|---|---|---|
+| -100 ("fully out") | -55.37 deg (134-165) | -55.37 deg (126-154) |
+| 10 | -19.51 deg (196-298) | -19.51 deg (183-276) |
+| 80 | ~-12.7 deg (340-352) | -12.69 deg (311-322) |
+| 0 (final) | -20.56 deg (425-437) | -20.57 deg (390-403) |
+
+Agreement between the two independent captures is tight (<=0.3 deg on every point, tighter even than the `ANGLE`
+cross-check) - the zoom channel's own mechanism (a direct accumulator -> `preset_blend_by_fraction`, "The real
+AI-script zoom chain" above) is evidently cleaner/more deterministic than `ANGLE`'s shortest-path kinematic ease.
+
+**Confirms last session's "zoom 0 = idle" hypothesis exactly**: the final hold (-20.56/-20.57 deg) matches the
+idle default (-20.39 deg, `camera::GROUND_PITCH_DEG`) to within 0.2 deg - not `zoom_to_pitch(0)`'s current
+~49.55 deg (`PITCH_RANGE`'s arithmetic midpoint).
+
+**New, bigger finding: the script's own -100..100 domain never reaches anywhere near `PITCH_RANGE`'s own
+endpoints (10.5/88.6 deg)**. Comparing every point against the current `zoom_to_pitch` formula:
+
+| zoom | `zoom_to_pitch` (current) | observed | error |
+|---|---|---|---|
+| -100 | 88.60 | 55.37 | 33.2 deg |
+| 10 | 45.64 | 19.51 | 26.1 deg |
+| 80 | 18.31 | 12.70 | 5.6 deg |
+| 0 | 49.55 | 20.56 | 29.0 deg |
+
+Every point is wrong, not just the zero-point - `PITCH_RANGE` (10.5-88.6 deg) is real (confirmed live, "Manual
+zoom is a pitch+bend orbit" above) but it's the range reachable by HOLDING THE MANUAL ZOOM KEY all the way to
+the whole-planet globe view, a completely different input than the AI script's bounded `-100..100` argument -
+conflating the two was the actual bug, not just a wrong offset. The script's own practical range for level 1
+is roughly -55.4 deg (at script -100) to -12.7 deg (at script 80, the largest "in" value this script happens to
+use) through an idle default of -20.4 deg at script 0 - narrower, and not centred the way `PITCH_RANGE`'s
+10.5-88.6 deg midpoint-at-zero assumption implied.
+
+**The out/in slope asymmetry already documented for the raw zoom accumulator (`+0x2c` trajectory, "Zoom channel
+(`+0x2c`) trajectory..." above, out ~2.0 vs in ~0.55 per zoom unit, ratio ~3.6) reproduces almost exactly in
+pitch-degree units too**: out leg (-100 -> 0) slope = (20.4-55.37)/100 = 0.35 deg/zoom-unit; in leg (10 -> 80)
+slope = (19.51-12.70)/70 = 0.097 deg/zoom-unit; ratio 0.35/0.097 ~ 3.6 - the same asymmetric curve shape, seen
+directly in the quantity that actually matters for `flyby.rs` (degrees) instead of the internal accumulator
+units, and independently cross-validating both findings against each other.
+
+**Eye-to-focus distance (`D`) - not testable from these traces, already settled two other ways**: `cam5.txt`/
+`cam7.txt` are `--scan-tribe` runs of `tribe_struct` only; `D` (`0x87CA64`) lives in a separate global
+render-block struct, never captured there. Two independent, already-existing findings settle it instead: (1) a
+live round-trip manual-zoom test, a DIFFERENT capture ("Manual zoom is a pitch+bend orbit" above), found `D`
+and `S` "never moved once" across the entire zoom range, idle through the whole-planet globe view; (2) the
+flyby's own `ZOOM` opcode chain was traced statically start to finish ("The real AI-script zoom chain" above)
+and confirmed it "does NOT touch `+0x10`(D)... at all" - a code-level guarantee, not just an observation. Zoom
+(manual and scripted alike) drives pitch and K/bend only, never distance - already fully confirmed, no new
+capture needed to answer this part.
+
+**Practical fix for `flyby.rs`**: `zoom_to_pitch` needs its target values replaced, not just its zero-point -
+the table above gives 4 real (zoom, pitch) pairs to fit against instead of the two manual-zoom endpoints alone
+(which describe a different input entirely). A 3-segment piecewise curve (or similar) through
+`(-100,-55.4) (0,-20.4) (10,-19.5) (80,-12.7)` would already match this level's own script far better than the
+current single linear span across `PITCH_RANGE`; more data points (other levels' own flyby scripts, run through
+the same pipeline) would pin the shape further, especially past zoom=80 up to 100, not exercised by level 1's
+own script. Written up for `open-populous` in `TODO.md`/`pop3-rev-analysis.md`.
+
+## Distance vs. FOV: `open-populous`'s `D=25.4 cells` is measured, `DEFAULT_FOV=35 deg` is an admitted guess - and there's a second, untraced camera-distance mechanism
+User's own instinct (comparing the original screenshot's strong foreground perspective against `open-populous`'s
+flatter render) was that distance "feels like it should be ~10 [cells]", with the caveat that distance and FOV
+are confounded in a single still image (on-screen size scales with `1/(distance * tan(fov/2))`). Worth separating
+what's actually measured from what's guessed before touching either number:
+
+- **This exe's landscape renderer does NOT use a standard D3D perspective matrix at all** - "Landscape
+  projection" (`pop3-rev-analysis.md`) already documents the real formula, a bespoke fixed-point integer
+  pipeline: `screen = (x', y') * (1 << (S+16)) / z'` after the rotation+bend+distance steps. There is no `P[1][1]
+  = 1/tan(fov_y/2)` matrix to read `fov` off - the closest equivalent is `S` ("perspective shift", measured
+  default 11), which acts as a focal-length-like scale exponent, not an angle.
+- **`D` (camera distance) is one of the best-confirmed numbers in this whole investigation, not a guess**: measured
+  live as exactly 6500 render units (25.4 cells) behind the focus, and independently confirmed CONSTANT two
+  separate ways - a live round-trip manual-zoom test across the ENTIRE range (idle through the literal
+  whole-planet globe view, screenshot-confirmed) never moved it, and the flyby's own `ZOOM` opcode chain
+  (`0x41c700`/`preset_blend_by_fraction`, `functions.tsv`) was traced statically and explicitly does NOT touch
+  `+0x10`(D) among the 5 render-block fields it does blend. Both findings predate this session; neither was
+  derived to answer this question, which is why they're decent independent evidence rather than a fit tuned to
+  match.
+- **By contrast, `open-populous`'s own `DEFAULT_FOV = 35 deg` is admittedly NOT measured from the exe at all** -
+  its own code comment: "not traced in the original (its screen scale is open); 35 deg frames at 25.4 cells what
+  a view matched by eye on level 23 framed at 13.8 cells and 60 deg." Given `D` is hard-measured and `FOV` is an
+  eyeballed guess, a perspective mismatch is much more likely to be a wrong FOV than a wrong distance - exactly
+  the alternative the user's own math flagged (FOV~77 deg at distance 10 would look the same as the current
+  guess at distance 25.4, so "distance feels wrong" doesn't by itself tell you which one actually is).
+- **Deriving `S`'s equivalent FOV needs one more piece this investigation hasn't pinned down**: "Landscape
+  projection" already flags it - `screen = (x',y') * (1<<(S+16))/z'` is an INTERMEDIATE value, not final pixels;
+  there's "a per-axis screen scale" applied after this step that converts it to actual screen coordinates,
+  explicitly noted as "not checked." Without that scale (and the exe's actual render resolution), `2^(S+16)`
+  alone isn't convertible to a focal length in the same units as screen half-width, so an equivalent FOV in
+  degrees can't be computed with confidence yet - this is real remaining work, not a number to guess at.
+- **New lead, found in `functions.tsv` while checking this, not yet connected to the flyby investigation
+  before now**: there IS a second, separate camera-preset-blend mechanism, `0x417510` ("Camera-PRESET
+  multi-frame blend", own row), confirmed to blend `D` (`0x88F014`) AND `S` (`0x88F018`) - fields the flyby's
+  own `0x41c700` explicitly does NOT touch. It's a multi-FRAME ease (driven by a frame counter at `0x89CE34`,
+  not the flyby's 0..1 fraction argument), and `functions.tsv`'s own note says its trigger is "still unclear...
+  plausibly `CREATE_MSG_INFORMATION_ZOOM`, not confirmed." `open-populous`'s own `ai-scripts.md` independently
+  documents `CREATE_MSG_INFORMATION_ZOOM idx x z angle` as a script opcode that "also zooms the camera while the
+  message is open" - a genuinely different, as-yet-untraced camera effect from the `FLYBY_SET_EVENT_ZOOM` channel
+  this whole investigation has been about. **If the screenshot being compared was taken at a moment touched by
+  this other opcode (or `ZOOM_TO`/`TRACK_TO_MARKER`, also listed in `ai-scripts.md`, also untraced) rather than
+  purely the flyby's own channel, distance really could move - just via a code path nothing here has looked at
+  yet.**
+- **Checked, a later session, RULED OUT for level 1 specifically**: the user supplied the actual game install
+  (`.../Bullfrog/Populous - A l'aube de la création/levels/cpscr010.dat`), so this could finally be checked for
+  real via `cargo run -p pop3-ai-script --example ai_script_info -- <path>`. The full parsed AST of level 1's own
+  red-tribe script contains **exactly one `Flyby` node** (matching the already-documented worked example, no
+  second flyby) and **zero occurrences anywhere in the entire script** of `ZOOM_TO` (1111),
+  `TRACK_SHAMAN_TO_ANGLE` (1133), `TRACK_TO_MARKER` (1152), `CREATE_MSG_INFORMATION_ZOOM` (1177), or any of the
+  other `SET_MSG_*ZOOM*` opcodes (1178/1182/1183/1184/1186) - confirmed by listing every distinct `CommandId`
+  the parsed script actually uses and diffing against that list. **So the "other mechanism" lead is dead for this
+  specific screenshot**: whatever camera behaviour the original shows at the end of level 1's intro is driven
+  purely by `FLYBY_SET_EVENT_ZOOM`, already fully traced (above) and confirmed to never touch `D`. The distance/
+  FOV mismatch, if real, isn't explained by a different script opcode - it comes down to `open-populous`'s own
+  `DEFAULT_FOV` guess (next bullet), or a genuinely unmodelled part of the already-documented projection formula
+  (the missing per-axis screen scale), not a missed camera-control code path.
+- **Practical recommendation (superseded below, kept for context)**: don't change `GROUND_DISTANCE`/`D` off a
+  screenshot read alone - still true. The per-axis screen-scale gap this bullet used to list as open is now
+  solved - see the next two sections.
+
+## The per-axis screen scale SOLVED: static disassembly of the projection's final step (no live memory needed)
+Found by disassembling `0x46de00` (per-vertex projection with the planet bend, `functions.tsv`'s own minimal
+row) and its setup function `0x5215b3`-ish (unnamed, writes the `+0xcf8`/`+0xcfc` fields read here), using the
+`exe-function-map`-style toolchain (`setup.sh`+`sl.py` run directly, the skill itself disabled for model
+invocation this session but its scripts work standalone) - the user handed over the real game install
+(`.../Bullfrog/Populous - A l'aube de la création/`), closing what "Landscape projection"'s own note flagged
+as unchecked.
+
+**Full pipeline, past where `pop3-rev-analysis.md` previously stopped** (`(x',y',z')` = the already-documented
+rotated+bent point, `z' += D` already applied):
+
+```text
+Q = tribe_struct+0x2a                          # CONFIRMED: this IS render-block+0x8's per-frame mirror,
+                                                 # previously just "the camera focus"-adjacent dword from
+                                                 # "Correction: POS/TOOLTIP..." above - wrong structure, same
+                                                 # offset by coincidence; this Q is a DIFFERENT value,
+                                                 # read directly off the active tribe's own tribe_struct
+shiftA, shiftB = byte[cf8_struct+0xcf8], byte[cf8_struct+0xcfc]   # per-axis, chosen at startup from
+                                                                     # video-mode flags, see below
+X2 = (x' * Q) >> (16 - shiftA)                 # intermediate, per-axis
+Y2 = (y' * Q) >> (16 - shiftB)
+scale_persp = (1 << (S+16)) / z'                # the already-documented step, SHARED by both axes
+finalX_int = (X2 * scale_persp) >> 16
+finalY_int = (Y2 * scale_persp) >> 16
+scaleX = 1.0 / (1 << shiftA)                    # float, precomputed once at startup (same cf8_struct)
+scaleY = 1.0 / (1 << shiftB)                     # ( * a literal float constant at 0x58fc4c, confirmed = 1.0
+                                                   #   exactly - reads straight out of .rdata, no live memory
+                                                   #   needed for this one)
+screen_x = origin_x + finalX_int * scaleX        # final output, written into the point struct
+screen_y = origin_y - finalY_int * scaleY        # Y is SUBTRACTED (screen-down vs math-up convention)
+```
+
+**The per-axis split (`shiftA`/`shiftB`) algebraically CANCELS OUT of the final result** - substitute `X2`
+into `finalX_int` into `screen_x` and the `2^shiftA` terms cancel exactly (confirmed both symbolically and by
+hand-computing a concrete example: `x'=3250, Q=40786, z'=D=6500`, with `shiftA=4` giving `screen_x-origin_x
+≈637.4` and with `shiftA=0` giving `≈637.1` - same answer to rounding). **So "Landscape projection"'s old
+"assuming the screen scales both axes alike (per-axis screen shifts not checked)" is now CONFIRMED TRUE**: X
+and Y share one real scale factor, `focal = Q * 2^(S-16)` (in screen pixels), despite the per-axis plumbing -
+this isn't an anisotropic lens, the `shiftA`/`shiftB` split is just an internal fixed-point precision choice
+(confirmed different per video-mode class via `[esi+0x8]` bits `0x20`/`0x40` and `[cf8_struct+0x640]==2`, not
+worth chasing further since it's provably inert on the output).
+
+**Concrete numbers, this session**: render-block defaults (`0x416f50`, hardcoded literals, read directly from
+the exe - matches every live-read default exactly: `K=0xb3b0=46000`, `D=0x1964=6500`, `S=0xb=11`, and **`Q
+(+0x8) = 0x9f52 = 40786`**, confirmed live too). At idle: `focal = 40786 * 2^(11-16) = 40786/32 = 1274.56`
+screen pixels. The game's own render window (confirmed both statically - `0x416f50` also hardcodes a `640,480`
+pair at `+0x30/+0x32` right next to K/D/S/Q - and live, `screen_w`/`screen_h` globals at `0x89c6cf`/`0x89c6d1`
+read exactly `640`/`480` in this session's headless capture) gives, at idle:
+
+```text
+FOV_y = 2*atan(240 / 1274.56) = 21.3 deg     (half-height 240 = 480/2)
+FOV_x = 2*atan(320 / 1274.56) = 28.2 deg     (half-width 320 = 640/2)
+```
+
+**This is NARROWER than `open-populous`'s current `DEFAULT_FOV=35 deg` guess, not wider** - the opposite
+direction from the "distance~10, wide FOV" hypothesis this investigation started from (see "Distance vs. FOV"
+above). But that idle number isn't the whole story - see the next section, which is the actual answer to "is it
+distance or FOV": **it's FOV, and it moves a lot more than just between idle and some fixed constant.**
+
+`origin_x`/`origin_y` (where `(0,0)` camera-space lands on screen): traced to `origin_x = render_block+0x2a +
+screen_width/2`, `origin_y = render_block+0x2c + screen_height/2` (`clear_land_draw_state`/`0x46e700`, the
+same per-frame copy function already in `functions.tsv`). **Y matches live exactly**: `render_block+0x2c=16`,
+`screen_height/2=240` -> predicted `256`, observed (live) `origin_y=256`. **X does NOT match**: `render_block
++0x2a=0` (confirmed live, never changes) + `320` predicts `320`, but live `origin_x` reads `270` throughout -
+a constant, unexplained ~50px discrepancy, not yet resolved (doesn't affect the FOV number above, which is
+independent of origin - only affects exactly where screen-center sits). Worth a dedicated follow-up: either a
+second write site overrides `origin_x` specifically (UI-sidebar related, the 640-wide window's left ~90px are
+UI chrome - a plausible but unconfirmed culprit), or this capture's `render_block+0x2a` read was stale/wrong.
+
+## Zoom changes effective FOV too, confirmed live - "pitch+bend orbit" was incomplete, not wrong
+**`render_block+0x8` (this session's `Q`, i.e. the focal-length factor above) and `render_block+0x2c` (the
+`origin_y` term above) are TWO of the five fields `0x41c700`/`preset_blend_by_fraction` already blends for the
+flyby's `ZOOM` channel** (`functions.tsv`'s own row for `0x41c700` lists `+0x0(K) +0x8(unnamed) +0x20(unnamed)
++0x2c(unnamed) +0x2e(unnamed)` - `+0x8` and `+0x2c` are now named; `+0x20`/`+0x2e` remain open). Live-confirmed
+this session (`scripts/docker/*.sh`, level 1's actual opening flyby, `watch_camera.py` extended with `Q`/
+`origin_x`/`origin_y`/`screen_w`/`screen_h`/`rb_2a`/`rb_2c` fields):
+
+```text
+turn   K       Q        rb_2c   note
+ 79    46000   40786    16      idle (pre-flyby)
+130    9       39251    16      deep-dive plateau (matches "-55.37 deg", "Pitch is not fixed..." above)
+343    56140   71207    103     shallow-pitch plateau (matches "-12.70 deg" zoom=80, "zoom_to_pitch calibrated" above)
+375    52946   61624    75      easing back down (zoom=0 keyframe engaging)
+```
+
+`Q` and `rb_2c` move in lockstep with `K` (same preset-blend fraction driving all three, by construction) and
+land at their extremes at EXACTLY the same turns this session's own pitch calibration already pinned down for
+`K`/pitch (turn~130-136 dive bottom, turn~340-352 shallow plateau) - strong internal cross-check, not a
+coincidence. At the shallow-pitch extreme (`Q=71207`): `focal = 71207*2^-5 = 2225 px` -> `FOV_y=2*atan(240/2225)
+=12.3 deg`, `FOV_x=2*atan(320/2225)=16.3 deg` - noticeably NARROWER than idle (21.3/28.2 deg). At the deep-dive
+extreme (`Q=39251`, barely below idle's 40786): `focal=1227 px` -> `FOV_y=21.6 deg`, `FOV_x=28.6 deg` - almost
+unchanged from idle. **Same out/in asymmetry already documented for the raw zoom accumulator and for pitch
+itself** (zooming "in" moves things a lot more than zooming "out" does) - a third independent quantity showing
+the identical lopsided curve shape.
+
+**Conclusion**: the original's "zoom" is not just a pitch+bend(K) orbit at a fixed FOV - it's a coordinated
+FOUR-way blend (pitch via the matrix, K/bend, Q/focal-length, and a vertical recenter via `origin_y`'s
+`render_block+0x2c` term), all driven by the same single preset-interpolation fraction. "Zooming in" in the
+original behaves like an actual camera zoom lens (narrower FOV) stacked on top of the pitch swing, not merely a
+pitch change - this is the real mechanism behind the "looks like a closer/more telephoto shot" impression a
+screenshot comparison would pick up on, more than distance ever could (distance is still provably constant,
+confirmed twice over, see "Distance vs. FOV" above).
+
+**Practical fix for `open-populous`**: `flyby.rs`'s `zoom_to_pitch` needs a sibling `zoom_to_fov` (or fold both
+into one function returning `(pitch, fov)`), using this session's real calibration points - `(zoom, Q)` pairs:
+`(-100, ~39251) (10, ~40786-ish, untested directly) (80, 71207) (0, ~40786 idle)` - `focal_px = Q/32` at `S=11`,
+`FOV = 2*atan(half_screen_px / focal_px)`, screen half-dims whatever `open-populous`'s own renderer uses (not
+necessarily 640x480 - that's just this capture's fixed window size, not a game-wide constant). **Not yet
+checked**: whether MANUAL zoom (not just the flyby) also moves `Q`/`render_block+0x2c` the same way - "Manual
+zoom is a pitch+bend orbit" above only ever recorded `D`/`S`/`K`/the matrix, not `Q`, so that section's own
+"never a distance dolly" conclusion still stands but its "pitch+bend orbit" framing may be similarly incomplete
+for manual zoom too - worth a repeat of that live test with `Q`/`rb_2c` added to the field list now that
+`watch_camera.py` has them.
+
 ## Flyby cancel - RESOLVED: cancel fast-forwards to the flyby's own end state, not back to the start
 Live re-test, this session (headless Docker/Xvfb, `scripts/docker/*.sh`, level 1, hands off the
 keyboard after the Space press - `cam9.txt`): cancelled cleanly mid-dive this time (Space sent at
@@ -660,10 +954,15 @@ call `0x4e6a70` - it's a different operation (see below).
    same end orientation (~107.2-107.8 deg) that an uncancelled flyby reaches on its own - cancel
    skips to the flyby's own scripted end state rather than returning to the start. See "Flyby
    cancel" above. Only the real focus position (`+0x24`) through a cancel remains unverified.
-5. Apply the D3D axis caveat once position/angle values are solid enough to change `flyby.rs`. New
-   lead (see "The intro message dialog pauses..." above): a before/after matrix yaw vs. the
-   script's final `ANGLE` keyframe lined up ~180° apart in one capture - check this properly
-   against `cam5.txt`'s per-turn data.
+5. ~~Apply the D3D axis caveat to yaw~~ **SOLVED for the `ANGLE` channel**, a later session, using the
+   user's own `yaw_true = s*raw*360/2048 + c` model against `cam5.txt`/`cam7.txt`'s per-turn data (exactly
+   the "check this properly" follow-up this item used to ask for): `s=-1, c=0` (pure sign flip, the
+   left-handed/right-handed mirror `open-populous`'s own `GameYaw::render()` already applies) fits four
+   independent keyframes to within ~0.5-4 deg in BOTH captures; `s=+1` is off by 100-150 deg on every
+   non-trivial point - see "D3D axis caveat for YAW - RESOLVED" above. `open-populous`'s `flyby.rs` needs
+   no change for yaw's scale/sign, it already calls the mirrored conversion. Position's own axis handling
+   was separately resolved too (it's a scale bug, not a handedness one - "Correction: POS/TOOLTIP/
+   end-target..." above). Pitch's sign was already corrected earlier ("Landscape projection").
 6. ~~What actually writes `tribe_struct+0x2c`~~ **SOLVED/CLOSED, a later session**: it isn't a real
    field - `--scan-tribe`'s "+0x2c dword" is an aliasing artifact of two adjacent, independently-written
    fields (`+0x2a` dword and `+0x2e` word), both straight per-frame copies of already-tracked render-block
@@ -685,8 +984,33 @@ call `0x4e6a70` - it's a different operation (see below).
    (`actual cell = raw / 2`), not literal cell indices - see "Correction: POS/TOOLTIP/end-target raw x/z are
    HALF-cell units" above. Also connects the already-known "zoom=0 is neutral" finding to `flyby.rs`'s own
    pitch mapping - see "Correction: flyby zoom value 0 means 'idle'" above. Yaw's own offset/sign convention
-   (open question 5's D3D axis caveat) remains the one open item from that same comparison - still just the
-   one 180°-apart data point, not newly resolved this round.
+   (open question 5's D3D axis caveat) was the one item left over from that same comparison - now also
+   **SOLVED**, see item 5 above and the next item.
+9. ~~Calibrate `ANGLE`'s yaw sign/scale and `ZOOM`'s pitch curve for real, with >=2 ground-truth points each~~
+   **SOLVED, a later session, from data already on hand**: re-ran the same flat-hold-detection pipeline (built
+   for the yaw check, item 5) against `cam5.txt`/`cam7.txt`'s matrix pitch instead of yaw, matched to level 1's
+   4 `ZOOM` keyframes - see "`flyby.rs::zoom_to_pitch` calibrated against the same traces" above. Confirms
+   zoom=0 -> idle pitch exactly, AND finds the bigger issue: the script's own -100..100 domain only reaches
+   -55.4 deg to -12.7 deg for this level, nowhere near `PITCH_RANGE`'s manual-zoom-derived 10.5-88.6 deg span -
+   `zoom_to_pitch` was fit against the wrong input's range entirely. `D` (distance) remains untestable from
+   these traces (wrong struct) but was already settled two other ways (live round-trip test + static chain
+   trace) - zoom never touches it, scripted or manual.
+10. Derive `S`'s real equivalent FOV for the "Distance vs. FOV" question (above). **SOLVED, a later session**:
+    whether level 1's own flyby touches the OTHER, untraced camera-distance mechanism (`0x417510`, blends `D`/
+    `S`) was checked and RULED OUT (level 1's actual `cpscr010.dat`, parsed via `ai_script_info`, uses none of
+    `ZOOM_TO`/`TRACK_SHAMAN_TO_ANGLE`/`TRACK_TO_MARKER`/`CREATE_MSG_INFORMATION_ZOOM`/other `SET_MSG_*ZOOM*`
+    opcodes, only the one known `Flyby`). The per-axis screen scale itself is now fully traced from pure static
+    disassembly, no live capture needed for the formula (`0x46de00`'s tail end + its `0x5215b3`-ish setup
+    function) - see "The per-axis screen scale SOLVED" above: it's isotropic (the per-axis split algebraically
+    cancels), `focal_px = Q * 2^(S-16)` where `Q = tribe_struct+0x2a` (a DIFFERENT field from this same offset's
+    other use as a camera-focus-adjacent dword in the POS correction above - confirmed via live reads matching
+    the static default exactly, `Q=40786` idle). **Bigger finding from the same session, live-confirmed**: `Q`
+    is itself one of the flyby `ZOOM` channel's 5 blended fields, swinging from ~39251 (deep dive) to ~71207
+    (shallow "zoomed in" extreme) - "zoom" changes effective FOV (12.3-28.6 deg observed range) on top of pitch,
+    not just a pitch+bend orbit at fixed FOV. See "Zoom changes effective FOV too" above. Still open: the
+    `origin_x` discrepancy (predicted 320, observed 270, constant offset, cause unfound), what `0x417510`'s real
+    trigger is (not level 1), whether MANUAL zoom also moves `Q`/`render_block+0x2c` the same way (untested),
+    and `render_block+0x20`/`+0x2e` (the 2 still-unnamed fields of the same 5-field zoom blend).
 
 ## Raw capture logs
 Not committed, scratch only: `cam.txt` (POPTB.EXE, mistranslated address lesson - m1..m8 read stuck

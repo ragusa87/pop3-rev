@@ -60,6 +60,13 @@ FIELDS = [
     (0x87CA5C, "<i", "K"),
     (0x87CA64, "<i", "D"),
     (0x87CA68, "<i", "S"),
+    (0x89D1C8 + 0x2A, "<I", "Q"),  # tribe0+0x2a, per-axis screen-scale mirror of render-block+0x8
+    (0x87CAA4, "<h", "origin_x"),  # screen-origin X offset (word), landscape projection's final step
+    (0x87CAA6, "<h", "origin_y"),  # screen-origin Y offset (word)
+    (0x89C6CF, "<h", "screen_w"),  # screen_width_2
+    (0x89C6D1, "<h", "screen_h"),  # screen_height_2
+    (0x88F004 + 0x2A, "<h", "rb_2a"),  # render-block+0x2a, word, X origin offset term
+    (0x88F004 + 0x2C, "<h", "rb_2c"),  # render-block+0x2c, word, Y origin offset term - ALSO one of the 5 zoom-blended fields
     (0x74A354, "<i", "m0"),
     (0x74A358, "<i", "m1"),
     (0x74A35C, "<i", "m2"),
