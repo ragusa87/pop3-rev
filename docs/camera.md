@@ -286,10 +286,11 @@ Followed up by tracing the other two main channels through the same per-kind dis
 all three of the flyby's primary channels are now ruled out as its source.
 
 - **POS = kind 1** (`0x490590` queues, `0x449670` start, `0x449760` tick; `functions.tsv`). **Solves the
-  former open question "decode the POS waypoints' own coordinate units":** the script's raw x/z values are
-  plain **0-255 cell indices** (the queueing code packs each into a single BYTE, which only works if they
-  fit in 0-255 - matches the worked example's "252 254" etc. exactly), converted to world/render units via
-  `(cell + 1) * 256` (confirms "256 render units per cell", "Landscape projection"). The tick callback eases
+  former open question "decode the POS waypoints' own coordinate units":** the script's raw x/z values
+  (0-255, the queueing code packs each into a single BYTE, which only works if they fit in 0-255 - matches
+  the worked example's "252 254" etc. exactly) convert to world/render units via `(cell + 1) * 256` (confirms
+  "256 render units per cell", "Landscape projection") - **but "cell" here is NOT the raw byte itself, see the
+  correction right below: the raw byte is at HALF-cell resolution over the real map.** The tick callback eases
   two independent float accumulators (x, z) and writes the rounded result straight into `tribe_struct+0x24`
   (x, low word) and `+0x26` (z, high word) - confirms those are exactly what POS drives, nothing else. The
   delta-to-target computation explicitly handles **wraparound on the 16-bit domain** (shortest path across
@@ -303,6 +304,63 @@ all three of the flyby's primary channels are now ruled out as its source.
   `FLYBY_SET_EVENT_ANGLE` "shortest way" rule, now seen directly in code** - with an explicit override flag,
   so it's not unconditional the way the docs implied.
 - **`+0x2c` is still unaccounted for by any of the three primary channels.**
+
+## Correction: POS/TOOLTIP/end-target raw x/z are HALF-cell units, not literal cell indices (found via a user screenshot comparison, not live memory)
+The "POS = kind 1" bullet above called the raw script byte a "cell index" - that can't be literally true: the
+map (`open-populous::pop3_format::MAP_SIZE`, hard-confirmed against the real `.dat` file's own binary layout,
+not a guess) is 128 cells per axis, but level 1's own script uses raw values up to 252/254
+(`ai-scripts.md`'s worked example) - over 127, so not a literal 0-127 cell index. This was never actually
+checked against the map's real cell count during the original trace (which only cross-checked the "256" scale
+factor and the 16-bit wraparound domain against each other, both internal to the exe, never against
+`open-populous`'s own 128-cell map).
+
+**Resolution, from a user's own comparison of a level-1 screenshot against `open-populous`'s flyby**: the raw
+byte is at HALF-cell resolution across the real 128-cell map - `actual cell = raw / 2`, wrapping at raw=256 /
+cell=128. `(cell+1)*256` and "256 render units per cell" both still hold, they just already presume this
+halving; the earlier write-up's "plain 0-255 cell indices" framing was an unflagged, uncross-checked
+simplification. Three independent checks, all from data already on hand (no new live-memory session needed):
+
+- **Every x/z value in level 1's own script is even**: `FLYBY_SET_EVENT_POS`'s 8/28, 2/28, 252/254, 12/238,
+  20/216; `FLYBY_SET_EVENT_TOOLTIP`'s 12/26, 2/250, 18/246; `FLYBY_SET_END_TARGET`'s 20/216 - 11 values, all
+  even. Exactly what's expected if the level designer placed every waypoint on a whole real-game cell and the
+  compiler doubled it into the script's half-cell encoding; 11/11 landing even by chance alone is ~1/2048.
+- `FLYBY_SET_END_TARGET 20 216` halved is cell `(10, 108)` - 1.5 cells from `open-populous`'s own
+  independently-derived level-1 site position, `(8.5, 107.5)` (`crates/game-client/src/sites.rs`'s
+  `site_cell_pos` test, read straight from the level file's own Thing record - ground truth, not fitted to
+  this problem). Matches the original screenshot (camera parked on the stone circle/shaman at the
+  reincarnation site, which is also exactly what the flyby's own triggering script logic is about - "FLYBY_START's
+  turn" above). Taken 1:1 instead (the raw byte straight into a 128-cell `rem_euclid`, `open-populous`'s
+  current `flyby.rs` behaviour) lands at `(20, 88)` - 20+ cells off, out over the sea.
+- Consistent with the already-documented "out"/"in" slope asymmetry in the zoom accumulator (next section) -
+  not proof by itself, just the same kind of half-scale blind spot this investigation's early passes had more
+  than once.
+
+**Practical fix, written up for `open-populous`** (`docs/specs/pop3-rev-analysis.md` "Camera flyby state",
+`TODO.md`): `crates/game-client/src/flyby.rs`'s `drive_camera`/`final_pose` currently use the raw
+`PosKeyframe`/`EndTarget` x/z bytes unscaled as `CameraRig.focus` cell coordinates (`k.x as f32`, `k.z as f32`,
+`end.x as f32`, `end.z as f32`) - each needs `* 0.5` before use. The existing `rem_euclid(MAP_SIZE)`
+wraparound is already correct once the halving is applied, no other change needed there. `TOOLTIP` keyframes'
+x/z (not currently rendered at all, see "INT_POINT and TOOLTIP channels" below) would need the same halving
+whenever that gets implemented.
+
+## Correction: flyby zoom value 0 means "idle", not "midpoint of the manual PITCH_RANGE"
+Same user comparison, a second point: the original screenshot's pitch at the flyby's end (last keyframe,
+`FLYBY_SET_EVENT_ZOOM 0 202 63` - script zoom value 0) looks shallow, close to the idle ~20.4° view, not
+`open-populous`'s `zoom_to_pitch(0)` result (~49.5°, the arithmetic midpoint of manual `PITCH_RANGE`
+10.5°..88.6°, `game-client/src/camera.rs`).
+
+This was already implied by two findings in this file, just never connected to `flyby.rs`'s own zoom=0
+behaviour: "Zoom channel (`+0x2c`) trajectory..." below found the idle-default raw accumulator (`1932`) is
+exactly what script zoom 0 settles back to ("0 really is neutral, not an arbitrary midpoint"), and "Manual
+zoom is a pitch+bend orbit" ties that same accumulator/preset system directly to pitch (K and pitch move
+together as one input, confirmed live). So script zoom 0 should map to the **idle pitch** (~20.4°, same as
+`camera::GROUND_PITCH_DEG`), not `PITCH_RANGE`'s arithmetic midpoint - and since idle sits much closer to the
+"zoomed in" end of `PITCH_RANGE` (10.5°) than the "zoomed out" end (88.6°), the real -100..100 -> pitch curve
+is asymmetric around 0, not the straight line `flyby.rs::zoom_to_pitch` currently implements. Consistent with
+the already-documented "out"/"in" slope asymmetry in the raw zoom accumulator (Δraw/Δzoom ≈ +2.0 "out" vs
++0.55 "in" per zoom unit) - same lopsidedness, seen from a different angle. **Not yet solved**: the actual
+curve shape between the two confirmed endpoints and this new zoom=0 anchor - three points constrain it, they
+don't determine it. Written up for `open-populous` in `pop3-rev-analysis.md`/`TODO.md`.
 
 ## INT_POINT and TOOLTIP channels traced - neither writes `+0x2c` either, but TOOLTIP's timing correlates
 Followed up on the user's own observation (playing level 1: a building/pyramid is presented and a tooltip
@@ -622,6 +680,13 @@ call `0x4e6a70` - it's a different operation (see below).
    the two-phase branch's blend (past where it splits the duration into a "kill existing rate" piece and a
    remainder) wasn't fully re-derived - a further session could finish that if the precise acceleration curve
    ever matters for `flyby.rs` (it's plausibly within smoothstep/easing error tolerance already).
+8. ~~Check the POS channel's raw-byte-to-cell scale against `open-populous`'s own 128-cell map~~ **SOLVED**,
+   found via a user's screenshot comparison rather than new live memory: raw x/z are HALF-cell units
+   (`actual cell = raw / 2`), not literal cell indices - see "Correction: POS/TOOLTIP/end-target raw x/z are
+   HALF-cell units" above. Also connects the already-known "zoom=0 is neutral" finding to `flyby.rs`'s own
+   pitch mapping - see "Correction: flyby zoom value 0 means 'idle'" above. Yaw's own offset/sign convention
+   (open question 5's D3D axis caveat) remains the one open item from that same comparison - still just the
+   one 180°-apart data point, not newly resolved this round.
 
 ## Raw capture logs
 Not committed, scratch only: `cam.txt` (POPTB.EXE, mistranslated address lesson - m1..m8 read stuck
