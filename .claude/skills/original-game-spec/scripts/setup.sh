@@ -9,17 +9,20 @@ mkdir -p "$WORK"
 
 # Find the game directory. Priority: explicit $GAME env var, then the repo's own persistent
 # cache (survives /clear and fresh sessions in this same container - see AGENTS.md "Where the
-# exe lives"), then known local Wine install paths (two different ones have been used across
-# this project's own history - the Makefile's GOG path and this skill's older Bullfrog path),
-# then a bounded filesystem search for a Wine prefix holding it anywhere else.
+# exe lives"), then a local Wine install - a non-default $WINEPREFIX if set, else the default
+# ~/.wine, under either of two install paths seen across this project's own history (the
+# Makefile's GOG path and this skill's older Bullfrog path) - then a bounded filesystem search
+# (which also covers ~/.wine and any other prefix under $HOME, in case the install path is yet
+# another variant of the two above) for a Wine prefix holding it anywhere else.
+WINE_C="${WINEPREFIX:-$HOME/.wine}/drive_c"
 if [ -n "${GAME:-}" ]; then
 	: # explicit override, use as given
 elif [ -s "$REPO/game/D3DPOPTB.EXE" ]; then
 	GAME="$REPO/game"
-elif [ -s "$HOME/.wine/drive_c/GOG Games/Populous 3/D3DPopTB.exe" ]; then
-	GAME="$HOME/.wine/drive_c/GOG Games/Populous 3"
-elif [ -s "$HOME/.wine/drive_c/Program Files (x86)/Bullfrog/Populous - A l'aube de la création/D3DPOPTB.EXE" ]; then
-	GAME="$HOME/.wine/drive_c/Program Files (x86)/Bullfrog/Populous - A l'aube de la création"
+elif [ -s "$WINE_C/GOG Games/Populous 3/D3DPopTB.exe" ]; then
+	GAME="$WINE_C/GOG Games/Populous 3"
+elif [ -s "$WINE_C/Program Files (x86)/Bullfrog/Populous - A l'aube de la création/D3DPOPTB.EXE" ]; then
+	GAME="$WINE_C/Program Files (x86)/Bullfrog/Populous - A l'aube de la création"
 else
 	FOUND="$(find "$HOME" /opt /mnt /media -maxdepth 8 -iname 'D3DPOPTB.EXE' -print -quit 2>/dev/null || true)"
 	if [ -n "$FOUND" ]; then
