@@ -1011,6 +1011,76 @@ call `0x4e6a70` - it's a different operation (see below).
     `origin_x` discrepancy (predicted 320, observed 270, constant offset, cause unfound), what `0x417510`'s real
     trigger is (not level 1), whether MANUAL zoom also moves `Q`/`render_block+0x2c` the same way (untested),
     and `render_block+0x20`/`+0x2e` (the 2 still-unnamed fields of the same 5-field zoom blend).
+11. **The preset TABLE itself, found and decoded from pure static data - no live memory needed for the numbers.**
+    `preset_blend_by_fraction`'s (`0x41C700`) own table (`0x88F0C0`, 10 presets × 470 bytes, confirmed by the
+    indexing arithmetic in that function) is runtime data, but it's loaded verbatim from a real file,
+    `data/VCONFIG0.DAT` (4700 bytes = 10 × 470 exactly, confirmed), via `init_vconfig`/`0x4170FA`'s own
+    seek+read pair (`0x5001B0`/`0x525F80` against file handle `0x89CD23`) - decoded directly with a small Python
+    script (`consts.py`'s own `va2off` doesn't apply, this is an external file, not exe-embedded data). All 10
+    presets' known fields (K `+0x0`, Q `+0x8`, `+0x20`/`+0x2c`/`+0x2e`/`+0x34`):
+
+    | preset | K | Q | +0x20 | +0x2c | +0x2e | +0x34 |
+    |---|---|---|---|---|---|---|
+    | 0 | 46000 | 40786 | 1932 | 16 | 195 | 280 |
+    | 1 | 46000 | 35154 | 1932 | -7 | 276 | 280 |
+    | 2 | 35248 | 40786 | 1932 | 0 | 335 | 280 |
+    | 3 | 35248 | 40786 | 1932 | -77 | 425 | 280 |
+    | 4 | 44208 | 35154 | 1900 | 88 | 222 | 280 |
+    | 5 | 46000 | 38226 | 1916 | 50 | 150 | 280 |
+    | 6 | 46000 | 40786 | 1932 | 16 | 150 | 280 |
+    | 7 | 46000 | 29522 | 1932 | 67 | 222 | 280 |
+    | 8 | 46000 | 40786 | 1932 | 16 | 222 | 280 |
+    | 9 | 46000 | 40786 | 1932 | 16 | 222 | 280 |
+
+    **Preset 0 = idle, confirmed exactly**: Q=40786 and `+0x2c`=16 match the already-live-measured idle values
+    (item 10 above) to the digit - strong validation that this decode and the field offsets are both right.
+    `preset_blend_by_fraction` always blends FROM the "current preset index" (`0x89C6EE`) TO current+2 (zoom-out,
+    positive internal delta) or current+3 (zoom-in, negative/zero internal delta). With current=0 at idle, that's
+    preset 2 (out) / preset 3 (in) - but neither has Q far from idle's 40786 (preset 3 is identical to idle on
+    every field but `+0x2c`/`+0x2e`), which does NOT match the live-observed Q~71207 at the flyby's own deepest
+    "zoomed in" point (item 10). **So "current index" must itself advance past 0 during a real zoom/flyby** (the
+    `0x88F061` "both presets at the table's end" dirty flag hints at exactly this kind of chained traversal) -
+    not traced this session. **Next step to finally pin script zoom 80-100 (and `flyby.rs`'s whole `*_KNOTS`
+    curve) exactly, with no live data needed at all**: find what updates `0x89C6EE` (grep its writers) and under
+    what condition, then walk the preset chain the same way the game does for a given cumulative zoom input.
+    **Partial answer, same session**: `0x89C6EE`'s only writers are inside one big function (`FUN_00479F00`,
+    Ghidra's own typeinfo: `(byte param_1, ushort tribe_num, int param_3)`, `0x479F00`-`0x47A50E`) - its tail
+    sets the index directly to a passed-in byte, with CIRCULAR wraparound at the 10-preset boundary (negative
+    -> 9, `>9` -> 0), after copying one 94-byte sub-record between two preset slots (the same 94-byte stride
+    `init_vconfig_struct_array`'s own row logs). So "current preset" is a direct, caller-chosen jump (likely a
+    scripted/UI "switch to camera view N" command, matching the function's own `tribe_num` parameter), not an
+    accumulate-by-zoom-amount counter - the smooth `-100..100` feel must come entirely from the fractional blend
+    toward `current+2`/`current+3`, with "current" itself only moving on a distinct event, not continuously.
+    **This likely resolves the apparent Q mismatch above too, without contradiction**: the live-measured
+    Q~71207 "zoomed in" extreme may well have come through the OTHER, separately-flagged preset-blend mechanism
+    (`0x417510`, "Camera-PRESET..." - still not fully traced, open question above) rather than through this
+    `0x41C700` zoom channel at all, since level 1's own flyby was never checked against `0x417510`'s own trigger
+    condition specifically for this capture. **Narrowed further, same session**: `0x479F00` is a much bigger,
+    generic multi-purpose dispatcher than "a camera command" - its own `param_1` (1-15) selects between 15
+    unrelated case bodies, and checking every one of its ~100 call sites found NONE pushing the literal `14`
+    needed to reach the camera-index case (`caseD_d`, `0x47A4E4`) - every literal caller passes 1/5/6/7/8/0xA/
+    0xB/0xC/0xD/0xF instead, for whatever `0x479F00`'s OTHER 14 cases do. The few callers that pass `param_1`
+    dynamically (a register, not a literal) trace back, at the one checked (`0x4B40BC`), to a settings-style
+    dispatch keyed by two other globals (`0x98F666`/`0x98F667`) that reads like an options/menu system, not
+    gameplay or AI-script code - plausibly a "camera style" menu option, never touched by ordinary play or a
+    level script. **This does NOT actually resolve the Q mismatch - it sharpens it into a real contradiction,
+    left open rather than guessed at**: `0x417510` was independently RULED OUT for this exact capture earlier
+    in this file ("Distance vs. FOV" above) - level 1's own parsed script (`cpscr010.dat`, checked directly) uses
+    none of `CREATE_MSG_INFORMATION_ZOOM`/`ZOOM_TO`/`TRACK_TO_MARKER`/the other `SET_MSG_*ZOOM*` opcodes, only the
+    one `Flyby` - and Q~71207 was measured DURING that exact flyby, already attributed to `0x41C700` itself (item
+    10 above, "Q is itself one of the flyby ZOOM channel's 5 blended fields"). So the Q~71207 reading demonstrably
+    came through `0x41C700`/`0x89C6EE`'s own mechanism, yet no literal caller of `0x479F00` reaches the camera
+    case and the one dynamic caller checked looks menu-only - these two findings conflict and are NOT reconciled
+    here. Left as a genuine open contradiction rather than resolved either way: either `0x89C6EE` has another,
+    unfound writer (a second, non-`0x479F00` path), or "current preset" isn't actually what's moving and the real
+    explanation for Q's swing is a DIFFERENT accumulator this session hasn't found. **There IS at least one such
+    writer, found but not traced to a conclusion**: `0x42ABE1` (inside `reload_hspr_sprites`, Ghidra's own name -
+    plausibly wrong/stale for this call site) writes `0x89C6EE` directly from the return value of `0x4171F0`,
+    called with two other globals (`0x89C6CF`/`0x89C6D1`, word) that read like mouse/cursor coordinates (checked
+    a few lines later against `0x200`/`0x180`) - NOT traced further this session; `0x4171F0` itself is unread.
+    Two more direct writers exist too (`0x4A49DE` in `draw_main`, `0x4A5086`/`0x4A51F5` in `init_all`), neither
+    opened. Any of these is a more promising lead than `0x479F00` for what actually drives "current preset"
+    during ordinary play - next session should start with `0x4171F0`.
 
 ## Raw capture logs
 Not committed, scratch only: `cam.txt` (POPTB.EXE, mistranslated address lesson - m1..m8 read stuck
