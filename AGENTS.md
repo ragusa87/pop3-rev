@@ -2,6 +2,23 @@
 
 Read `CONTEXT.md` first for a big-picture overview before diving into the exe, memory, or docs.
 
+## Where the exe lives
+The game executable (`D3DPOPTB.EXE`, the Direct3D build every address in this repo is traced against; sha256
+`5234beab740375608ca35bdcd436626f1a6a5677230e1ce7be0fab8f4ef93da5` - spot-checked byte-identical to
+`backup/backup.xml` at several independent landmarks across sessions despite not matching `Makefile`'s own pinned
+hash, safe to keep using) lives in **`game/` at this repo's own root** - gitignored, never committed (the
+clean-room boundary below), but persistent on disk across sessions in the same container, unlike a session's own
+scratchpad. `setup.sh` (used by both skills) now checks there FIRST, before falling back to a couple of known
+local Wine install paths and a bounded filesystem search - run it with no `GAME=` override and it should just
+find it. If `game/D3DPOPTB.EXE` is missing (a brand-new container with no persistent disk from a prior session,
+or it was never placed there): ask the user to re-upload the game zip (`Populous_-_A_laube_de_la_cr_ation.zip` or
+similar, containing `D3DPopTB.exe`/`popTB.exe`/`HW_SW_Select.exe`), extract it, and copy `D3DPopTB.exe` to
+`game/D3DPOPTB.EXE` (uppercase - case matters) yourself so it persists from then on, rather than re-deriving a
+scratchpad-only copy that won't survive the next session. Also worth checking for the SOFTWARE-renderer sibling,
+`POPTB.EXE` (same code, different link order, same `game/` dir) - never analysed directly (`sl.py`/`dis.txt`
+assume the Direct3D build), but useful for live-memory checks when it runs better; `docs/poptb_map.tsv` maps
+addresses between the two builds.
+
 ## Role: document only
 Agents working from this repo analyse the original game and document it. They never implement anything:
 - No code changes in `open-populous` (`crates/`, tests, tools): no fixes, even when asked to "fix" a difference.

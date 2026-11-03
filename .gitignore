@@ -12,3 +12,4 @@ script/*.hdr
 script/*.ver
 blast_log*.csv
 __pycache__
+/game/

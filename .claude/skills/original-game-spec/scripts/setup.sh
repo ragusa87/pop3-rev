@@ -4,11 +4,38 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../../../.." && pwd)"
-DEFAULT_GAME="$HOME/.wine/drive_c/Program Files (x86)/Bullfrog/Populous - A l'aube de la création"
-GAME="${GAME:-$DEFAULT_GAME}"
-EXE="$GAME/D3DPOPTB.EXE"
 WORK="${WORK:-/tmp/pop3-spec}"
 mkdir -p "$WORK"
+
+# Find the game directory. Priority: explicit $GAME env var, then the repo's own persistent
+# cache (survives /clear and fresh sessions in this same container - see AGENTS.md "Where the
+# exe lives"), then known local Wine install paths (two different ones have been used across
+# this project's own history - the Makefile's GOG path and this skill's older Bullfrog path),
+# then a bounded filesystem search for a Wine prefix holding it anywhere else.
+if [ -n "${GAME:-}" ]; then
+	: # explicit override, use as given
+elif [ -s "$REPO/game/D3DPOPTB.EXE" ]; then
+	GAME="$REPO/game"
+elif [ -s "$HOME/.wine/drive_c/GOG Games/Populous 3/D3DPopTB.exe" ]; then
+	GAME="$HOME/.wine/drive_c/GOG Games/Populous 3"
+elif [ -s "$HOME/.wine/drive_c/Program Files (x86)/Bullfrog/Populous - A l'aube de la création/D3DPOPTB.EXE" ]; then
+	GAME="$HOME/.wine/drive_c/Program Files (x86)/Bullfrog/Populous - A l'aube de la création"
+else
+	FOUND="$(find "$HOME" /opt /mnt /media -maxdepth 8 -iname 'D3DPOPTB.EXE' -print -quit 2>/dev/null || true)"
+	if [ -n "$FOUND" ]; then
+		GAME="$(dirname "$FOUND")"
+	fi
+fi
+
+if [ -z "${GAME:-}" ] || [ ! -s "$GAME/D3DPOPTB.EXE" ]; then
+	echo "No D3DPOPTB.EXE found (checked \$GAME, $REPO/game, known Wine install paths, and a" >&2
+	echo "filesystem search). Ask the user to re-upload the game zip, extract it, copy" >&2
+	echo "D3DPopTB.exe to $REPO/game/D3DPOPTB.EXE (uppercase - case matters) so it persists" >&2
+	echo "for future sessions (gitignored, never committed), then re-run this script." >&2
+	exit 1
+fi
+EXE="$GAME/D3DPOPTB.EXE"
+echo "using game dir: $GAME" >&2
 
 [ -s "$WORK/dis.txt" ] || objdump -d -M intel --no-show-raw-insn "$EXE" > "$WORK/dis.txt"
 
