@@ -58,6 +58,12 @@ Agents working from this repo analyse the original game and document it. They ne
 - `docs/camera.md`: working log for the camera/flyby investigation (raw addresses, candidate tribe_struct
   fields, confidence levels, dead ends, tools) - the fuller record behind what's written into `open-populous`
   `docs/specs/pop3-rev-analysis.md` "Camera flyby state (tribe_struct)".
+- `docs/trace-backlog.md`: queued tracing targets for a future session, one topic at a time (currently Angel of
+  Death and native-AI/AI-scripting follow-ups) - each item names the concrete exe lead to chase, found by reading
+  what `open-populous`'s own TODO.md/specs left open after building on a prior session's findings here. Check
+  this file before starting a fresh investigation from scratch; add to it (with the same "what to chase, and
+  where" shape) whenever `open-populous`'s own docs surface a new open question this repo should resolve, rather
+  than letting it go untracked.
 - `backup/backup.xml`: the Ghidra export both skills read function names/ranges from. **It holds much more than that**
   (found by an agent session, previously unused): full `STRUCTURE`/`MEMBER` type definitions for this exact game
   (`unit_struct`, `tribe_struct`, `unit_type_person`, `sprite_bank`, `vstart_struct`/`vfra_struct`/`vele_struct`,
