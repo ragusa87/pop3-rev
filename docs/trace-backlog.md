@@ -12,22 +12,32 @@ one with a different approach, or a later pop3-rev session may already have trac
 
 ## Angel of Death
 
-- **Does it dive down to grab a grounded victim, or only ever grab from cruising height?** `open-populous`'s own
-  implementation confirmed its grab check is x/z distance only, height never factored in - but the exe trace never
-  settled whether the original visibly swoops down first. Chase: the case-5 hunt/engage machine's own grab
-  transition (`0x4DB980`, `+0xA8`==1) for any height-target write distinct from the general flight-physics
-  altitude clamp (`0x4DDB30`).
-- **The literal `AOD_KILL_COUNT` (40) / `AOD_DURATION` (2500-turn) expiry check.** Never located in state 28
-  itself. Chase: the still-unopened outer `+0x2D` sub-states (0, 1, 3, 4, 6, 7, 8, 0xA, 0xB nested, 0xF, 0x10 -
-  symbols only via `backup.xml`'s own `switchD_`/`caseD_` entries at `0x4DB980`'s own switch address), and
-  whether the self-damage cost charged on release (`0x4E0A30`) is actually what ends its life via `LIFE_AOD`
-  instead of a separate counter.
-- **Can it attack a building at all?** No building-attack path was found inside state 28's case 5. The
-  user-reported prison/pyramid/totem exclusion is unconfirmed either way. Chase: the still-unopened per-tribe
-  fallback scan's own building-candidate path (the sibling of the person-candidate scan already traced).
-- **Can it grab a person riding in a vehicle** (boat/balloon) the way it grabs one in the open? No
-  vehicle-eviction call was found anywhere in state 28 or its known callees. Chase: the same per-tribe fallback
-  scan above, and whether it has any class-4 (vehicle) branch at all.
+- **RESOLVED this session.** ~~The literal `AOD_KILL_COUNT` (40) / `AOD_DURATION` (2500-turn) expiry check.~~
+  Both fully traced: `+0x97` (duration, init 2500, ticks down every turn except while `+0x63` is set) and `+0xB2`
+  (kill count, init 0, incremented once per release in `0x4E0A30`) are checked together in `0x4DB980`'s own
+  shared tail (`0x4DD3DE`-`0x4DD47B`) - either one hitting its cap forces the angel into caseD_6
+  (`0x4DC805`, a 16-turn countdown) then caseD_7 (`0x4DC899`, the real self-delete: sound 0xB2, spirit-handoff,
+  a class-7/type-9 death-puff effect, `delete_unit`/`0x4EF180`). A SECOND, more violent ending shares the same
+  check: if the angel is already critically damaged (`+0x93` bit 0x1, set when life <=2) when it would otherwise
+  still have time/kills left, it instead shatters its own shadow-companion object (`0x407860`) and detonates a
+  real damaging blast (`alloc_unit(7,1,...)` + `0x50B6F0`) at its own position, skipping straight to caseD_7
+  without the holding countdown. Also corrected in the same pass: `0x4E0A30`'s throw destination is along the
+  ANGEL's own facing, not the victim's as previously written, and `0x4E0A30` charges NO self-damage at all (that
+  was unconfirmed speculation that didn't survive a full read). Full write-up: `docs/person_states.tsv` row 28,
+  `docs/functions.tsv` rows `0x4db980`/`0x4e0a30`/`0x407860`/`0x50b6f0`.
+- **Does it dive down to grab a grounded victim, or only ever grab from cruising height?** Still open.
+  `open-populous`'s own implementation confirmed its grab check is x/z distance only, height never factored in -
+  but the exe trace never settled whether the original visibly swoops down first. Chase: the case-5 hunt/engage
+  machine's own grab transition (`0x4DB980`, `+0xA8`==1) for any height-target write distinct from the general
+  flight-physics altitude clamp (`0x4DDB30`).
+- **Can it attack a building at all?** Still open, but a concrete lead now exists: a per-tribe-wide candidate-scan
+  loop was found this session inside outer caseD_3 (`0x4DBF20`, reached after ~40 ticks of lost-target wandering
+  in caseD_1) - an object-chain walk with `class`/`type`-byte checks at `+0x2B` on both the angel and each
+  candidate, sampled but not read to completion. Chase: finish reading caseD_3's own candidate-acceptance test
+  for a class-2 (building) branch, cross-referencing `docs/unit_types` for what `+0x2B`==5 means on whatever
+  class the candidates turn out to be.
+- **Can it grab a person riding in a vehicle** (boat/balloon) the way it grabs one in the open? Still open - same
+  caseD_3 candidate scan above is the lead; check whether it has any class-4 (vehicle) branch at all.
 - **Does it actually pitch/bank in flight**, or is yaw-only (plus the confirmed cruise/dive mesh swap) really all
   the original does? User-reported in play as looking visually odd ("the angle is strange", flat/no banking).
   Chase: the flight-physics helper (`0x4DDB30`) and the shadow-companion's own facing/bank fields for any rotation
