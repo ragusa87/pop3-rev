@@ -30,14 +30,17 @@ one with a different approach, or a later pop3-rev session may already have trac
   but the exe trace never settled whether the original visibly swoops down first. Chase: the case-5 hunt/engage
   machine's own grab transition (`0x4DB980`, `+0xA8`==1) for any height-target write distinct from the general
   flight-physics altitude clamp (`0x4DDB30`).
-- **Can it attack a building at all?** Still open, but a concrete lead now exists: a per-tribe-wide candidate-scan
-  loop was found this session inside outer caseD_3 (`0x4DBF20`, reached after ~40 ticks of lost-target wandering
-  in caseD_1) - an object-chain walk with `class`/`type`-byte checks at `+0x2B` on both the angel and each
-  candidate, sampled but not read to completion. Chase: finish reading caseD_3's own candidate-acceptance test
-  for a class-2 (building) branch, cross-referencing `docs/unit_types` for what `+0x2B`==5 means on whatever
-  class the candidates turn out to be.
-- **Can it grab a person riding in a vehicle** (boat/balloon) the way it grabs one in the open? Still open - same
-  caseD_3 candidate scan above is the lead; check whether it has any class-4 (vehicle) branch at all.
+- **RESOLVED this session: can it attack a building, or grab a person riding in a vehicle? No, to both.**
+  caseD_3 (`0x4DBF20`-`0x4DC1CA`) was read to completion: all three of its candidate lookups (a per-tribe
+  existence check, a global angel-priority list walk, and the full per-tribe fallback scan) require
+  `+0x2A`==1 (class 1/person) before any other check runs - no class-2 (building) or class-4 (vehicle) branch
+  exists anywhere in the function. This isn't "not found yet" - the single candidate-acceptance path's own class
+  filter rules both out at the source. Bonus finds from the same read: caseD_3's type-pairing exclusion chain
+  independently re-confirms "angel accepts any candidate type" and, while reading the shared self-type-4/6/8
+  helper it reuses, turned up that firewarrior does NOT exclusively target shaman as the community wiki claims -
+  the code's actual default is "firewarrior accepts any type", with a global option flag EXCLUDING shaman
+  specifically when set (the opposite of preacher's own shaman-only-by-default rule sharing the same flag). Full
+  write-up: `docs/person_states.tsv` row 28, `docs/functions.tsv` row `0x4db980`.
 - **Does it actually pitch/bank in flight**, or is yaw-only (plus the confirmed cruise/dive mesh swap) really all
   the original does? User-reported in play as looking visually odd ("the angle is strange", flat/no banking).
   Chase: the flight-physics helper (`0x4DDB30`) and the shadow-companion's own facing/bank fields for any rotation
