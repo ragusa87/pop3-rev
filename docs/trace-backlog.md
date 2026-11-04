@@ -35,17 +35,28 @@ one with a different approach, or a later pop3-rev session may already have trac
   the VISUAL flight path, confirming the original really does swoop down, which a pure x/z-range implementation
   with a fixed cruise altitude would not reproduce. Full write-up: `docs/person_states.tsv` row 28,
   `docs/functions.tsv` row `0x4ddb30`.
-- **RESOLVED this session: can it attack a building, or grab a person riding in a vehicle? No, to both.**
-  caseD_3 (`0x4DBF20`-`0x4DC1CA`) was read to completion: all three of its candidate lookups (a per-tribe
-  existence check, a global angel-priority list walk, and the full per-tribe fallback scan) require
-  `+0x2A`==1 (class 1/person) before any other check runs - no class-2 (building) or class-4 (vehicle) branch
-  exists anywhere in the function. This isn't "not found yet" - the single candidate-acceptance path's own class
-  filter rules both out at the source. Bonus finds from the same read: caseD_3's type-pairing exclusion chain
-  independently re-confirms "angel accepts any candidate type" and, while reading the shared self-type-4/6/8
-  helper it reuses, turned up that firewarrior does NOT exclusively target shaman as the community wiki claims -
-  the code's actual default is "firewarrior accepts any type", with a global option flag EXCLUDING shaman
-  specifically when set (the opposite of preacher's own shaman-only-by-default rule sharing the same flag). Full
-  write-up: `docs/person_states.tsv` row 28, `docs/functions.tsv` row `0x4db980`.
+- **Building attack - refined (third follow-up session, prompted by a user-reported memory of tower attacks).**
+  The candidate SCAN (`caseD_3`, read to completion in the prior session) still only ever accepts class-1/person
+  candidates - no class-2 (building) branch exists in it, so the angel can't target a building as an object
+  through that path. BUT the engagement-gate helper (`0x4DADA0`, opened this session) explicitly checks whether
+  its locked target is standing on a TOWER's door cell (`0x40A3F0(target, 4)`) and reacts with a wider standoff
+  distance - confirming the user's memory: **it does go after people sheltering in towers**, just still as a
+  person-target, never damaging/destroying the tower itself. Full write-up: `docs/person_states.tsv` row 28,
+  `docs/functions.tsv` rows `0x4dada0`/`0x40a3f0`.
+- **Vehicle-passenger grab - still open, user raised an alternate mechanism worth chasing.** The hunting scan and
+  the area-panic scan (`0x4DB5E0`) both still hard-require class==1, so there's still no direct vehicle-eviction
+  call anywhere in the angel's own code. User's alternate theory: the area-panic effect (forces nearby persons
+  into state 26, "run in a random direction") might cause a BOARDED passenger to disembark as a side effect of
+  being forced to flee, not via any angel-specific mechanism. Not confirmed or refuted this session - state 26's
+  own handlers (`docs/person_states.tsv` row 26) show no disembark call in what was previously read, but that
+  read never specifically checked for one, and whether a boarded passenger even stays in the per-cell chain
+  `0x4DB5E0` walks while embarked was not checked at all. Chase: how vehicle boarding represents a passenger
+  (removed from the normal per-cell chain while embarked, or not?), and whether state 26's entry (`0x4D2D74`) or
+  the generic movement/physics step auto-disembarks a unit forced to move independently. Bonus finds from the
+  prior session's scan read, still accurate: caseD_3's type-pairing exclusion chain confirms "angel accepts any
+  candidate type" and turned up that firewarrior does NOT exclusively target shaman as the community wiki claims
+  - the code's actual default is "accepts any type", with a global option flag EXCLUDING shaman specifically when
+  set (the opposite of preacher's own shaman-only-by-default rule sharing the same flag).
 - **Does it actually pitch/bank in flight**, or is yaw-only (plus the confirmed cruise/dive mesh swap) really all
   the original does? User-reported in play as looking visually odd ("the angle is strange", flat/no banking).
   Chase: the flight-physics helper (`0x4DDB30`) and the shadow-companion's own facing/bank fields for any rotation
