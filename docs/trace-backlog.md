@@ -150,13 +150,30 @@ one with a different approach, or a later pop3-rev session may already have trac
   section 6h's own task table).
 - **Whether a guard group is ever replenished after losses.** Current best reading is "no" but this was never
   directly confirmed - would need the same guard/patrol task traced above, once found.
-- **The shaman's drum-tower rally/muster-before-attack sequence**, and whether she has any dedicated "guard a
-  repair site" behaviour distinct from generic base-defense positioning (live-observed on level 25: builds a drum
-  tower, goes inside it, followers gather, and she waits beside it during repairs rather than relocating).
-  Flagged by the implementation session as its own substantially bigger investigation, not started. Chase:
-  `ai_attack`'s own simplification note (`INT_ATTR_DONT_GROUP_AT_DT`, never read anywhere) as the starting
-  thread, plus whatever task evaluator actually orders the shaman into a building (`PUT_PERSON_IN_DT` has no
-  engine-side mechanism at all yet - nothing currently issues the shaman a move/enter order).
+- **RESOLVED this session: the gather-then-attack muster sequence, confirming the user's own hypothesis.**
+  `0x4CB400` (`ATTACK`'s own task-20 handler, `docs/functions.tsv`'s own row has the full state-by-state
+  write-up) turns out to be a genuine 24-substate machine, not just the "per-person sweep" a past session partly
+  read. The real sequence: init/wait -> a GATHER phase (one unit-TYPE category per tick, each a percentage-of-budget
+  quota - the same `INT_ATTR_PREF_*_PEOPLE`-shaped mechanism `TRAIN_PEOPLE` already uses - committing each found
+  recruit to person state 14, plus a final any-type top-up for the remaining shortfall; advances once the force is
+  merely non-empty, not once a hard headcount is hit) -> broadcast/commit -> a REGROUP-AT-m1 loop (confirmed as a
+  genuine repeating poll, re-kicking stragglers still waiting in state 14, matching `ai-scripts.md`'s already-written
+  "it leaves, regroups at `m1`... then attacks" narrative with a concrete state-machine home for the first time) ->
+  the per-person sweep issuing real attack orders. **So: yes, units gather (by type quota, not a flat headcount),
+  and once the gathered force is non-empty and has regrouped, the attack actually starts - the user's hypothesis is
+  correct in substance**, with the gather threshold being "at least one recruit after one pass" rather than "the
+  AI's full ideal force." `INT_ATTR_DONT_GROUP_AT_DT` (attribute id 1042): no gating check was found anywhere in
+  the entire gather phase (substates 0/2/3/4/5, all fully read) - confirms it's never actually consulted by the
+  native `ATTACK` implementation, at least for skipping the gather step itself (substates 9-16/18-23 weren't
+  individually read, so not 100% exhaustive). **`PUT_PERSON_IN_DT`'s own missing engine mechanism is STILL
+  unresolved** - the shaman's own branch within the per-person sweep (`0x4CC553`, own row, the natural place to
+  look) turned out to be something else entirely: she reuses her own auto-cast spell-casting pipeline (the exact
+  same gates/cast-call her dedicated auto-cast task, `0x4C9580`, already uses) to cast one of `ATTACK`'s own
+  `spell1`/`spell2`/`spell3` operands - not a drum-tower occupancy order. So "whatever task evaluator actually
+  orders the shaman into a building" remains an open question for a future session; the "guard a repair site"
+  half of this item was not investigated this session either. Full write-up: `docs/functions.tsv` rows
+  `0x4cb400`/`0x4cc553`/`0x4d14f0`/`0x4f4680`/`0x4f4f60`/`0x4f4ff0`/`0x4f5050`, plus caller cross-references added
+  to `0x4c29a0`/`0x4c2d80`/`0x4f2100`/`0x4f3040`/`0x4f4de0`.
 - **Finish tasks 2, 19 and 27** (shaman positioning, vehicle-hut dispatch, class-4 garrison coordination): each
   confirmed last session to interleave more than one distinct job in a single handler, and none was read to
   completion - this is what's blocking "garrison and vehicle tasks" from being modelled in `open-populous` at
