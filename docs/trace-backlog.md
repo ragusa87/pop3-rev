@@ -64,12 +64,20 @@ one with a different approach, or a later pop3-rev session may already have trac
   with a steeper scripted override during the one-time player-approach intro) and a turn-rate bank (`+0x6E`,
   scaled from the desired-vs-current heading delta). Both are skipped (stays level) while carrying a victim or
   during the fast post-grab chase. Full write-up: `docs/functions.tsv` row `0x4ddb30`, `docs/person_states.tsv`
-  row 28. **Still open, and this is plausibly the real explanation for the user's "looks flat" report**: whether
-  the renderer actually reads `+0x6C`/`+0x6E` to rotate the drawn mesh at all - no other reference to either
-  offset was found anywhere else in the executable. Chase: the class-6 object's draw/transform code (find what
-  actually builds its render matrix - candidates not yet checked include whatever function services the drawable
-  record `0x4EE700` sets up, or the generic per-object 3D transform near `coord_global_convert`/`0x46DBE0`) to see
-  whether it reads these two fields, reads something else, or only ever applies yaw.
+  row 28. **RESOLVED this follow-up session: yes, the renderer reads and applies both.** Found it via
+  `draw_unit_on_land_pos`/`0x46EC80` (the per-frame per-thing draw-state dispatcher) -> `object_to_polygons`/
+  `0x4708D0` (reached unconditionally, for the companion's own draw class 4, through the `0x74A348`
+  function-pointer slot). That function composes a Z-axis rotation from `+0x6C` and a Y-axis rotation from
+  `+0x6E` onto the thing's own 3D orientation matrix (via `create_z_rot_matrix3x3`/`0x47F930` and
+  `create_y_rot_matrix3x3`/`0x47FA30`, each a matrix-multiply through `0x47F7B0`) every time it's drawn - skipped
+  only for class-2/building objects (a drawable flag, `+0x35` bit 0x20, that the companion never gets set, since
+  `alloc_unit` zeroes it and nothing in the angel's own spawn code touches it), which instead get a simpler
+  yaw-only path matching the sinking-building rock animation already documented elsewhere. The companion's model
+  id also indexes a 54-byte-stride per-model table (`0x895EC1`), confirming it's drawn as a real 3D mesh, not a
+  2D sprite - so there's no rendering-side disconnect: the original engine genuinely tilts and banks the angel's
+  flying body. Whatever drove the user's original "looks flat" report, it isn't this. Full write-up:
+  `docs/functions.tsv` rows `0x46ec80`/`0x4708d0`/`0x471c40`/`0x42a070`/`0x47f930`/`0x47fa30`/`0x47f9b0`,
+  `docs/person_states.tsv` row 28.
 - **RESOLVED this session (prompted by a user request to catalog the spell's visual effects): cruise/dive
   crossfade timing, and the third "launching" pose.** `0x4DE440` was fully read: the transition is a genuine
   discrete multi-pose blend, not a linear interpolation or a hard cut - a 0..5 counter (`+0x7C`) steps by 1 per

@@ -423,14 +423,17 @@ visibly distinct in-between poses along the way, so the switch should read as a 
 in any reimplementation. **The simulation also computes real pitch (nose up when flying slowly, levelling off as
 it speeds up, with a sharper scripted dip during the one-time entrance) and real banking (leaning into a turn,
 proportional to how sharply it's turning) every tick** - both are switched off while it's actively carrying a
-victim or sprinting after a release. Whether the game's own renderer ever actually applies these two values to
-the drawn mesh could not be confirmed from the code - no other reference to either value exists anywhere else in
-the executable, so it is genuinely possible the original game computed real pitch/bank and then never displayed
-it, which would be a strange but not unheard-of leftover. **A reimplementation should feel free to render visible
-pitch and banking matching this formula - it will match the original's own intent even if the original's own
-renderer may not have actually shown it**, and doing so would directly address the specific user complaint that
-drove the open question ("looks flat/odd, no banking" in the original). (exe refs: `0x4DE440`, `0x40CC30`,
-`0x4DDB30` - `functions.tsv`.)
+victim or sprinting after a release. **Update, 2026-11-04: confirmed the renderer genuinely applies both.** The
+companion is drawn as a real 3D mesh (its model id indexes a per-model point/face table, not a 2D sprite frame),
+and the function that builds its on-screen orientation every time it's drawn composes a real rotation from the
+pitch value AND a separate real rotation from the bank value onto its base heading, via the engine's own generic
+3x3-rotation-matrix machinery (the same kind of matrix-compose step buildings and other true 3D objects use) -
+skipped only for buildings, which take a simpler yaw-only path instead (matching the sinking-building's own
+rock animation elsewhere in this doc, which also only ever touches yaw). So this was never a dead computation:
+**the original game really does tilt and bank the angel's flying body**, resolving the open question below and
+confirming a reimplementation matching this formula will match the original's actual on-screen behaviour, not
+just its unused intent. (exe refs: `0x4DE440`, `0x40CC30`, `0x4DDB30`, the object-to-mesh draw prep at
+`0x4708D0` - all `functions.tsv`.)
 
 **What ends its life - fully resolved, two different endings.** The spell has both of its documented caps - a
 2500-turn duration limit and a 40-kill limit - checked literally in code, every tick, and either one hitting
@@ -460,9 +463,10 @@ untouchable by ordinary spell effects," with the firewarrior's partial damage be
 attack exists anywhere in its behaviour - the "breathes fire" impression most likely comes from the one-off blast
 that happens when it first appears, not an ongoing attack. A handful of narrower loose ends remain, none of them
 load-bearing for how the spell plays: the exact mesh/pose used by the brief "launching" climb-out beyond knowing
-it's a genuinely distinct third pose; a couple of still-unopened minor flight sub-states that appear to be further
-scripted-approach or patrol variants, not part of the ordinary hunt loop; and (as above) whether the computed
-pitch/banking values were ever actually wired into the original's own renderer.
+it's a genuinely distinct third pose; and a couple of still-unopened minor flight sub-states that appear to be
+further scripted-approach or patrol variants, not part of the ordinary hunt loop. (Whether the computed
+pitch/banking values reach the renderer - genuinely open as of the original version of this section - is now
+resolved: see "Visual appearance in flight" above.)
 
 **What this means for implementing it.** A new, player-uncontrollable flying unit kind that is spawned by a
 multi-stage cast effect (an invisible falling object trailing a fixed 42-spark formation, a real terrain-ripple
@@ -475,9 +479,9 @@ scripted fight, never touches buildings or vehicles directly, and ends its own l
 on cause (a quiet fade-out on natural expiry, a violent self-detonation if beaten in combat) - and should be
 exempted from the same "shaman-and-angel-proof" spell-damage list every other immune-type exemption in the game
 already uses, with one partial exception for firewarrior fire. Visually, it's worth giving it real pitch and bank
-while flying (formula above) even though the original engine's own use of those values couldn't be confirmed -
-it is very unlikely to look worse than flat yaw-only flight, and directly answers the one visual complaint that
-prompted this whole follow-up investigation.
+while flying (formula above) - now confirmed to match the original engine's own actual on-screen behaviour, not
+just its computed-but-unused intent - which directly answers the one visual complaint that prompted this whole
+follow-up investigation.
 
 ### 6d. Follow-up (2026-10-30, same day): task type 1 (resource-gathering, likely FETCH_WOOD) traced
 
