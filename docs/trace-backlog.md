@@ -57,10 +57,18 @@ one with a different approach, or a later pop3-rev session may already have trac
   candidate type" and turned up that firewarrior does NOT exclusively target shaman as the community wiki claims
   - the code's actual default is "accepts any type", with a global option flag EXCLUDING shaman specifically when
   set (the opposite of preacher's own shaman-only-by-default rule sharing the same flag).
-- **Does it actually pitch/bank in flight**, or is yaw-only (plus the confirmed cruise/dive mesh swap) really all
-  the original does? User-reported in play as looking visually odd ("the angle is strange", flat/no banking).
-  Chase: the flight-physics helper (`0x4DDB30`) and the shadow-companion's own facing/bank fields for any rotation
-  beyond heading (yaw) - a pitch or roll field would settle this.
+- **RESOLVED (simulation side): yes, real pitch and bank ARE computed, not yaw-only.** `0x4DDB30` eases two
+  further fields on the companion every tick via the engine's generic tilt helper (`0x4E6C80`, also used by the
+  sinking-building rock animation): a speed-dependent nose-up pitch (`+0x6C`, grows the slower the angel flies,
+  with a steeper scripted override during the one-time player-approach intro) and a turn-rate bank (`+0x6E`,
+  scaled from the desired-vs-current heading delta). Both are skipped (stays level) while carrying a victim or
+  during the fast post-grab chase. Full write-up: `docs/functions.tsv` row `0x4ddb30`, `docs/person_states.tsv`
+  row 28. **Still open, and this is plausibly the real explanation for the user's "looks flat" report**: whether
+  the renderer actually reads `+0x6C`/`+0x6E` to rotate the drawn mesh at all - no other reference to either
+  offset was found anywhere else in the executable. Chase: the class-6 object's draw/transform code (find what
+  actually builds its render matrix - candidates not yet checked include whatever function services the drawable
+  record `0x4EE700` sets up, or the generic per-object 3D transform near `coord_global_convert`/`0x46DBE0`) to see
+  whether it reads these two fields, reads something else, or only ever applies yaw.
 - **RESOLVED this session (prompted by a user request to catalog the spell's visual effects): cruise/dive
   crossfade timing, and the third "launching" pose.** `0x4DE440` was fully read: the transition is a genuine
   discrete multi-pose blend, not a linear interpolation or a hard cut - a 0..5 counter (`+0x7C`) steps by 1 per
@@ -70,16 +78,20 @@ one with a different approach, or a later pop3-rev session may already have trac
   confirmed as a genuinely separate mesh (model id 0x4A/74, not "same as cruise"): set directly/instantly (no
   blend) by outer caseD_a (`0x4DCCBE`, raw `+0x2D`==11, a climb-out state - snap to ground height, then climb to
   +600 units). Full write-up: `docs/person_states.tsv` row 28, `docs/functions.tsv` rows `0x4de440`/`0x40cc30`.
-- **Orbiter spark particle count corrected: 42, not 36** (6 lifetime tiers x 7 angular-phase steps, re-counted
-  from `0x514F60`'s own loop bounds/strides this session - the previous "36"/"6x6" read the inner loop's trip
-  count wrong). Each particle's spawn-time jitter-phase and lifetime-tier values are now identified (stored
-  straight into its own `+0x78`/`+0x7A` fields) and confirmed purely cosmetic (no damage/push args passed to
-  `alloc_unit`). **Still open**: the orbiter's own PER-TICK motion (does it drift in a pattern using those stored
-  fields, or just fade in/out in place) - that logic lives in the orbiter's own per-turn effect-state handler
-  (type 7/0x46), a different function from the meteor's own body (`0x514F60`) that spawns them; not located or
-  opened this session. Chase: find class-7 state dispatch table's entry for whatever state orbiters are
-  initialized into (not yet identified - `alloc_unit` itself sets no state, so something else must, not found in
-  the spawn loop itself) and read its per-turn body.
+- **RESOLVED this follow-up session: orbiter count AND per-particle motion, both fully traced.** Count corrected
+  to 42, not 36 (6 lifetime/amplitude tiers x 7 angular-phase steps - the previous "36"/"6x6" read the inner
+  loop's trip count wrong). Found and read the orbiter's own per-turn body (`0x514D00`, effect state 57/`0x39` -
+  not located in the prior session, found this time via `backup.xml`'s own `switchD_0050a769` case symbols sitting
+  right next to ground-shockwave's and the meteor's own). Genuine two-phase motion, correcting the earlier
+  "scattered jitter, no real motion" guess: while the meteor (its "owner", `+0x6E`) is still alive, each particle
+  holds a FIXED relative offset in a 42-point formation trailing the meteor's current position every tick (a
+  2-angle sin/cos combination using its own spawn-seeded phase/tier values - the angle-ADVANCE term that would
+  make it actually spiral is left at zero and never set, so the formation itself doesn't rotate); the instant the
+  meteor self-destructs on impact, every particle independently rolls a random speed/heading, pops up slightly,
+  then falls under a simple decelerating arc until it crosses real terrain height and self-destructs. So: a static
+  spark-shower formation that detaches and scatters to the ground all at once at impact, not a per-particle
+  staggered fade. Full write-up: `docs/functions.tsv` rows `0x514d00`/`0x514f60`, `docs/effect_states.csv` rows
+  57/59.
 
 ## Native AI / AI scripting
 
