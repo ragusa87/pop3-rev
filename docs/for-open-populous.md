@@ -21,6 +21,57 @@ independent landmarks (`process_tribe_cmd`/0x43e8e0, the `process_cmd` switch at
 `switchD_00d1138f`), but not exhaustively verified. Low risk, but worth re-confirming against the
 exact pinned build before anything here is treated as final.
 
+## Open-populous propagation plan (updated 2026-11-04) - read this first
+
+This file has grown into a long chronological log, oldest material first. A session that just got
+`open-populous3` attached and wants to work efficiently, rather than read top to bottom, should
+start here: what's actually outstanding right now, grouped by target file/section, newest findings
+first. Once a bullet below is ported, delete it (and, if its source section further down is now
+fully absorbed, trim that too, per this file's own stated purpose above).
+
+**Known starting condition, confirm before trusting anything else in this checklist**: as of
+2026-11-04, `open-populous3`'s own `docs/specs/pop3-rev-analysis.md` "Angel of Death mechanics"
+section and `TODO.md` Angel-of-Death line(s) are STALE - an earlier session's edits there were
+left uncommitted (per `open-populous3`'s own `AGENTS.md`, this repo never commits to that one) and
+were lost when that container reset. This is exactly the failure mode this file exists to prevent,
+so re-check the live `open-populous3` state before assuming anything below is already done, even
+if an earlier log entry here says it was "written directly" into that repo.
+
+- **§7 "Angel of Death mechanics" -> `open-populous3`'s `docs/specs/pop3-rev-analysis.md` +
+  `TODO.md`.** §7 below is a full, corrected rewrite (42 particles not 36, the literal
+  `AOD_KILL_COUNT`/`AOD_DURATION` expiry mechanism with its two death types, the real 3D dive-to-grab,
+  tower-standoff behaviour, the "angel can't touch buildings/vehicles directly but eviction-on-death
+  still applies" nuance, confirmed pitch/bank actually reaching the renderer). Needs a wholesale
+  rewrite of that spec section from §7's text, not a patch - the current version predates the whole
+  follow-up investigation.
+- **§6i "`GIVE_UP_AND_SULK`" -> `open-populous3`'s `docs/specs/ai-scripts.md`.** Its own bullet
+  under "Other ON/OFF switches" still hedges "the actual retreat/guard behaviour... must come from
+  that other function, if the original really does that" - replace with §6i's confirmed mechanism:
+  NOT a retreat/guard order at all; it's vehicle eviction + Angel-of-Death crippling + hypnotism
+  re-timing + a ghost sweep + spy-disguise reveal + conversion-coordinator teardown.
+- **§6j "`SET_ATTACK_VARIABLE`" -> `open-populous3`'s `docs/specs/ai-scripts.md`.** Its own line
+  still carries a "(?)" marker ("a variable the AI may update with the attack's outcome (?)") -
+  replace with §6j's confirmed 4-code mechanism (the `ATTACK` call's own immediate accept/reject
+  status - queued / at concurrency cap / no free task slot / no valid target - NOT the eventual
+  battle's outcome).
+- **§6k "worker selection" -> `open-populous3`'s own `game_core` code + `TODO.md`.** If
+  `open-populous3`'s worker-selection is still "idle braves in id order" (this file's own earlier
+  note, not independently re-checked against the current crate this session - verify first), §6k
+  found that's the wrong one of two real native code paths: real `ATTACK`/construction/training
+  worker assignment is nearest-eligible-candidate(s) to the work site, not id order. Likely a CODE
+  change, not just a doc update - flag for a coding session once confirmed against the current crate.
+- **§6l "`ATTACK`'s gather/regroup state machine" -> `open-populous3`'s `docs/specs/ai-scripts.md`
+  (citation) + `TODO.md` (implementation gap).** `ai-scripts.md`'s own "Sequence" bullet for `ATTACK`
+  ("the force gathers... leaves, regroups at `m1`... then attacks") is already roughly right but had
+  no exe confirmation behind it; §6l gives the full state machine (percentage-of-budget quota per
+  unit type, advances once merely non-empty rather than at full quota, then a genuine regroup-and
+  -re-kick-stragglers poll loop) if open-populous wants to implement or cite it precisely.
+- **Still genuinely open - leave these as open items in `docs/trace-backlog.md`, nothing to port
+  yet**: `PUT_PERSON_IN_DT`'s own engine mechanism (still never located - §6l's own shaman branch
+  inside `ATTACK` turned out to be spell-casting, not a drum-tower order, so that lead is spent);
+  the guard/patrol group's actual movement order and whether a guard group is ever replenished; and
+  tasks 2/19/27's own unread remainder.
+
 ## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED, mostly not actionable
 
 Update (2026-10-30, later same day): all 7 original handlers (plus a newly-found companion,
@@ -633,3 +684,109 @@ task catalog is probably enough to design the AI subsystem's data model directly
 callee (still ~40 `named`-but-not-`traced` helper rows) is individually read. The remaining highest-value
 targets, if continuing: `0x4f8490`/`0x4f7dc0` (the shared worker-finder's exact selection criteria), `0x4ea920`
 (the move/build order primitive several tasks call), and finishing tasks 2/19/27's un-read remainder.
+
+### 6i. Follow-up (2026-11-04): `GIVE_UP_AND_SULK` debunked - not a retreat/guard order
+
+Chased this session's own first Native AI backlog item: what `GIVE_UP_AND_SULK`'s ON case actually does to a
+tribe's units, since `ai-scripts.md` only had the community wiki's unconfirmed "everyone guards the shaman"
+description. Traced its own callee (`0x41CA10`) end to end - it takes the WHOLE TRIBE, not a single target,
+and **there is no order reassignment, movement command, or formation anywhere in it.** Instead it's a one-shot
+cleanup/punishment sweep:
+- Forcibly pulls every non-shaman follower off any vehicle they're currently riding.
+- Cripples the tribe's own Angels of Death - rerolls their life down to a random tiny value (32-95, out of a base
+  of 10,000), left to finish themselves off in combat rather than removed outright.
+- Re-times any unit this tribe currently holds hypnotised - rerolls their revert-to-original-owner countdown to a
+  new random (and typically much shorter) value.
+- Sweeps and deletes the tribe's own ghost units, the same generic "ghosts get deleted" rule used everywhere else.
+- Reveals/reverts any of the tribe's own currently-disguised spies.
+- Force-tears-down the tribe's own in-progress "soul convert 2" (a second-phase preacher-conversion coordinator)
+  instances.
+
+This sits ALONGSIDE the already-documented generic "force success" flag this same command also sets (which
+affects preacher-conversion rolls and some level-script-forced outcomes elsewhere - that part of `ai-scripts.md`
+was already correct). **Net for `open-populous`**: implementing `GIVE_UP_AND_SULK` should NOT look like "send
+everyone to defend the shaman" - it's this specific bundle of cleanup actions plus the force-success flag. The
+wiki's "everyone guards the shaman" claim does not hold up anywhere in this command's actual code.
+
+### 6j. Follow-up (2026-11-04): `SET_ATTACK_VARIABLE` reports `ATTACK`'s own accept/reject status, not the battle's outcome
+
+`SET_ATTACK_VARIABLE $v` is a pure "register" opcode: it stores `$v`'s own variable-slot id into a per-tribe
+staging field that has exactly one writer in the whole exe and is NEVER reset - so once a script calls it, every
+later `ATTACK` call in that same script keeps reporting into that same variable, until a later
+`SET_ATTACK_VARIABLE` call changes it. Each `ATTACK` call writes one of four literal codes into that variable via
+the engine's generic script-variable store:
+- **0** - the attack task was successfully queued.
+- **1** - this tribe is already at its own per-`ATTACK` concurrency cap (multiple attacks CAN be active at once,
+  up to a per-tribe limit - it's a cap, not a strict single-instance lock).
+- **2** - no free AI task slot (each tribe has 10, shared across every AI task type).
+- **3** - no valid target was found matching the given `target_type` (marker/building/person).
+
+So `ai-scripts.md`'s own "(?)"-marked guess ("a variable the AI may update with the attack's outcome") was right
+in spirit but imprecise: **it's the immediate accept-or-reject status of the `ATTACK` call itself, reported the
+same tick it's issued - never the eventual battle's result** (kills, damage dealt, win/lose). A script checking
+this variable right after `DO ATTACK` can tell whether the attack was actually launched, not how it went.
+
+Side finding from the same trace, also worth a citation: `ATTACK`'s 13th/last parameter, `m3`, is read past (the
+script's own program counter is advanced over it) but its value is never actually resolved or used anywhere in
+the chain - confirms `ai-scripts.md`'s own "(?)"-flagged suspicion that `m3` has no visible effect; it's not just
+unused in practice, the original interpreter itself discards it outright.
+
+### 6k. Follow-up (2026-11-04): worker selection is proximity-based, not id order - likely needs a code fix, not just a doc fix
+
+Traced the two shared "find eligible workers" functions (`CONSTRUCT_BUILDING`'s/`TRAIN_PEOPLE`'s/`ATTACK`'s own
+worker-assignment calls all go through these) to settle this session's own worker-selection backlog item. Both
+functions support TWO selection modes over the same eligibility filter:
+- **List order** - just take the first eligible candidate(s) walking the tribe's own person list front to back
+  (effectively unit-allocation/id order).
+- **Proximity** - rank every eligible candidate by actual distance (wraparound-aware, since the map is a torus)
+  to the target position, and take the closest one(s). For a single-candidate search this has a "good enough"
+  shortcut (anything within 18 cells on both axes is accepted immediately); for a multi-candidate search it's a
+  genuine top-K nearest-neighbour selection via a proper insertion sort, not a single pass.
+
+**Every real call site checked this session - including `CONSTRUCT_BUILDING`'s own worker assignment, confirmed
+by disassembling the call directly - uses the PROXIMITY mode.** The list-order mode exists in the code but, as
+far as surveyed, nothing actually calls it that way. **If `open-populous`'s own worker-selection currently
+guesses "idle braves in id order"** (this file's own earlier note from a past session - worth re-checking against
+the CURRENT crate before assuming it's still true), **that's the wrong one of the two real code paths**: the
+correct rule is "the closest eligible worker(s) to the work site." This is likely a small but real behavioural
+difference (which brave responds to a build order, not just which one is logged) - probably wants an actual code
+change in `game_core`, not just a spec-doc correction.
+
+(Separately, and NOT something that needs any follow-up: the building-site-SEARCH half of this same backlog item,
+`0x4F7AA0`, was already fully traced by an earlier session as a deterministic spiral search with terrain/footprint/
+water checks - see "Resolved `0x4f7aa0`" in §6h above. That half of the item was stale, not actually open.)
+
+### 6l. Follow-up (2026-11-04): `ATTACK`'s full gather-then-regroup-then-attack state machine, confirming the muster sequence
+
+Traced `ATTACK`'s own task handler end to end as a 24-phase per-tick state machine (a past session had only read
+its final per-person order-issuing phase). Confirms, with the actual mechanics, the muster sequence
+`ai-scripts.md`'s own "Sequence" bullet already describes narratively ("the force gathers... leaves, regroups at
+`m1`... then attacks"):
+
+1. **Gather phase.** Cycles through the AI's unit-type preferences one category per tick, each a quota computed as
+   `(preference percentage) x (total attack-force budget) / 100` - the exact same percentage-of-budget mechanism
+   already confirmed for `TRAIN_PEOPLE`'s own training quotas. For each category, recruits the closest eligible
+   units of that type (see §6k) toward the quota, committing each one to the engine's universal "pulled from
+   default behaviour, committed to a job" marker (person state 14). The shaman gets her own direct slot rather
+   than going through the quota search. Once every category has been tried once, any remaining shortfall against
+   the total budget is filled by a generic "any type, closest first" top-up pass. **Advances to the next phase the
+   moment the recruited force is merely non-empty - NOT once the full ideal quota is met.** If truly nobody at all
+   could be recruited, the whole attack is abandoned here.
+2. **Regroup-at-`m1` phase.** A genuine repeating poll: the force is set moving as a group, then the task
+   repeatedly checks whether it has actually converged, re-nudging any straggler still sitting in the "committed"
+   marker state (person state 14) until the whole group is together. This is the concrete mechanism behind "it
+   leaves, regroups at `m1` because units walk at different speeds."
+3. **Attack phase.** Only once regrouped does the per-person sweep fire real attack orders at the resolved
+   target. The shaman's own role here is to cast one of `ATTACK`'s own `spell1`/`spell2`/`spell3` parameters,
+   reusing the exact same mana-check/cast pipeline her autonomous auto-cast behaviour already uses elsewhere -
+   not a building-entry order.
+
+**For `open-populous`**: if `ATTACK`'s own implementation is currently simplified to "move toward the target and
+fight" with no staging, this state machine is worth citing/implementing precisely, including the "non-empty, not
+full quota" advance condition - a smaller/weaker force attacking sooner rather than a maximal one attacking later
+is a real, observable behavioural difference from the original.
+
+**Still unresolved, a genuine dead end this session**: `PUT_PERSON_IN_DT` - whatever actually orders the shaman
+(or anyone) into a building to occupy/defend it from the inside - was NOT found here. The shaman's own branch
+inside `ATTACK`'s per-person sweep, the natural place to expect it, turned out to be her spell-casting role
+instead (point 3 above). This remains open in `docs/trace-backlog.md` for a future session.
