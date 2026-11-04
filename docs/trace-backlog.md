@@ -25,11 +25,16 @@ one with a different approach, or a later pop3-rev session may already have trac
   ANGEL's own facing, not the victim's as previously written, and `0x4E0A30` charges NO self-damage at all (that
   was unconfirmed speculation that didn't survive a full read). Full write-up: `docs/person_states.tsv` row 28,
   `docs/functions.tsv` rows `0x4db980`/`0x4e0a30`/`0x407860`/`0x50b6f0`.
-- **Does it dive down to grab a grounded victim, or only ever grab from cruising height?** Still open.
-  `open-populous`'s own implementation confirmed its grab check is x/z distance only, height never factored in -
-  but the exe trace never settled whether the original visibly swoops down first. Chase: the case-5 hunt/engage
-  machine's own grab transition (`0x4DB980`, `+0xA8`==1) for any height-target write distinct from the general
-  flight-physics altitude clamp (`0x4DDB30`).
+- **RESOLVED this session: yes, it genuinely dives/climbs to the victim's real height.** The moment case 5 commits
+  to a grab (`0x4DB980`, `+0xA8` 0->1), it writes a precise target height into `+0x6A` (victim's own ground height
+  `+0x41` plus a fixed grab-point offset `+0x1C`). `0x4DDB30` (`aod_flight_physics`) reads `+0x6A` every tick and
+  eases its own planned altitude toward it at a rate computed from distance/speed (decelerating as it closes) -
+  layered UNDER the already-known ~100-unit terrain floor, so it dives as low as ~100 units above ground to grab
+  someone standing there, never lower. `open-populous`'s own grab-range check can stay x/z-only (the exe's own
+  grab RANGE check is also x/z-only, per case 5's already-documented standoff-distance logic) - this only affects
+  the VISUAL flight path, confirming the original really does swoop down, which a pure x/z-range implementation
+  with a fixed cruise altitude would not reproduce. Full write-up: `docs/person_states.tsv` row 28,
+  `docs/functions.tsv` row `0x4ddb30`.
 - **RESOLVED this session: can it attack a building, or grab a person riding in a vehicle? No, to both.**
   caseD_3 (`0x4DBF20`-`0x4DC1CA`) was read to completion: all three of its candidate lookups (a per-tribe
   existence check, a global angel-priority list walk, and the full per-tribe fallback scan) require
