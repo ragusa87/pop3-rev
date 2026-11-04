@@ -246,9 +246,24 @@ one with a different approach, or a later pop3-rev session may already have trac
   (confirmed vehicle-exclusivity checks), `0x465650`/`0x4f3b20` (re-confirmed as vehicle-site checks in practice
   despite being written generically). Open end: `0x4f2d40` (named, not traced), and the exact hand-off from
   "vehicle loaded" to "vehicle departs."
-- **Finish task 27** (class-4 garrison coordination): confirmed to interleave more than one distinct job in a
-  single handler, and not read to completion - this is what's blocking "garrison tasks" from being modelled in
-  `open-populous` at all (explicitly listed there as "deliberately not modelled yet").
+- **RESOLVED this session: task 27 fully traced, confirming a user hypothesis in substance ("board units into a
+  vehicle, use/manage the vehicle, disembark") with one correction (it is FIREWARRIOR-specific, and it does not
+  move a mis-parked vehicle).** All 11 states of `0x4cf970`'s own dispatch now read. State 0 checks the tribe can
+  afford a vehicle-model's worth of transport for a requested headcount (ceiling-divided by that model's own
+  passenger capacity) against a per-tribe-per-model count (`tribe+0xba5`, not independently confirmed). State 2
+  (huge) runs two global CLASS-4 (vehicle) scans: one validates every occupant of already-loaded, ready vehicles
+  and "selects" the fully-valid ones; the other checks whether a ready vehicle is validly parked - if so, finds
+  its disembark point and unloads its passengers one at a time (`disembark_vehicle`/`0x4659d0`, already a
+  confirmed function); if NOT validly parked but already half-loaded, it's selected anyway but **no movement
+  order was found for it** - this is the one part of the hypothesis NOT confirmed, a vehicle short of a valid
+  resting spot is left alone by this task, not redirected. State 4 then recruits troops to fill the needed
+  headcount via the shared proximity worker-finder with `type_lo=type_hi=6` - **explicitly firewarriors**,
+  settling the task's own "firewarrior-specific" character the prior session's partial read had only guessed at.
+  States 5-9 poll for readiness, do a final pilot-commit pass, and broadcast finalize notifications; state 10
+  cleans up by de-selecting any vehicles this task marked. **Not found**: an `ATTACK`/task-20 enqueue, matching
+  task 19's own same gap - this task manages vehicle readiness/loading/disembarking only, not departure/attack
+  itself. Full write-up: `docs/functions.tsv` row `0x4cf970` (fully rewritten), `0x4f2460`/`0x4f24c0` (corrected/
+  updated), `0x4f24a0`/`0x4f24d0`/`0x4f2520`/`0x4d1d90`/`0x4d21e0` (new, named but not traced).
 - **RESOLVED this session: the worker-selection tie-break is PROXIMITY, not id order.** `0x4F7DC0` (finds at
   most one worker - its own `count` argument can only be 0 or 1, anything else bails immediately) and `0x4F8490`
   (finds up to a real N, via its own `mode` argument) share the same eligibility filter but each have TWO

@@ -97,8 +97,14 @@ if an earlier log entry here says it was "written directly" into that repo.
   committing troops to the generic "committed" person state. Note the exe trace did NOT find this task issuing
   the actual `ATTACK`/departure order itself - it only manages readiness and loading; flag that hand-off as a
   separate, still-open question rather than assuming one.
-- **Still genuinely open - leave these as open items in `docs/trace-backlog.md`, nothing to port
-  yet**: task 27's own unread remainder.
+- **§6q "task 27 is a firewarrior-crewed vehicle mission coordinator" -> `open-populous3`'s AI/native-behaviour
+  docs + `TODO.md`.** If there's no existing native-AI behaviour modelling "confirm enough vehicles of a kind,
+  disembark ones that have arrived, and specifically recruit firewarriors to crew the rest," this is new ground
+  worth a `TODO.md` entry citing §6q's mechanism - this is the counterpart to §6p's own task-19 finding (general
+  boat/balloon readiness) but specific to firewarrior transport, and (like task 19) stops at "vehicle loaded,"
+  never issuing the departure/attack order itself.
+- **Nothing left genuinely open from this file's own Native AI backlog** - `docs/trace-backlog.md`'s entire
+  "Native AI / AI scripting" section is now marked RESOLVED, item by item, as of this session.
 
 ## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED, mostly not actionable
 
@@ -680,7 +686,7 @@ level - summary table (own `functions.tsv` row has the full state-machine detail
 | 24 | Native execution of `SET_MARKER_ENTRY`/`MARKER_ENTRIES` patrol groups - **fully resolved (2026-11-04): recruits by proximity, then NEVER issues any movement order; see §6m** |
 | 25 | Unconditional mass rally to a random nearby point (candidate: `STATE_DEFEND`) |
 | 26 | `TRAIN_PEOPLE` (confirmed, corrects a "coded no-op" misread from a tiny-looking entry dispatcher) |
-| 27 | Class-4-object garrison coordination + (per an earlier session) vehicle management (largest handler, partial) |
+| 27 | **Fully resolved (2026-11-04): mount a firewarrior-crewed vehicle mission - confirm enough vehicles, disembark arrived ones, recruit firewarriors for the rest; see §6q** |
 | 28 | A training-quota sibling of task 26 (confirmed shape, exact distinction from 26 open) |
 
 **Cross-cutting findings that matter more than any single task**:
@@ -711,8 +717,8 @@ level - summary table (own `functions.tsv` row has the full state-machine detail
 task catalog is probably enough to design the AI subsystem's data model directly, even before every single
 callee (still ~40 `named`-but-not-`traced` helper rows) is individually read. The remaining highest-value
 targets, if continuing: `0x4f8490`/`0x4f7dc0` (the shared worker-finder's exact selection criteria), `0x4ea920`
-(the move/build order primitive several tasks call), and finishing task 27's un-read remainder (tasks 2 and 19
-are now fully resolved, see §6o and §6p).
+(the move/build order primitive several tasks call) - tasks 2, 19 and 27 are all now fully resolved, see §6o,
+§6p and §6q.
 
 ### 6i. Follow-up (2026-11-04): `GIVE_UP_AND_SULK` debunked - not a retreat/guard order
 
@@ -956,3 +962,32 @@ vehicle, which this session didn't trace from that side.
 troops aboard them for a vehicle-borne assault or infiltration," that's the real gap here - not a hut/population
 one. Full exe detail: `docs/functions.tsv` row `0x4caac0` (rewritten a second time, correcting the first
 rewrite's own building-expansion misreading).
+
+### 6q. Follow-up (2026-11-04): task 27 is a firewarrior-crewed vehicle mission coordinator
+
+Another user hypothesis, checked directly against the exe before writing anything down: "board units into a
+vehicle, move/use the vehicle, disembark" as the shape of task 27 (the largest native AI task handler, 2848
+bytes, previously only partially read as a vague "class-4 garrison/occupancy" scan). Confirmed in substance, with
+two sharpened details.
+
+**The confirmed shape**: the task first checks whether the tribe can even afford the trip - a requested headcount
+divided by one vehicle's own passenger capacity gives "how many vehicles of this model are needed," compared
+against how many the tribe already has. If affordable, it runs two sweeps over the tribe's own vehicles of that
+model: one validates and "selects" already-loaded vehicles whose entire passenger list still checks out; the
+other looks for a vehicle that has safely arrived/parked and, if found, **disembarks its passengers one at a
+time** at a computed exit point near it (the same confirmed "get this person off the vehicle" primitive
+`GIVE_UP_AND_SULK` also uses, `disembark_vehicle`). Once vehicles are confirmed available, the task **recruits
+troops to crew them** via the same proximity-based worker-finder every other gathering task uses - but this one
+asks for troop type 6 specifically: **firewarriors**, not a generic mix. The task then polls for readiness,
+re-confirms pilots are properly assigned, broadcasts a notification, and cleans up.
+
+**One part of the hypothesis not confirmed**: a vehicle that ISN'T sitting in a valid resting spot but is already
+decently loaded gets marked as "selected" anyway, but nothing in this task ever orders it to move anywhere closer
+to shore or to a better spot - it's simply left as-is. If vehicles do get redirected toward a valid parking spot
+in the original game, it isn't this task doing it.
+
+**For `open-populous`**: this is the firewarrior-transport counterpart to §6p's own task-19 finding (which
+covers general boat/balloon readiness without a specific troop type) - together they describe "maintain a vehicle
+fleet, load specific or general troops aboard it, disembark on arrival." Neither task was found to issue the
+actual departure/attack order - that hand-off remains an open question for both. Full exe detail:
+`docs/functions.tsv` row `0x4cf970` (fully rewritten).
