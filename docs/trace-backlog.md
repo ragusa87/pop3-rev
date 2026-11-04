@@ -61,18 +61,25 @@ one with a different approach, or a later pop3-rev session may already have trac
   the original does? User-reported in play as looking visually odd ("the angle is strange", flat/no banking).
   Chase: the flight-physics helper (`0x4DDB30`) and the shadow-companion's own facing/bank fields for any rotation
   beyond heading (yaw) - a pitch or roll field would settle this.
-- **The exact cruise/dive crossfade timing.** `0x4DE440`'s own model-id toggle (0x45 cruise / 0x3E dive) is
-  confirmed, but the blend curve between them was never pinned down (implementation uses a straight linear guess).
-  Chase: whatever reads the shadow-companion's own `+0x7C` variant counter (0..5) and `0x40CC30`'s variant
-  derivation - is there a multi-step blend table there, or a hard cut per tick.
-- **The literal mesh/sprite for the confirmed third "launching/accelerating" pose** (outer sub-state 11's own
-  distinct `0x4EE700(companion, hfx 0x45, draw_class 4)` call plus `self+0x36 |= 0x4`) - confirmed to exist in
-  code, but its own hfx/model id was taken at face value as "same as cruise" without checking whether draw_class 4
-  (vs. the cruise toggle's own draw_class, not previously cross-checked) actually resolves to a distinct mesh in
-  the object bank.
-- **The 36 "orbiter" spark particles' own per-particle motion**, beyond "scattered, staggered lifetimes
-  170/340/510/680/850/1020". Chase: `0x514F60`'s own nested 6x6 spawn loop for the actual per-particle initial
-  velocity/direction, if any (current implementation guesses a simple fade-in/fade-out with no real motion).
+- **RESOLVED this session (prompted by a user request to catalog the spell's visual effects): cruise/dive
+  crossfade timing, and the third "launching" pose.** `0x4DE440` was fully read: the transition is a genuine
+  discrete multi-pose blend, not a linear interpolation or a hard cut - a 0..5 counter (`+0x7C`) steps by 1 per
+  tick toward the requested pose, passing through 3 intermediate blend poses (indices 76/77/78 via `0x40CC30`,
+  also newly traced - a plain field-setter, not a "derivation" function as previously guessed) before swapping to
+  the real cruise/dive mesh once the counter reaches its target extreme - up to 5 ticks total. The third pose is
+  confirmed as a genuinely separate mesh (model id 0x4A/74, not "same as cruise"): set directly/instantly (no
+  blend) by outer caseD_a (`0x4DCCBE`, raw `+0x2D`==11, a climb-out state - snap to ground height, then climb to
+  +600 units). Full write-up: `docs/person_states.tsv` row 28, `docs/functions.tsv` rows `0x4de440`/`0x40cc30`.
+- **Orbiter spark particle count corrected: 42, not 36** (6 lifetime tiers x 7 angular-phase steps, re-counted
+  from `0x514F60`'s own loop bounds/strides this session - the previous "36"/"6x6" read the inner loop's trip
+  count wrong). Each particle's spawn-time jitter-phase and lifetime-tier values are now identified (stored
+  straight into its own `+0x78`/`+0x7A` fields) and confirmed purely cosmetic (no damage/push args passed to
+  `alloc_unit`). **Still open**: the orbiter's own PER-TICK motion (does it drift in a pattern using those stored
+  fields, or just fade in/out in place) - that logic lives in the orbiter's own per-turn effect-state handler
+  (type 7/0x46), a different function from the meteor's own body (`0x514F60`) that spawns them; not located or
+  opened this session. Chase: find class-7 state dispatch table's entry for whatever state orbiters are
+  initialized into (not yet identified - `alloc_unit` itself sets no state, so something else must, not found in
+  the spawn loop itself) and read its per-turn body.
 
 ## Native AI / AI scripting
 
