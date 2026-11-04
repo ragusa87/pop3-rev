@@ -74,10 +74,17 @@ if an earlier log entry here says it was "written directly" into that repo.
   native walk/patrol behaviour to document as unknown. Also worth a `TODO.md` note if `open-populous`'s current
   implementation (reusing its own player-facing 8-slot patrol-point system as a stand-in) should be flagged as a
   deliberate deviation from the original rather than an unconfirmed approximation.
+- **§6n "`PUT_PERSON_IN_DT` found - its own dedicated opcode" -> `open-populous3`'s `docs/specs/ai-scripts.md`
+  `PUT_PERSON_IN_DT` entry + `TODO.md`.** The spec currently just says `PUT_PERSON_IN_DT model x z puts a
+  follower of that model in the tower at x z` with no mechanism behind it (and this repo's own prior session had
+  flagged the engine side as a genuine dead end) - replace with §6n's confirmed chain: it resolves `(x,z)` to the
+  tribe's OWN NEAREST drum tower (not a named building), does nothing if no free AI task slot/no nearby tower/
+  already correctly staffed, and otherwise asynchronously evicts any wrong-type non-shaman occupant and walks the
+  nearest eligible follower of the given type in - not a one-shot teleport of a specific unit. Worth a `TODO.md`
+  entry if `open-populous` doesn't yet model this as "resolve nearest tower, then evict+recruit" rather than a
+  direct placement.
 - **Still genuinely open - leave these as open items in `docs/trace-backlog.md`, nothing to port
-  yet**: `PUT_PERSON_IN_DT`'s own engine mechanism (still never located - §6l's own shaman branch
-  inside `ATTACK` turned out to be spell-casting, not a drum-tower order, so that lead is spent);
-  and tasks 2/19/27's own unread remainder.
+  yet**: tasks 2/19/27's own unread remainder.
 
 ## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED, mostly not actionable
 
@@ -644,7 +651,7 @@ level - summary table (own `functions.tsv` row has the full state-machine detail
 | 4 | `DEFEND_SHAMEN` gathering feeding a `STATE_SEND_GHOSTS` phase (confirmed shape) |
 | 5 | Integrates freshly-converted followers (confirmed, corrects a "desperation" false lead) |
 | 6 | Assembles a themed group (spy/firewarrior/shaman/angel) around a specialist unit (shape confirmed, label open) |
-| 7 | Type-aware garrison staffing with active eviction (candidate: native `PUT_PERSON_IN_DT`) |
+| 7 | Type-aware garrison staffing with active eviction - **CONFIRMED (2026-11-04) as `PUT_PERSON_IN_DT`'s own native engine, not just a candidate; see §6n** |
 | 8 | Reactive counter-attack, triggered by an "avenge me" per-unit flag |
 | 9 | Probabilistic dispatcher - spawns task 8, or randomly task 11 or 15 (confirmed, corrects "no-op" misread) |
 | 11 | "Wander" - sends a unit (+ optional escort) to a random point near the tribe's anchor |
@@ -793,10 +800,11 @@ fight" with no staging, this state machine is worth citing/implementing precisel
 full quota" advance condition - a smaller/weaker force attacking sooner rather than a maximal one attacking later
 is a real, observable behavioural difference from the original.
 
-**Still unresolved, a genuine dead end this session**: `PUT_PERSON_IN_DT` - whatever actually orders the shaman
-(or anyone) into a building to occupy/defend it from the inside - was NOT found here. The shaman's own branch
-inside `ATTACK`'s per-person sweep, the natural place to expect it, turned out to be her spell-casting role
-instead (point 3 above). This remains open in `docs/trace-backlog.md` for a future session.
+**Dead end this session, RESOLVED a later session (see §6n)**: `PUT_PERSON_IN_DT` - whatever actually orders the
+shaman (or anyone) into a building to occupy/defend it from the inside - was NOT found here. The shaman's own
+branch inside `ATTACK`'s per-person sweep, the natural place to expect it, turned out to be her spell-casting
+role instead (point 3 above) - a dead end, because `PUT_PERSON_IN_DT` turns out not to be reachable from `ATTACK`
+at all; it has its own dedicated opcode and task-enqueue path, found and fully traced in §6n below.
 
 ### 6m. Follow-up (2026-11-04): the native "guard/patrol group" never actually walks or circles anywhere
 
@@ -826,3 +834,36 @@ Whether to keep the current (more capable-looking) patrol-point stand-in anyway 
 improvement, or match the original's static/idle behaviour exactly, is a judgment call for whoever implements
 this - but the spec should stop describing the original's own behaviour as "unknown," and should say plainly
 that it's a recruit-and-park mechanism, not a patrol. Full exe detail: `docs/functions.tsv` row `0x4cedd0`.
+
+### 6n. Follow-up (2026-11-04): `PUT_PERSON_IN_DT` found - its own dedicated opcode, not an `ATTACK` side-effect
+
+A prior session's dead end (above, in §6l's area) looked for `PUT_PERSON_IN_DT` inside `ATTACK`'s per-person
+sweep, since that's where community-sourced docs put the shaman's own drum-tower-occupancy behaviour. That was
+the wrong lead: `PUT_PERSON_IN_DT model x z` is its own `interpret_script` opcode (id 1097), with its own short
+call chain straight into one of the SAME "AI goal evaluator" functions `ATTACK`'s own native trigger belongs to
+- it was never part of `ATTACK` at all.
+
+**The mechanism, in full**: the opcode resolves its 3 operands (`model`, `x`, `z`) then calls a small evaluator
+function that does four things, bailing out silently (no script-visible error or return code) the moment any one
+of them fails:
+1. Claims one of the tribe's 10 AI task slots - fails if all are busy.
+2. Searches a small area around `(x, z)` for this tribe's OWN nearby drum tower (class 2/type 4 "tower",
+   specifically in an active/completed state) - fails if there isn't one nearby. **This is the key behavioural
+   detail**: the script doesn't name a building directly, it names a position, and the engine finds whichever of
+   the tribe's own towers happens to be closest to that position.
+3. Checks whether the tower is already garrisoned by someone of the requested `model` type, or by a shaman -
+   if so, does nothing (won't double-assign, won't ever evict a shaman).
+4. Otherwise, enqueues the SAME native task (task 7, already fully traced in §6h above as "type-aware garrison
+   staffing with active eviction") that handles the actual work: evict any current occupant whose type isn't
+   `model` and isn't a shaman, then find and walk the NEAREST eligible follower of `model`'s own type into the
+   tower.
+
+**What this means for `open-populous`**: `PUT_PERSON_IN_DT` is not "teleport this specific follower into that
+building" - it's "make sure the nearest tower to this spot ends up staffed by someone of this type," asynchronous
+and best-effort, silently a no-op if there's no free AI task slot, no tower nearby, or the tower's already
+correctly staffed. A follower doesn't even have to exist yet at command time - task 7's own already-documented
+worker-finder does the recruiting. If `open-populous` ever implements this command, it should resolve the
+nearest tower to the given position (not require an exact building reference) and drive it through the same
+evict-then-recruit two-step task 7 already needs for its own generic garrison-filling behaviour, rather than a
+one-shot teleport. Full exe detail: `docs/functions.tsv` rows `0x48d22b`/`0x4925e0`/`0x4e67b0`/`0x4f33d0`, and
+`0x4c8910` (task 7, now confirmed rather than "candidate").

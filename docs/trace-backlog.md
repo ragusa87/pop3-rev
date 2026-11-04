@@ -191,6 +191,25 @@ one with a different approach, or a later pop3-rev session may already have trac
   half of this item was not investigated this session either. Full write-up: `docs/functions.tsv` rows
   `0x4cb400`/`0x4cc553`/`0x4d14f0`/`0x4f4680`/`0x4f4f60`/`0x4f4ff0`/`0x4f5050`, plus caller cross-references added
   to `0x4c29a0`/`0x4c2d80`/`0x4f2100`/`0x4f3040`/`0x4f4de0`.
+- **RESOLVED (later session): `PUT_PERSON_IN_DT`'s own engine mechanism - found, and it was never in `ATTACK` at
+  all.** The earlier dead end above was looking in the wrong place: `PUT_PERSON_IN_DT` doesn't ride along inside
+  `ATTACK`'s per-person sweep, it's its own dedicated `interpret_script` opcode (id 1097, case `0x48d22b`, bounded
+  exactly between the already-known `PRAY_AT_HEAD`/`I_HAVE_ONE_SHOT` cases). Traced the full chain: the opcode
+  case calls `0x4925e0` (resolves the 3 `model x z` operands) which calls `0x4e67b0` - **one of the SAME ~21
+  "AI goal evaluator" functions `ATTACK`'s own `0x4e5fd0` belongs to**, called directly from the script opcode
+  rather than from one of `maybe_ai_func_1`'s priority-template slots. `0x4e67b0`: claims a free AI task slot
+  (silently does nothing if none free), resolves `(x,z)` to THIS tribe's own nearby class-2/type-4 "tower"
+  building via a small-area search (`0x4f33d0`, own row - silently does nothing if no tower is nearby), checks
+  the tower isn't already garrisoned by `model`'s type or a shaman (silently does nothing if so), then enqueues
+  **task 7** (`0x4c8910`, already fully traced, previously only a "candidate" link - now CONFIRMED) with
+  `param_a`=the tower's id, `param_b`=`model`. Task 7 then does the actual work it was already known to do:
+  evicts any wrong-type non-shaman occupant, finds and recruits the nearest eligible unit of `model`'s type near
+  the tower, commits it to person state 14, and finalizes. **Net: `PUT_PERSON_IN_DT model x z` doesn't teleport
+  a specific follower into a tower - it kicks off an async "evict wrong type, then walk the nearest eligible
+  `model`-type follower in" task against whichever of the tribe's own towers is nearest `(x,z)`, failing silently
+  (no script-visible error) if there's no free task slot, no nearby tower, or the tower is already correctly
+  staffed.** Full write-up: `docs/functions.tsv` rows `0x48d22b`/`0x4925e0`/`0x4e67b0`/`0x4f33d0` (new/updated),
+  `0x4c8910` (updated to drop the "candidate" hedge).
 - **Finish tasks 2, 19 and 27** (shaman positioning, vehicle-hut dispatch, class-4 garrison coordination): each
   confirmed last session to interleave more than one distinct job in a single handler, and none was read to
   completion - this is what's blocking "garrison and vehicle tasks" from being modelled in `open-populous` at
