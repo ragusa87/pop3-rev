@@ -88,13 +88,15 @@ if an earlier log entry here says it was "written directly" into that repo.
   always-on "the shaman wanders toward and casts Convert on small wildman pockets on her own" behaviour, this is
   new ground to add, not a correction - worth a `TODO.md` entry citing §6o's mechanism (hill-climb toward the
   nearest few-wildmen spot, cast once in range, cooldown via a per-tribe busyness accumulator).
-- **§6p "task 19 is a population-expansion decision bundled with boat-hut housekeeping" -> `open-populous3`'s
-  AI/native-behaviour docs + `TODO.md`.** If there's no existing native-AI behaviour modelling "expand to a new
-  building site once the current one's capacity for huts/towers runs out, scaled by difficulty," this is new
-  ground (not a correction) worth a `TODO.md` entry citing §6p's mechanism - counts current hut-big+tower (or
-  ordinary hut) totals against a difficulty target, finds/validates a nearby site, then frees up an existing
-  building's occupants for reassignment. Note the exe trace did NOT find a direct link from this decision to an
-  actual new `CONSTRUCT_BUILDING` enqueue - flag that gap rather than assuming one.
+- **§6p "task 19 is vehicle mission-readiness/loading, corrected from an initial 'population expansion'
+  misreading within the same session" -> `open-populous3`'s AI/native-behaviour docs + `TODO.md`.** If there's
+  no existing native-AI behaviour modelling "maintain enough ready boats/balloons for the difficulty level, then
+  load gathered troops aboard once one has room," this is new ground worth a `TODO.md` entry citing §6p's
+  mechanism - vehicle readiness counted by type (boat vs balloon), a staging/launch spot found (a boat hut's
+  water-exit point for boats, a nearby vehicle-free cell for balloons), then crew/passenger slots filled by
+  committing troops to the generic "committed" person state. Note the exe trace did NOT find this task issuing
+  the actual `ATTACK`/departure order itself - it only manages readiness and loading; flag that hand-off as a
+  separate, still-open question rather than assuming one.
 - **Still genuinely open - leave these as open items in `docs/trace-backlog.md`, nothing to port
   yet**: task 27's own unread remainder.
 
@@ -673,7 +675,7 @@ level - summary table (own `functions.tsv` row has the full state-machine detail
 | 16 | Fills a targeted building's garrison to capacity (candidate: `POPULATE_DRUM_TOWER`) |
 | 17 | Recovers a unit/vehicle that can't path home (candidate: `FETCH_LOST_PEOPLE`/`FETCH_LOST_VEHICLE`) |
 | 18 | Resolves a vehicle, searches for a home-anchored spot (candidate: `BOAT_PATROL`/`VEHICLE_PATROL`) |
-| 19 | **Fully resolved (2026-11-04): a population/building-capacity expansion decision bundled with unrelated boat-hut housekeeping; see §6p** |
+| 19 | **Fully resolved (2026-11-04, corrected same day): vehicle mission readiness/loading (boat or balloon) - maintain enough ready vehicles, find a staging/launch spot, load troops aboard; see §6p** |
 | 20 | `ATTACK` - script-exclusive, confirmed no native autonomous trigger |
 | 24 | Native execution of `SET_MARKER_ENTRY`/`MARKER_ENTRIES` patrol groups - **fully resolved (2026-11-04): recruits by proximity, then NEVER issues any movement order; see §6m** |
 | 25 | Unconditional mass rally to a random nearby point (candidate: `STATE_DEFEND`) |
@@ -920,33 +922,37 @@ occasionally converting one or two) is an observable behavioural difference from
 `docs/functions.tsv` row `0x4c7370` (fully rewritten), `0x4f79d0` (the wildman census helper, corrected from an
 earlier "height function" guess).
 
-### 6p. Follow-up (2026-11-04): task 19 is a population-expansion decision, not (just) vehicle-hut dispatch
+### 6p. Follow-up (2026-11-04): task 19 is vehicle mission readiness/loading, not population expansion
 
-Prompted by a user's own game-knowledge hint: huts can't be built just anywhere - they need to be near the
-reincarnation site, another building, or a tower, and once a site runs out of room for more huts, the tribe needs
-to find a new spot and build a tower there to keep expanding. That hint pointed straight at what task 19
-(previously labelled only "vehicle-hut dispatch/positioning, partial") turned out to actually be, once fully
-traced: it bundles that exact expansion decision together with a second, unrelated vehicle-hut behaviour.
+A user's game-knowledge hints drove this whole follow-up, in two rounds. The first hint (huts need to be near
+existing structures, and a full site needs a new tower to keep expanding) pointed at a population/building
+reading of task 19's "type 3/4" branch, which an initial re-trace seemed to confirm. But a second hint - that
+house expansion has nothing to do with vehicles, and that this looked more like an attack-by-vehicle workflow
+("gather enough units, put them in a vehicle, start a coordinated attack... boat or balloon... sometimes a mix of
+trained units, sometimes just a spy mission") - didn't fit what had just been written up, and was worth checking
+directly against the exe rather than taking either guess on faith. It was right: the building-expansion reading
+was wrong, caught by re-tracing the task's own count function (`0x4f77e0`) directly - it filters the GLOBAL
+object list by CLASS 4 (vehicle), not class 2 (building). The "type 3/4" byte values that looked like "hut
+big"/"tower" are actually "air 1"/"air 2" (balloon) on a VEHICLE record, not a building one - same numbers,
+wrong record kind, an easy trap `docs/unit_types` exists precisely to catch.
 
-**Job A - the expansion decision** (triggered when the task's own candidate building happens to be a "hut big" or
-a "tower"): counts how many of that building category (hut-big + tower combined) the tribe currently has, against
-a difficulty-scaled target count. If the tribe already has enough, it moves on. If not: it looks for - and
-distance/placement-validates - a candidate site near an existing related building, marks it as claimed for this
-tribe, and then frees up every current occupant of the building that triggered the check (releasing them from
-whatever job they were doing, presumably so something else, like `CONSTRUCT_BUILDING`'s own worker-finder, can
-reassign them to the new site). **One real gap found**: the exe trace does NOT show this decision directly
-enqueueing a new `CONSTRUCT_BUILDING` task - it ends at "freed workers + a claim marker," not an obvious "now go
-build it" step. Either the hand-off happens through a mechanism this session didn't identify (the claim bit?), or
-building the actual new tower/hut is left to a separate, independent decision elsewhere in the AI. Worth a
-dedicated follow-up if the precise trigger-to-construction link matters.
+**With that fixed, task 19 reads as**: maintain enough ready, crewed vehicles of each kind (boats and balloons
+counted separately) for the current difficulty level. When a vehicle of a short-supplied kind has room to spare:
+for a **balloon**, find a nearby cell free of any other vehicle to stage it, confirm it's still sitting somewhere
+valid, and claim it for the tribe; for a **boat**, find the tribe's own boat hut and work out its water-exit
+point from the direction it's facing. Either way, once the vehicle is confirmed still needed and ready, **load
+its crew/passenger slots** - a small array sized by a per-vehicle-type capacity table - by committing each
+occupant into the same generic "committed to a job" person state every other task's worker-assignment uses, here
+meaning "boarding." This matches the hinted workflow closely: gather eligible troops (elsewhere, before this task
+runs), confirm a vehicle is ready, load it, and - for a boat - know where to launch from. A single-occupant load
+would read as exactly the "just a spy mission" case; a fuller load as the "mix of trained units" assault case.
 
-**Job B - unrelated boat-hut housekeeping** (the task's other branch): finds the tribe's own boat hut, works out
-its water-exit point from which direction it's facing, and separately tries to claim a ready crew member waiting
-at a (possibly different) building. This shares only bookkeeping fields and terminal states with job A - further
-confirmation of the already-noted pattern that several native AI tasks interleave more than one real behaviour
-under a single task id.
+**What this task does NOT do, confirmed by reading all 13 states**: it never issues an `ATTACK`/task-20 order
+itself. It manages vehicle readiness and boarding only - the actual departure/attack presumably comes from a
+script's own `ATTACK ... ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON` call (`ai-scripts.md`) consuming an already-loaded
+vehicle, which this session didn't trace from that side.
 
-**For `open-populous`**: if the current AI has nothing modelling "the tribe needs to expand to a new site once an
-existing one can't support more huts," this is new ground, not a documentation fix - a computer tribe that just
-stops growing once its starting area fills up would be a real, observable gap versus the original. Full exe
-detail: `docs/functions.tsv` row `0x4caac0` (fully rewritten).
+**For `open-populous`**: if the current AI has nothing modelling "keep enough boats/balloons ready and load
+troops aboard them for a vehicle-borne assault or infiltration," that's the real gap here - not a hut/population
+one. Full exe detail: `docs/functions.tsv` row `0x4caac0` (rewritten a second time, correcting the first
+rewrite's own building-expansion misreading).

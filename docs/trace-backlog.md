@@ -222,24 +222,30 @@ one with a different approach, or a later pop3-rev session may already have trac
   (`shaman+0x9f`, a generic back-reference, not specifically a ghost) that always ends the task once triggered,
   not an ongoing escort loop. Full write-up: `docs/functions.tsv` row `0x4c7370` (rewritten), `0x4f79d0`
   (corrected from a guessed height-function to a confirmed wildman census), `0x4c2e00` (new).
-- **RESOLVED this session: task 19 fully traced, confirming (and sharpening) a user-suggested hypothesis -
-  it's a population/building-capacity EXPANSION decision bundled with unrelated vehicle-hut housekeeping.**
-  All 13 states of `0x4caac0`'s own dispatch now read. Job A (reached when the task's own candidate building is
-  type 3/"hut big" or type 4/"tower"): counts the tribe's current total of that building category against a
-  difficulty-scaled target, and - only if still short - finds/validates a nearby candidate site (distance +
-  placement checks against an existing related building), marks a per-tribe claim bit on it, then frees up
-  (evicts to the generic "committed" state) every occupant of the building that triggered the check, presumably
-  so some other system (not identified this session - possibly `CONSTRUCT_BUILDING`'s own worker-finder) can
-  reassign them. This matches, with the exe mechanism now behind it, the real-game behaviour of needing to
-  expand to a new building/tower once a site's own capacity for more huts is exhausted. **Job B** (the
-  non-type-3/4 path): locates the tribe's boat hut, computes its own water-exit point from its facing, and
-  separately tries to claim a ready crew member - genuinely unrelated to job A beyond sharing task-record fields
-  and terminal states, confirming the earlier "interleaves more than one job" read. **Not found this session**:
-  a direct enqueue of a NEW `CONSTRUCT_BUILDING` task from job A - it ends at "evict occupants + mark a claim
-  bit," not an obvious "and now go build it" step; worth a follow-up if the exact hand-off to actual construction
-  matters for `open-populous`. Full write-up: `docs/functions.tsv` row `0x4caac0` (rewritten), `0x465650`
-  (corrected from "boat may park here" to a generic per-type terrain-site check), `0x4f92b0`/`0x4f2490` (merged),
-  `0x4f7660`/`0x4f3b20`/`0x450450`/`0x4f2d40` (logged, still not individually traced).
+- **RESOLVED this session, with a correction partway through: task 19 is a VEHICLE mission-readiness/loading
+  task (boat or balloon), not a population/building-capacity expansion decision as this same session first
+  concluded.** All 13 states of `0x4caac0`'s own dispatch now read. The first pass (reflected in an earlier
+  draft of this entry) mis-read the task's own "type 3/4" branch as "hut big"/"tower" building types, because
+  `+0x16`'s resolved record and the literal byte values 1-4 happen to collide with class-2 (building) type ids -
+  re-tracing `0x4f77e0` (the count function) directly settled it: it walks the GLOBAL object list filtering
+  CLASS 4 (**vehicle**, `docs/unit_types`), not class 2 (building). So `+0x16` is a VEHICLE throughout, found by
+  `0x4f92b0` via a person already linked to it (a crew member/pilot) with room to spare; type 3/4 = "air 1"/"air
+  2" (**balloon**), the else branch = "boat 1"/"boat 2" (**boat**) - not hut-big/tower at all. With that fixed,
+  the whole task reads as: maintain enough ready, crewed boats/balloons for the difficulty level (counted via
+  `0x4f77e0`); for a balloon short of target, find a nearby vehicle-free staging cell (`0x4cec10`'s validated
+  3x3 grid - itself confirmed vehicle-specific, since its own validity checks `0x4650d0`/`0x465440` explicitly
+  reject any cell occupied by another class-4 object) and claim the balloon; for a boat, find the tribe's boat
+  hut and compute its water-exit launch point; either way, once the vehicle still has room and is still needed,
+  **load its crew/passenger slots** (`+0x7a`, a small array sized by a per-vehicle-type capacity table,
+  `0x5a7940`) by committing each one to person state 14 - the same generic "committed" marker every other task's
+  worker-assignment uses, here meaning "boarding." **Not found this session**: this task does not itself issue
+  an `ATTACK`/task-20 order - it manages vehicle readiness and loading only; departure/attack presumably comes
+  from a script's own `ATTACK ... ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON` call consuming an already-loaded vehicle,
+  not traced from this side. Full write-up: `docs/functions.tsv` row `0x4caac0` (rewritten a second time),
+  `0x4f77e0`/`0x4f92b0` (corrected from building- to vehicle-counting), `0x4cec10`/`0x4650d0`/`0x465440`
+  (confirmed vehicle-exclusivity checks), `0x465650`/`0x4f3b20` (re-confirmed as vehicle-site checks in practice
+  despite being written generically). Open end: `0x4f2d40` (named, not traced), and the exact hand-off from
+  "vehicle loaded" to "vehicle departs."
 - **Finish task 27** (class-4 garrison coordination): confirmed to interleave more than one distinct job in a
   single handler, and not read to completion - this is what's blocking "garrison tasks" from being modelled in
   `open-populous` at all (explicitly listed there as "deliberately not modelled yet").
