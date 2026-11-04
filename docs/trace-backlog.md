@@ -43,20 +43,21 @@ one with a different approach, or a later pop3-rev session may already have trac
   distance - confirming the user's memory: **it does go after people sheltering in towers**, just still as a
   person-target, never damaging/destroying the tower itself. Full write-up: `docs/person_states.tsv` row 28,
   `docs/functions.tsv` rows `0x4dada0`/`0x40a3f0`.
-- **Vehicle-passenger grab - still open, user raised an alternate mechanism worth chasing.** The hunting scan and
-  the area-panic scan (`0x4DB5E0`) both still hard-require class==1, so there's still no direct vehicle-eviction
-  call anywhere in the angel's own code. User's alternate theory: the area-panic effect (forces nearby persons
-  into state 26, "run in a random direction") might cause a BOARDED passenger to disembark as a side effect of
-  being forced to flee, not via any angel-specific mechanism. Not confirmed or refuted this session - state 26's
-  own handlers (`docs/person_states.tsv` row 26) show no disembark call in what was previously read, but that
-  read never specifically checked for one, and whether a boarded passenger even stays in the per-cell chain
-  `0x4DB5E0` walks while embarked was not checked at all. Chase: how vehicle boarding represents a passenger
-  (removed from the normal per-cell chain while embarked, or not?), and whether state 26's entry (`0x4D2D74`) or
-  the generic movement/physics step auto-disembarks a unit forced to move independently. Bonus finds from the
-  prior session's scan read, still accurate: caseD_3's type-pairing exclusion chain confirms "angel accepts any
-  candidate type" and turned up that firewarrior does NOT exclusively target shaman as the community wiki claims
-  - the code's actual default is "accepts any type", with a global option flag EXCLUDING shaman specifically when
-  set (the opposite of preacher's own shaman-only-by-default rule sharing the same flag).
+- **Vehicle-passenger grab - substantially resolved this follow-up session.** Found and fully traced the actual
+  boarding/disembarking pair (`0x4657D0`/`0x4659D0`, `docs/functions.tsv`). A boarded passenger stays a completely
+  ordinary, fully-alive class-1 record - nothing unlinks it from the per-cell object chain, so the angel's own
+  panic scan (`0x4DB5E0`) CAN in principle reach a boarded passenger. But disembarking is an explicit, active
+  function requiring a destination from its caller, not something that happens passively - no call to it, nor any
+  clearing of the passenger's own "attached to vehicle" reference, exists anywhere in person state 26's own
+  entry/tick code or in the angel's panic scan. **One of disembark's ~17 call sites sits directly inside
+  `delete_unit` (`0x4EF180`)** - confirming that destroying/deleting ANY unit, a vehicle included, evicts its
+  passengers as generic cleanup, regardless of cause of death. Best current explanation for the user's "panic
+  causes people to jump off vehicles" memory: more likely this generic delete-time eviction (a boat/balloon
+  destroyed in combat dumps its riders - easy to misread as "they panicked and jumped") than the panic effect
+  itself causing a disembark. **Still open**: whether forcing a boarded passenger into state 26's speed/heading
+  fields (while still attached) has any visible side effect at all - not checked, but likely none since nothing
+  clears the attachment reference; and none of disembark's 17 call sites besides `delete_unit` were individually
+  surveyed. Full write-up: `docs/person_states.tsv` row 28, `docs/functions.tsv` rows `0x4657d0`/`0x4659d0`.
 - **RESOLVED (simulation side): yes, real pitch and bank ARE computed, not yaw-only.** `0x4DDB30` eases two
   further fields on the companion every tick via the engine's generic tilt helper (`0x4E6C80`, also used by the
   sinking-building rock animation): a speed-dependent nose-up pitch (`+0x6C`, grows the slower the angel flies,
