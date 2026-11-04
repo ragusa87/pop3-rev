@@ -103,6 +103,12 @@ if an earlier log entry here says it was "written directly" into that repo.
   worth a `TODO.md` entry citing §6q's mechanism - this is the counterpart to §6p's own task-19 finding (general
   boat/balloon readiness) but specific to firewarrior transport, and (like task 19) stops at "vehicle loaded,"
   never issuing the departure/attack order itself.
+- **§6r "the vehicle-attack loop, closed" -> `open-populous3`'s AI/native-behaviour docs + `TODO.md`.** Extends
+  §6j's own addendum: `ATTACK`'s vehicle-transport sub-machine crews the specific vehicles needed, departs them
+  as a group via the SAME primitive its own land-based regroup uses, and on arrival attacks via the SAME
+  per-person order sweep a land attack uses - not a separate vehicle-combat path. If `open-populous`'s own
+  vehicle-attack implementation (if any) doesn't re-check availability at attack time, or doesn't route combat
+  orders through the same mechanism as a land attack, flag those as the concrete gaps.
 - **Nothing left genuinely open from this file's own Native AI backlog** - `docs/trace-backlog.md`'s entire
   "Native AI / AI scripting" section is now marked RESOLVED, item by item, as of this session.
 
@@ -1004,6 +1010,39 @@ in the original game, it isn't this task doing it.
 
 **For `open-populous`**: this is the firewarrior-transport counterpart to §6p's own task-19 finding (which
 covers general boat/balloon readiness without a specific troop type) - together they describe "maintain a vehicle
-fleet, load specific or general troops aboard it, disembark on arrival." Neither task was found to issue the
-actual departure/attack order - that hand-off remains an open question for both. Full exe detail:
-`docs/functions.tsv` row `0x4cf970` (fully rewritten).
+fleet, load specific or general troops aboard it, disembark on arrival." Neither task issues the actual
+departure/attack order itself - but §6r below traces that hand-off to `ATTACK`'s own vehicle-dispatch logic,
+closing the loop. Full exe detail: `docs/functions.tsv` row `0x4cf970` (fully rewritten).
+
+### 6r. Follow-up (2026-11-04): the vehicle-attack loop, closed - `ATTACK` crews, departs, and fights via vehicle
+
+§6j's addendum found that `ATTACK` checks current vehicle stock before a boat/balloon assault and simply fails
+(a new result code) if short, rather than waiting on tasks 19/27 to build more. This follow-up went further into
+that same checking routine (`ATTACK`'s own vehicle-transport sub-machine, a whole separate state machine it
+calls into) to find out what happens once there ARE enough vehicles - and it turns out to run a complete,
+self-contained "crew, depart, arrive, fight" sequence, mirroring `ATTACK`'s own land-based gather-regroup-attack
+shape almost exactly.
+
+**Crewing**: once stock is confirmed, the sub-machine looks at the SPECIFIC vehicles it's going to use for this
+attack. A partly-loaded vehicle gets any invalid occupant disembarked to make room; a completely empty one gets
+the nearest available brave found and ordered aboard (reusing an existing attack-order kind, which - when its
+target is a vehicle rather than a person or building - reads the vehicle's own crew-attachment field instead,
+suggesting the engine reuses one "order kind" number for two different jobs depending on what it's pointed at).
+
+**Departure and arrival**: once crewed, the vehicle(s) are set moving as a group via the exact same "move this
+gathered force" primitive `ATTACK`'s own land-based muster phase uses for its own regroup-at-`m1` step - genuinely
+the same underlying mechanism, not a vehicle-specific copy. After an (unread, but structurally obvious from the
+state layout) arrival-poll loop, the final state issues the attack orders - through the SAME per-person
+order-issuing sweep `ATTACK`'s own land-based attack phase uses. **A vehicle-borne attack and a land-based one
+end up firing their actual combat orders through one identical shared function** - the vehicle phase is purely
+about getting the force to the fight, not a separate way of fighting. If nothing is left capable of attacking
+once arrived, or if the force never fully regroups within a cap, the attack reports its own new failure codes and
+gives up, the same way the vehicle-availability check does.
+
+**For `open-populous`**: the full native vehicle-attack lifecycle is now mapped end to end - independent fleet
+maintenance (tasks 19/27, §6p/§6q) keeps vehicles stocked and generally crewed; `ATTACK` itself re-checks stock,
+crews the specific vehicles for this attack, moves them as a group, and attacks on arrival using the identical
+mechanism a land attack would. If `open-populous`'s own `ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON` implementation (if
+any exists yet) doesn't check current vehicle availability and fail gracefully when short, or doesn't route the
+vehicle-borne force through the same attack-order mechanism as a land force, those are the two concrete gaps this
+session found. Full exe detail: `docs/functions.tsv` row `0x4cceb0` (substantially extended).

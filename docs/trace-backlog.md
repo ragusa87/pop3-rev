@@ -298,3 +298,21 @@ one with a different approach, or a later pop3-rev session may already have trac
   an extra water-adjacency check (`0x4F6B50`) for vehicle-hut building types - NOT a random search as
   `open-populous` currently guesses either. No new tracing needed; `open-populous`'s own "random site search"
   guess should be corrected to "deterministic spiral search from a per-tribe anchor point."
+- **RESOLVED this session: `ATTACK`'s vehicle-transport sub-machine (`0x4cceb0`) traced through to the actual
+  attack dispatch, closing the loop between tasks 19/27 (fleet maintenance) and combat.** Following up on the
+  session's own earlier "code 6" find: state 0 checks vehicle stock (already documented); **state 2** crews the
+  specific vehicles needed for this attack - disembarking invalid occupants from partly-loaded ones, and for
+  empty ones, finding the nearest brave and ordering it to board (order kind `0x16`/`0x43ba10`, whose handler
+  reads the target's own vehicle-attachment field - plausibly a dual-purpose "attack or board" order kind,
+  gated by target class, not fully disambiguated); **state 7** calls `0x4d14f0` - now confirmed (a second call
+  site found) as the generic "set the gathered force/vehicle moving as a group" primitive, the SAME function
+  `ATTACK`'s own land-based substate 6 calls - this is the literal "the loaded vehicle departs" moment; **state
+  17**, reached after an (unread) arrival-poll loop, calls `0x4ce2c0` - **the identical per-person attack-order
+  sweep `ATTACK`'s own land-based substate 17 uses** - confirming a vehicle-borne force attacks through the exact
+  same shared mechanism as a land-based one, not a separate path. Two more tentative `SET_ATTACK_VARIABLE` codes
+  found via the same report call: `0x33`(51, nothing left to attack with on arrival) and `0x34`(52, gave up after
+  a regroup cap/timer while re-kicking stragglers with plain move orders). **Net, closing the whole lifecycle**:
+  tasks 19/27 keep a fleet stocked/crewed ahead of time; `ATTACK` re-checks stock, tops up the specific vehicles
+  needed, sets them moving, and on arrival issues the same combat orders a land attack would. Full write-up:
+  `docs/functions.tsv` row `0x4cceb0` (substantially extended), `0x4d14f0`/`0x43ba10` (corrected/extended),
+  `0x4f3af0`/`0x4f3b10`/`0x4f5950` (new, named but not traced).
