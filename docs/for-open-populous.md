@@ -83,8 +83,13 @@ if an earlier log entry here says it was "written directly" into that repo.
   nearest eligible follower of the given type in - not a one-shot teleport of a specific unit. Worth a `TODO.md`
   entry if `open-populous` doesn't yet model this as "resolve nearest tower, then evict+recruit" rather than a
   direct placement.
+- **§6o "task 2 is the shaman's own autonomous wildman-hunting Convert behaviour" -> `open-populous3`'s AI/
+  native-behaviour docs + `TODO.md`.** If `open-populous` currently has nothing modelling an unscripted,
+  always-on "the shaman wanders toward and casts Convert on small wildman pockets on her own" behaviour, this is
+  new ground to add, not a correction - worth a `TODO.md` entry citing §6o's mechanism (hill-climb toward the
+  nearest few-wildmen spot, cast once in range, cooldown via a per-tribe busyness accumulator).
 - **Still genuinely open - leave these as open items in `docs/trace-backlog.md`, nothing to port
-  yet**: tasks 2/19/27's own unread remainder.
+  yet**: tasks 19/27's own unread remainder.
 
 ## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED, mostly not actionable
 
@@ -646,7 +651,7 @@ level - summary table (own `functions.tsv` row has the full state-machine detail
 |---|---|
 | 0 | `CONSTRUCT_BUILDING` - full lifecycle (confirmed) |
 | 1 | Resource-gathering, likely `FETCH_WOOD` (confirmed shape, name inferred) |
-| 2 | Shaman positioning + a reused ghost-escort step (partial, multi-purpose) |
+| 2 | **Fully resolved (2026-11-04): the shaman's own autonomous "seek wildmen, cast Convert" behaviour, not ghost-escort; see §6o** |
 | 3 | Synchronization primitive - releases state-14-parked workers once a target building is ready |
 | 4 | `DEFEND_SHAMEN` gathering feeding a `STATE_SEND_GHOSTS` phase (confirmed shape) |
 | 5 | Integrates freshly-converted followers (confirmed, corrects a "desperation" false lead) |
@@ -697,7 +702,8 @@ level - summary table (own `functions.tsv` row has the full state-machine detail
 task catalog is probably enough to design the AI subsystem's data model directly, even before every single
 callee (still ~40 `named`-but-not-`traced` helper rows) is individually read. The remaining highest-value
 targets, if continuing: `0x4f8490`/`0x4f7dc0` (the shared worker-finder's exact selection criteria), `0x4ea920`
-(the move/build order primitive several tasks call), and finishing tasks 2/19/27's un-read remainder.
+(the move/build order primitive several tasks call), and finishing tasks 19/27's un-read remainder (task 2 is
+now fully resolved, see §6o).
 
 ### 6i. Follow-up (2026-11-04): `GIVE_UP_AND_SULK` debunked - not a retreat/guard order
 
@@ -867,3 +873,42 @@ nearest tower to the given position (not require an exact building reference) an
 evict-then-recruit two-step task 7 already needs for its own generic garrison-filling behaviour, rather than a
 one-shot teleport. Full exe detail: `docs/functions.tsv` rows `0x48d22b`/`0x4925e0`/`0x4e67b0`/`0x4f33d0`, and
 `0x4c8910` (task 7, now confirmed rather than "candidate").
+
+### 6o. Follow-up (2026-11-04): task 2 is the shaman's own autonomous "hunt wildmen, cast Convert" behaviour
+
+A prior session's partial read of task 2 (`0x4c7370`) guessed "shaman positioning + a reused ghost-escort step."
+Fully tracing its 9-state dispatch corrects that: the "escort" part is a one-shot cleanup, and the task's real,
+long-lived purpose is something open-populous likely has no equivalent of at all - a fully autonomous, unscripted
+"the shaman goes looking for a few stray wildmen and converts them" behaviour.
+
+**States 0-7** are straightforward setup: pick a base-adjacent target position (several fallback sources, a
+computed one as a last resort), run a couple of gate checks, claim the shaman (commit her to the generic
+"committed to a job" person state), wait, and broadcast a notification once she's on her way.
+
+**State 8 is the interesting part, and the task's real steady state** (everything above just gets here):
+- Every tick, it counts nearby wildmen (class 1/type 1 people) in a radius-3 square around the current target.
+- It does a cheap, incremental hill-climb: samples 4 neighbouring points about half a cell away in each
+  direction, and if any of them has MORE wildmen nearby than the current target, the target drifts there. Over
+  many ticks this walks the target toward the nearest small cluster of wildmen, one tiny step per tick, not a
+  one-shot "find the best spot" search.
+- Once a per-tribe "how busy is my AI" accumulator crosses a threshold (roughly 600 cumulative "number of busy
+  task slots" ticks - in practice a cooldown proportional to how much else the tribe's AI is doing, not a fixed
+  turn count), the task stops drifting and does one of two things: if something is currently "attached" to the
+  shaman (a preacher sermonizing at her, a disguised infiltrator targeting her, or similar - a generic back-
+  reference, not specifically a ghost escort), it releases that unit back to its own normal behaviour; either
+  way, the task then ends.
+- Below that threshold, if the best nearby spot still has a SMALL number of wildmen (3 or fewer) rather than a
+  large cluster, and the shaman isn't already busy with something else, she casts **Convert** there (spell id 17
+  - confirmed via `open-populous3`'s own spell-id table) using the identical readiness/mana/cast machinery the
+  scripted auto-cast system (`SET_SPELL_ENTRY`) and `ATTACK`'s own shaman-casts-her-operand-spells behaviour both
+  already use, then the task ends.
+
+**Net, in plain terms**: a computer-controlled tribe's shaman will, on her own, periodically wander toward and
+mop up small, scattered pockets of nearby wildmen with Convert - entirely independent of any script command.
+Large wildman clusters are specifically NOT targeted by this behaviour (reads like deliberate "don't waste the
+cooldown on a crowd, handle those a different way" tuning, though the exact reason isn't confirmed). **For
+`open-populous`**: if the native computer AI doesn't currently do anything like this, it's a real gap, not a
+correction to an existing guess - a computer tribe that just leaves nearby wildmen alone forever (versus
+occasionally converting one or two) is an observable behavioural difference from the original. Full exe detail:
+`docs/functions.tsv` row `0x4c7370` (fully rewritten), `0x4f79d0` (the wildman census helper, corrected from an
+earlier "height function" guess).

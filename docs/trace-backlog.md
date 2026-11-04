@@ -210,10 +210,22 @@ one with a different approach, or a later pop3-rev session may already have trac
   (no script-visible error) if there's no free task slot, no nearby tower, or the tower is already correctly
   staffed.** Full write-up: `docs/functions.tsv` rows `0x48d22b`/`0x4925e0`/`0x4e67b0`/`0x4f33d0` (new/updated),
   `0x4c8910` (updated to drop the "candidate" hedge).
-- **Finish tasks 2, 19 and 27** (shaman positioning, vehicle-hut dispatch, class-4 garrison coordination): each
-  confirmed last session to interleave more than one distinct job in a single handler, and none was read to
-  completion - this is what's blocking "garrison and vehicle tasks" from being modelled in `open-populous` at
-  all (explicitly listed there as "deliberately not modelled yet").
+- **RESOLVED this session: task 2 is the shaman's own autonomous "seek wildmen, cast Convert" behaviour, not
+  ghost-escort management.** Fully traced its 9-state dispatch (`0x4c7a3c`): states 0-7 walk her toward a
+  base-adjacent target (several position sources, a computed fallback, a claim/commit step); state 8, the task's
+  real long-lived steady state, does a cheap 4-neighbour hill-climb each tick (via a newly-identified wildman
+  census function, `0x4f79d0`) to drift the target toward the nearest small pocket of wildmen, then - once in
+  range and off cooldown - casts spell 17 (Convert, confirmed via `open-populous3`'s own spell-id table) there
+  using the EXACT SAME readiness/mana/cast primitives the scripted auto-cast task (`0x4c9580`/`SET_SPELL_ENTRY`)
+  and `ATTACK`'s own shaman branch (`0x4cc553`) already use. The "reset a linked follower" block from the prior
+  session's partial read turned out to be a one-shot "release whatever's currently attached to me" cleanup
+  (`shaman+0x9f`, a generic back-reference, not specifically a ghost) that always ends the task once triggered,
+  not an ongoing escort loop. Full write-up: `docs/functions.tsv` row `0x4c7370` (rewritten), `0x4f79d0`
+  (corrected from a guessed height-function to a confirmed wildman census), `0x4c2e00` (new).
+- **Finish tasks 19 and 27** (vehicle-hut dispatch, class-4 garrison coordination): each confirmed to interleave
+  more than one distinct job in a single handler, and neither was read to completion - this is what's blocking
+  "garrison and vehicle tasks" from being modelled in `open-populous` at all (explicitly listed there as
+  "deliberately not modelled yet").
 - **RESOLVED this session: the worker-selection tie-break is PROXIMITY, not id order.** `0x4F7DC0` (finds at
   most one worker - its own `count` argument can only be 0 or 1, anything else bails immediately) and `0x4F8490`
   (finds up to a real N, via its own `mode` argument) share the same eligibility filter but each have TWO
