@@ -66,11 +66,18 @@ if an earlier log entry here says it was "written directly" into that repo.
   no exe confirmation behind it; §6l gives the full state machine (percentage-of-budget quota per
   unit type, advances once merely non-empty rather than at full quota, then a genuine regroup-and
   -re-kick-stragglers poll loop) if open-populous wants to implement or cite it precisely.
+- **§6m "the native guard/patrol group never walks or circles" -> `open-populous3`'s `docs/specs/ai-scripts.md`
+  "Markers, guards and the base" section.** That section's own "Open gap" bullet currently reads "the actual
+  walk/circle movement order for a gathered group is still unknown" - replace with §6m's confirmed finding: it
+  isn't unknown, it's absent. The native mechanism recruits troops near the marker(s) by proximity and parks
+  them in the generic idle/fidget state (no movement, no circuit, no release for non-preachers) - there is no
+  native walk/patrol behaviour to document as unknown. Also worth a `TODO.md` note if `open-populous`'s current
+  implementation (reusing its own player-facing 8-slot patrol-point system as a stand-in) should be flagged as a
+  deliberate deviation from the original rather than an unconfirmed approximation.
 - **Still genuinely open - leave these as open items in `docs/trace-backlog.md`, nothing to port
   yet**: `PUT_PERSON_IN_DT`'s own engine mechanism (still never located - §6l's own shaman branch
   inside `ATTACK` turned out to be spell-casting, not a drum-tower order, so that lead is spent);
-  the guard/patrol group's actual movement order and whether a guard group is ever replenished; and
-  tasks 2/19/27's own unread remainder.
+  and tasks 2/19/27's own unread remainder.
 
 ## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED, mostly not actionable
 
@@ -649,7 +656,7 @@ level - summary table (own `functions.tsv` row has the full state-machine detail
 | 18 | Resolves a vehicle, searches for a home-anchored spot (candidate: `BOAT_PATROL`/`VEHICLE_PATROL`) |
 | 19 | Vehicle-hut dispatch/positioning (large handler, partial) |
 | 20 | `ATTACK` - script-exclusive, confirmed no native autonomous trigger |
-| 24 | Native execution of `SET_MARKER_ENTRY`/`MARKER_ENTRIES` patrol groups (confirmed shape) |
+| 24 | Native execution of `SET_MARKER_ENTRY`/`MARKER_ENTRIES` patrol groups - **fully resolved (2026-11-04): recruits by proximity, then NEVER issues any movement order; see §6m** |
 | 25 | Unconditional mass rally to a random nearby point (candidate: `STATE_DEFEND`) |
 | 26 | `TRAIN_PEOPLE` (confirmed, corrects a "coded no-op" misread from a tiny-looking entry dispatcher) |
 | 27 | Class-4-object garrison coordination + (per an earlier session) vehicle management (largest handler, partial) |
@@ -790,3 +797,32 @@ is a real, observable behavioural difference from the original.
 (or anyone) into a building to occupy/defend it from the inside - was NOT found here. The shaman's own branch
 inside `ATTACK`'s per-person sweep, the natural place to expect it, turned out to be her spell-casting role
 instead (point 3 above). This remains open in `docs/trace-backlog.md` for a future session.
+
+### 6m. Follow-up (2026-11-04): the native "guard/patrol group" never actually walks or circles anywhere
+
+Prompted by checking whether `open-populous`'s own stand-in for `GUARD_AT_MARKER`/`GUARD_BETWEEN_MARKERS` (it
+currently reuses its player-facing 8-slot patrol-point mechanism, `docs/specs/units.md` "Patrol orders") might
+in fact be the SAME underlying native mechanism rather than an invented approximation. Traced task 24's
+(`0x4cedd0`) previously-unread "between m1/m2" gather sub-dispatch (`0x4cf2c4`) and all three finalize variants
+to completion, plus every function they call.
+
+**Answer: no, and more than that - the native mechanism doesn't walk/circle troops at all, in either mode.**
+Exhaustively checked every call task 24 makes, on both the "circle m1" and "between m1/m2" gather paths and all
+three finalize variants: nowhere does it call `group_alloc`/`order_set`/`group_assign`
+(`0x436c20`/`0x438730`/`0x436d00`, the generic order-giving machinery) or the player's own patrol-point assigner
+(`0x4ba9b0`). It recruits eligible troops by proximity to the marker (the same shared worker-finder
+`CONSTRUCT_BUILDING`/`TRAIN_PEOPLE` use) and commits each one into person state 14 ("committed to a job") - and
+that state's own per-turn handler is a content-free idle/fidget cycle (a cosmetic sub-state alternation on a
+random timer, no movement, no destination field read anywhere in it). One narrow exception: the single-marker
+("circle m1") finalize path releases ONLY preacher-type recruits back to their own default behaviour; braves/
+warriors/firewarriors recruited by either mode are simply left fidgeting in state 14 forever, wherever the
+recruitment search happened to find them.
+
+**For `open-populous`**: this is a correction, not just a gap-fill. The current stand-in (reusing the player's
+own back-and-forth patrol-point system) implements real walking/circuit behaviour the original engine never
+has for this command - the authentic behaviour is closer to "troops near the marker(s) get pulled into a
+held/idle holding pattern and a UI notification fires," with no ongoing guard-post or patrol motion at all.
+Whether to keep the current (more capable-looking) patrol-point stand-in anyway as a deliberate gameplay
+improvement, or match the original's static/idle behaviour exactly, is a judgment call for whoever implements
+this - but the spec should stop describing the original's own behaviour as "unknown," and should say plainly
+that it's a recruit-and-park mechanism, not a patrol. Full exe detail: `docs/functions.tsv` row `0x4cedd0`.

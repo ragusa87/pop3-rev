@@ -141,15 +141,32 @@ one with a different approach, or a later pop3-rev session may already have trac
   pre-existing error in this catalog: `get_tribe_sub_struct`/`0x462730` had its return polarity backwards
   (it returns the first FREE slot, not the first occupied one). Full write-up: `docs/functions.tsv` rows
   `0x48cf50`/`0x48c650`/`0x4e5fd0`/`0x4627f0`/`0x462730`/`0x462d40`. Chase: `0x4E5FD0`'s own parameter-to-field writes, one by one.
-- **The guard/patrol group's actual movement order** (how a marker-assigned group walks or circles while
-  guarding). Never found anywhere in the exe trace - `open-populous` currently reuses its own unrelated
-  patrol-point mechanism as a stand-in. Chase: whatever task type(s) back `GUARD_AT_MARKER`/`GUARD_BETWEEN_MARKERS`
-  (per `ai-scripts.md` "Markers, guards and the base" - these states have no DO-command token of their own, so
-  start from the per-type default-fallback table or a fresh sweep of `maybe_ai_func_1`'s still-unidentified task
-  ids: 0, 1, 4, 6, 7, 8, 11, 14 were only shape-confirmed, not read to completion, per `for-open-populous.md`
-  section 6h's own task table).
-- **Whether a guard group is ever replenished after losses.** Current best reading is "no" but this was never
-  directly confirmed - would need the same guard/patrol task traced above, once found.
+- **RESOLVED this session: the guard/patrol group's actual movement order - confirmed ABSENT, not just unknown.**
+  Chased by fully tracing task 24's (`0x4cedd0`, `SET_MARKER_ENTRY`/`MARKER_ENTRIES`/`GUARD_AT_MARKER`/
+  `GUARD_BETWEEN_MARKERS`'s own native handler) previously-unread "between m1/m2" gather sub-dispatch
+  (table `0x4cf2c4`) and all three of its own finalize variants (state 5, keyed on task-record flag `+0x2a`
+  and whether `m2==-1`), plus every function any of those paths call (`0x4f3880`/`0x4f8490`/`0x4e9b40`/
+  `0x4f2440`, all now traced - see their own `functions.tsv` rows). **None of them ever call `group_alloc`/
+  `order_set`/`group_assign` (`0x436c20`/`0x438730`/`0x436d00`) or the player's own patrol-point assigner
+  (`0x4ba9b0`) - no movement/walk/circle order is issued to the gathered troops in EITHER mode (circle-m1 or
+  between-two-markers).** Troops are recruited by proximity (the shared `0x4f8490` worker-finder) and committed
+  into person state 14 ("committed to a job" marker) - and `person_states.tsv` row 14 confirms state 14's own
+  per-turn handler is a content-free idle/fidget cycle (cosmetic sub-state alternation on a random timer, no
+  movement, no destination field). One narrow exception: the circle-m1 finalize path calls `0x41b180` (own row)
+  to release ONLY type-4 (preacher) state-14 units back to their own per-type default behaviour (state 10,
+  `order_execute`) - braves/warriors/firewarriors committed by this task are never released by it at all, and
+  the between-two-markers finalize variants release nobody, of any type. **Net: the recruited "guard group"
+  literally just stands wherever the proximity search found it and fidgets in place - there is no native
+  circuit-walking/patrolling behaviour anywhere in the exe for this command family.** This is a genuinely
+  different (in fact, nonexistent) mechanism from the player's own 8-slot patrol-point system (`0x4ba9b0`,
+  `docs/specs/units.md` "Patrol orders") that `open-populous` currently reuses as a stand-in approximation - so
+  that stand-in is not secretly "the same mechanism after all," it is inventing behaviour (actual back-and-forth
+  walking) the original engine never implements for this command. Full write-up: `docs/functions.tsv` row
+  `0x4cedd0` (updated), `0x41b180`/`0x4e9b40`/`0x4f2440` (new rows), `docs/person_states.tsv` row 14 (cited,
+  not changed).
+- **Whether a guard group is ever replenished after losses - now moot.** With no ongoing guard/patrol behaviour
+  at all (units simply idle after being recruited), "replenishment" isn't a meaningful question for this task;
+  nothing resembling a top-up was seen in any of the traced paths above.
 - **RESOLVED this session: the gather-then-attack muster sequence, confirming the user's own hypothesis.**
   `0x4CB400` (`ATTACK`'s own task-20 handler, `docs/functions.tsv`'s own row has the full state-by-state
   write-up) turns out to be a genuine 24-substate machine, not just the "per-person sweep" a past session partly
