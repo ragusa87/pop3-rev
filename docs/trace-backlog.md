@@ -104,9 +104,23 @@ one with a different approach, or a later pop3-rev session may already have trac
 
 ## Native AI / AI scripting
 
-- **`GIVE_UP_AND_SULK`'s actual retreat/guard behaviour.** Only half-traced: the ON case's "force success" flag
-  write is confirmed, but its own callee, `0x41CA10(target_struct)`, was never opened - this is the one place the
-  wiki's "everyone guards the shaman" claim could still turn out to be literally true. Chase: `0x41CA10` in full.
+- **RESOLVED this session: `GIVE_UP_AND_SULK`'s real unit-level effect, and the wiki's claim is false.**
+  `0x41CA10` (the ON case's own callee, confirmed to take the whole tribe_struct, not a single target) fully
+  traced: there is no retreat, guard, order reassignment or formation anywhere in it. It's a tribe-wide sweep that,
+  per person: forcibly disembarks any non-shaman follower from a vehicle (`0x466C80`/`disembark_vehicle`), rerolls
+  an Angel of Death's own life down to 32-95 (crippling it, via the shared LCG), re-times a currently-hypnotised
+  unit's revert countdown (`+0xAC`) to 8-71, deletes any ghost outright (the generic ghost-cleanup convention),
+  and reveals/reverts a spy's own disguise (`0x4DE7F0`); separately, a second pass force-deletes any of the
+  tribe's own "soul convert 2" (class 10/type 0xC) conversion-coordinator objects in sub-state `+0x75`==7. Net:
+  "giving up" is a bundle of cleanup/punishment actions, not a self-contained surrender-and-defend routine - the
+  community wiki's "everyone guards the shaman" description does not hold up anywhere in this command's code.
+  Significant enough to affect open-populous's own modelling of this command if it's implemented at all (currently
+  it isn't, per `ai-scripts.md`). Full write-up: `docs/functions.tsv` rows `0x41ca10`/`0x48e6a1`/`0x466190`/
+  `0x466c80`/`0x4de7f0`. (Side correction found along the way: the global object list at `0x890324`, previously
+  described in the Angel of Death write-up as "the global type-8 angel list," is actually the exe's generic
+  all-objects id-list - dozens of unrelated readers exe-wide filter it by their own class/type, it isn't
+  angel-specific; doesn't change any Angel of Death conclusion, since that investigation's own filtering by
+  class 1/type 8 was already correct.)
 - **`SET_ATTACK_VARIABLE`'s exact received value/meaning.** Still only the community wiki's own guess
   (`ai-scripts.md`); `ATTACK`'s own worker function was traced down to its call into `0x4E5FD0`, but the other 12
   `ATTACK` parameters' exact mapping onto the task record (including whichever one feeds `SET_ATTACK_VARIABLE`)
