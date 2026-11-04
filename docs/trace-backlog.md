@@ -161,7 +161,22 @@ one with a different approach, or a later pop3-rev session may already have trac
   confirmed last session to interleave more than one distinct job in a single handler, and none was read to
   completion - this is what's blocking "garrison and vehicle tasks" from being modelled in `open-populous` at
   all (explicitly listed there as "deliberately not modelled yet").
-- **The real worker-selection tie-breaking rule** (`0x4F8490`/`0x4F7DC0`'s shared "find N eligible workers"
-  family - who gets picked when several idle candidates qualify) and **the exact building-site-search placement
-  rule** beyond "a bounded number of random nearby tries" (`0x4F7AA0`). Both explicitly left open by the original
-  trace; `open-populous` currently guesses (random site search, idle braves in id order).
+- **RESOLVED this session: the worker-selection tie-break is PROXIMITY, not id order.** `0x4F7DC0` (finds at
+  most one worker - its own `count` argument can only be 0 or 1, anything else bails immediately) and `0x4F8490`
+  (finds up to a real N, via its own `mode` argument) share the same eligibility filter but each have TWO
+  selection modes: a plain list-order pass (id order - `0x4F7DC0`'s `count=0`, `0x4F8490`'s `mode=0`) and a
+  genuine nearest-neighbour search by toroidal distance to a target position (`0x4F7DC0`'s `count=1`, with an
+  18-cell "close enough" early-exit; `0x4F8490`'s `mode=1`, a real top-K insertion sort via its own helper,
+  `0x4F8390`). **Every real call site found uses the proximity mode**, confirmed directly for `CONSTRUCT_BUILDING`'s
+  own worker-assignment call (disassembled directly: `mode=1`). So `open-populous`'s current "idle braves in id
+  order" guess is the WRONG mode - the real rule is "closest eligible worker(s) to the target," and the id-order
+  code path, while real, appears to be dead in practice. Full write-up: `docs/functions.tsv` rows
+  `0x4f7dc0`/`0x4f8490`/`0x4f8390`, plus 7 new eligibility-callee stubs (`0x4f3200`/`0x4f39d0`/`0x4f55d0`/
+  `0x4f61f0`/`0x4f62c0`/`0x4f6720`/`0x4f25b0`) logged but not individually traced.
+- **RESOLVED, already fully traced by an earlier session - this backlog item was stale.** "The exact
+  building-site-search placement rule" beyond "a bounded number of random nearby tries" is NOT actually open:
+  `0x4F7AA0` (`docs/functions.tsv`'s own row) was already fully traced - a deterministic spiral search
+  (`0x49C890`) with terrain-suitability (`0x4F3DC0`) and footprint (`0x4B9A20`) checks per candidate cell, plus
+  an extra water-adjacency check (`0x4F6B50`) for vehicle-hut building types - NOT a random search as
+  `open-populous` currently guesses either. No new tracing needed; `open-populous`'s own "random site search"
+  guess should be corrected to "deterministic spiral search from a per-tribe anchor point."
