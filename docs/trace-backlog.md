@@ -222,10 +222,27 @@ one with a different approach, or a later pop3-rev session may already have trac
   (`shaman+0x9f`, a generic back-reference, not specifically a ghost) that always ends the task once triggered,
   not an ongoing escort loop. Full write-up: `docs/functions.tsv` row `0x4c7370` (rewritten), `0x4f79d0`
   (corrected from a guessed height-function to a confirmed wildman census), `0x4c2e00` (new).
-- **Finish tasks 19 and 27** (vehicle-hut dispatch, class-4 garrison coordination): each confirmed to interleave
-  more than one distinct job in a single handler, and neither was read to completion - this is what's blocking
-  "garrison and vehicle tasks" from being modelled in `open-populous` at all (explicitly listed there as
-  "deliberately not modelled yet").
+- **RESOLVED this session: task 19 fully traced, confirming (and sharpening) a user-suggested hypothesis -
+  it's a population/building-capacity EXPANSION decision bundled with unrelated vehicle-hut housekeeping.**
+  All 13 states of `0x4caac0`'s own dispatch now read. Job A (reached when the task's own candidate building is
+  type 3/"hut big" or type 4/"tower"): counts the tribe's current total of that building category against a
+  difficulty-scaled target, and - only if still short - finds/validates a nearby candidate site (distance +
+  placement checks against an existing related building), marks a per-tribe claim bit on it, then frees up
+  (evicts to the generic "committed" state) every occupant of the building that triggered the check, presumably
+  so some other system (not identified this session - possibly `CONSTRUCT_BUILDING`'s own worker-finder) can
+  reassign them. This matches, with the exe mechanism now behind it, the real-game behaviour of needing to
+  expand to a new building/tower once a site's own capacity for more huts is exhausted. **Job B** (the
+  non-type-3/4 path): locates the tribe's boat hut, computes its own water-exit point from its facing, and
+  separately tries to claim a ready crew member - genuinely unrelated to job A beyond sharing task-record fields
+  and terminal states, confirming the earlier "interleaves more than one job" read. **Not found this session**:
+  a direct enqueue of a NEW `CONSTRUCT_BUILDING` task from job A - it ends at "evict occupants + mark a claim
+  bit," not an obvious "and now go build it" step; worth a follow-up if the exact hand-off to actual construction
+  matters for `open-populous`. Full write-up: `docs/functions.tsv` row `0x4caac0` (rewritten), `0x465650`
+  (corrected from "boat may park here" to a generic per-type terrain-site check), `0x4f92b0`/`0x4f2490` (merged),
+  `0x4f7660`/`0x4f3b20`/`0x450450`/`0x4f2d40` (logged, still not individually traced).
+- **Finish task 27** (class-4 garrison coordination): confirmed to interleave more than one distinct job in a
+  single handler, and not read to completion - this is what's blocking "garrison tasks" from being modelled in
+  `open-populous` at all (explicitly listed there as "deliberately not modelled yet").
 - **RESOLVED this session: the worker-selection tie-break is PROXIMITY, not id order.** `0x4F7DC0` (finds at
   most one worker - its own `count` argument can only be 0 or 1, anything else bails immediately) and `0x4F8490`
   (finds up to a real N, via its own `mode` argument) share the same eligibility filter but each have TWO

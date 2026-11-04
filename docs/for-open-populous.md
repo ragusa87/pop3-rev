@@ -88,8 +88,15 @@ if an earlier log entry here says it was "written directly" into that repo.
   always-on "the shaman wanders toward and casts Convert on small wildman pockets on her own" behaviour, this is
   new ground to add, not a correction - worth a `TODO.md` entry citing §6o's mechanism (hill-climb toward the
   nearest few-wildmen spot, cast once in range, cooldown via a per-tribe busyness accumulator).
+- **§6p "task 19 is a population-expansion decision bundled with boat-hut housekeeping" -> `open-populous3`'s
+  AI/native-behaviour docs + `TODO.md`.** If there's no existing native-AI behaviour modelling "expand to a new
+  building site once the current one's capacity for huts/towers runs out, scaled by difficulty," this is new
+  ground (not a correction) worth a `TODO.md` entry citing §6p's mechanism - counts current hut-big+tower (or
+  ordinary hut) totals against a difficulty target, finds/validates a nearby site, then frees up an existing
+  building's occupants for reassignment. Note the exe trace did NOT find a direct link from this decision to an
+  actual new `CONSTRUCT_BUILDING` enqueue - flag that gap rather than assuming one.
 - **Still genuinely open - leave these as open items in `docs/trace-backlog.md`, nothing to port
-  yet**: tasks 19/27's own unread remainder.
+  yet**: task 27's own unread remainder.
 
 ## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED, mostly not actionable
 
@@ -666,7 +673,7 @@ level - summary table (own `functions.tsv` row has the full state-machine detail
 | 16 | Fills a targeted building's garrison to capacity (candidate: `POPULATE_DRUM_TOWER`) |
 | 17 | Recovers a unit/vehicle that can't path home (candidate: `FETCH_LOST_PEOPLE`/`FETCH_LOST_VEHICLE`) |
 | 18 | Resolves a vehicle, searches for a home-anchored spot (candidate: `BOAT_PATROL`/`VEHICLE_PATROL`) |
-| 19 | Vehicle-hut dispatch/positioning (large handler, partial) |
+| 19 | **Fully resolved (2026-11-04): a population/building-capacity expansion decision bundled with unrelated boat-hut housekeeping; see §6p** |
 | 20 | `ATTACK` - script-exclusive, confirmed no native autonomous trigger |
 | 24 | Native execution of `SET_MARKER_ENTRY`/`MARKER_ENTRIES` patrol groups - **fully resolved (2026-11-04): recruits by proximity, then NEVER issues any movement order; see §6m** |
 | 25 | Unconditional mass rally to a random nearby point (candidate: `STATE_DEFEND`) |
@@ -702,8 +709,8 @@ level - summary table (own `functions.tsv` row has the full state-machine detail
 task catalog is probably enough to design the AI subsystem's data model directly, even before every single
 callee (still ~40 `named`-but-not-`traced` helper rows) is individually read. The remaining highest-value
 targets, if continuing: `0x4f8490`/`0x4f7dc0` (the shared worker-finder's exact selection criteria), `0x4ea920`
-(the move/build order primitive several tasks call), and finishing tasks 19/27's un-read remainder (task 2 is
-now fully resolved, see §6o).
+(the move/build order primitive several tasks call), and finishing task 27's un-read remainder (tasks 2 and 19
+are now fully resolved, see §6o and §6p).
 
 ### 6i. Follow-up (2026-11-04): `GIVE_UP_AND_SULK` debunked - not a retreat/guard order
 
@@ -912,3 +919,34 @@ correction to an existing guess - a computer tribe that just leaves nearby wildm
 occasionally converting one or two) is an observable behavioural difference from the original. Full exe detail:
 `docs/functions.tsv` row `0x4c7370` (fully rewritten), `0x4f79d0` (the wildman census helper, corrected from an
 earlier "height function" guess).
+
+### 6p. Follow-up (2026-11-04): task 19 is a population-expansion decision, not (just) vehicle-hut dispatch
+
+Prompted by a user's own game-knowledge hint: huts can't be built just anywhere - they need to be near the
+reincarnation site, another building, or a tower, and once a site runs out of room for more huts, the tribe needs
+to find a new spot and build a tower there to keep expanding. That hint pointed straight at what task 19
+(previously labelled only "vehicle-hut dispatch/positioning, partial") turned out to actually be, once fully
+traced: it bundles that exact expansion decision together with a second, unrelated vehicle-hut behaviour.
+
+**Job A - the expansion decision** (triggered when the task's own candidate building happens to be a "hut big" or
+a "tower"): counts how many of that building category (hut-big + tower combined) the tribe currently has, against
+a difficulty-scaled target count. If the tribe already has enough, it moves on. If not: it looks for - and
+distance/placement-validates - a candidate site near an existing related building, marks it as claimed for this
+tribe, and then frees up every current occupant of the building that triggered the check (releasing them from
+whatever job they were doing, presumably so something else, like `CONSTRUCT_BUILDING`'s own worker-finder, can
+reassign them to the new site). **One real gap found**: the exe trace does NOT show this decision directly
+enqueueing a new `CONSTRUCT_BUILDING` task - it ends at "freed workers + a claim marker," not an obvious "now go
+build it" step. Either the hand-off happens through a mechanism this session didn't identify (the claim bit?), or
+building the actual new tower/hut is left to a separate, independent decision elsewhere in the AI. Worth a
+dedicated follow-up if the precise trigger-to-construction link matters.
+
+**Job B - unrelated boat-hut housekeeping** (the task's other branch): finds the tribe's own boat hut, works out
+its water-exit point from which direction it's facing, and separately tries to claim a ready crew member waiting
+at a (possibly different) building. This shares only bookkeeping fields and terminal states with job A - further
+confirmation of the already-noted pattern that several native AI tasks interleave more than one real behaviour
+under a single task id.
+
+**For `open-populous`**: if the current AI has nothing modelling "the tribe needs to expand to a new site once an
+existing one can't support more huts," this is new ground, not a documentation fix - a computer tribe that just
+stops growing once its starting area fills up would be a real, observable gap versus the original. Full exe
+detail: `docs/functions.tsv` row `0x4caac0` (fully rewritten).
