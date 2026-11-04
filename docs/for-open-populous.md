@@ -761,9 +761,14 @@ the engine's generic script-variable store:
   up to a per-tribe limit - it's a cap, not a strict single-instance lock).
 - **2** - no free AI task slot (each tribe has 10, shared across every AI task type).
 - **3** - no valid target was found matching the given `target_type` (marker/building/person).
-- **6** (found a later session, prompted by a user hypothesis about vehicle-attack gating) - for an
-  `ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON` attack specifically: not enough ready vehicles of the needed model exist
-  to carry the force. See the addendum at the end of this section for the full mechanism.
+Found a later session, specific to `ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON` attacks (see the addendum at the end of
+this section for the full mechanism):
+- **6** - not enough ready vehicles of the needed model exist to carry the force; the attack never departs.
+- **51** - the force arrived but nothing was left capable of attacking; a genuine cancellation, no attack fires.
+- **52** - the attack WAS issued successfully, but the force's final regroup nudge hit its own time/cycle cap -
+  a partial-success/timeout marker, not a cancellation (easy to misread as one - double-checked directly).
+- **5** - a generic fallback, written only if none of the above (or the original 0-3) already reported something
+  this run.
 
 So `ai-scripts.md`'s own "(?)"-marked guess ("a variable the AI may update with the attack's outcome") was right
 in spirit but imprecise: **it's the immediate accept-or-reject status of the `ATTACK` call itself, reported the
@@ -1035,9 +1040,13 @@ the same underlying mechanism, not a vehicle-specific copy. After an (unread, bu
 state layout) arrival-poll loop, the final state issues the attack orders - through the SAME per-person
 order-issuing sweep `ATTACK`'s own land-based attack phase uses. **A vehicle-borne attack and a land-based one
 end up firing their actual combat orders through one identical shared function** - the vehicle phase is purely
-about getting the force to the fight, not a separate way of fighting. If nothing is left capable of attacking
-once arrived, or if the force never fully regroups within a cap, the attack reports its own new failure codes and
-gives up, the same way the vehicle-availability check does.
+about getting the force to the fight, not a separate way of fighting. **If nothing is left capable of attacking
+once arrived, that's a genuine cancellation - no attack happens.** Otherwise the attack DOES fire, and only
+afterward does the task do one last "nudge any stragglers" pass gated by a time/cycle cap - reporting a distinct
+"attacked, but the regroup wasn't fully clean" code regardless of how that nudge goes, then ending either way.
+Double-checking this distinction (a cancel-looking code turned out NOT to mean cancel) is itself worth noting for
+whoever models this: the two failure-shaped codes mean genuinely different things, one a real abort and one a
+timeout after the fact.
 
 **For `open-populous`**: the full native vehicle-attack lifecycle is now mapped end to end - independent fleet
 maintenance (tasks 19/27, §6p/§6q) keeps vehicles stocked and generally crewed; `ATTACK` itself re-checks stock,

@@ -309,10 +309,19 @@ one with a different approach, or a later pop3-rev session may already have trac
   `ATTACK`'s own land-based substate 6 calls - this is the literal "the loaded vehicle departs" moment; **state
   17**, reached after an (unread) arrival-poll loop, calls `0x4ce2c0` - **the identical per-person attack-order
   sweep `ATTACK`'s own land-based substate 17 uses** - confirming a vehicle-borne force attacks through the exact
-  same shared mechanism as a land-based one, not a separate path. Two more tentative `SET_ATTACK_VARIABLE` codes
-  found via the same report call: `0x33`(51, nothing left to attack with on arrival) and `0x34`(52, gave up after
-  a regroup cap/timer while re-kicking stragglers with plain move orders). **Net, closing the whole lifecycle**:
-  tasks 19/27 keep a fleet stocked/crewed ahead of time; `ATTACK` re-checks stock, tops up the specific vehicles
-  needed, sets them moving, and on arrival issues the same combat orders a land attack would. Full write-up:
-  `docs/functions.tsv` row `0x4cceb0` (substantially extended), `0x4d14f0`/`0x43ba10` (corrected/extended),
-  `0x4f3af0`/`0x4f3b10`/`0x4f5950` (new, named but not traced).
+  same shared mechanism as a land-based one, not a separate path. **Addendum, prompted by a user question asking
+  whether code 52 means "cancel the mission" - checked directly and the answer sharpens both codes' meaning.**
+  `0x33`(51) IS a genuine cancellation: `0x4ce2c0` found nothing left capable of attacking, so no attack ever
+  goes out. `0x34`(52) is reported AFTER `0x4ce2c0` already succeeded (the attack DID fire) - it's a one-shot
+  "nudge any remaining stragglers, gated by a time/cycle cap and a regroup-quota check" tail that always runs
+  once then ends the task regardless of outcome - so 52 reads as "attacked, but the final regroup nudge hit its
+  own cap," a timeout/partial-success marker, not a cancel. Chasing this also surfaced the function's own true
+  terminal state (18, not just the bare `0x4ce020` sentinel): it de-selects marked vehicles (same sweep task 27's
+  own cleanup uses), then writes a 5TH, generic fallback code (`5`, "mission ended") via a new gate function
+  (`0x48c680`) - but ONLY if nothing more specific (6/51/52) was already reported this run. **Net, closing the
+  whole lifecycle**: tasks 19/27 keep a fleet stocked/crewed ahead of time; `ATTACK` re-checks stock, crews the
+  specific vehicles needed, sets them moving, and on arrival issues the same combat orders a land attack would,
+  ending in one of 4 now-documented outcome codes (5 generic, 6 no vehicles, 51 cancelled on arrival, 52 attacked
+  but regroup timed out) on top of `0x4E5FD0`'s own original 0-3. Full write-up: `docs/functions.tsv` row
+  `0x4cceb0` (substantially extended), `0x48c650` (all 5 codes consolidated), `0x48c680` (new),
+  `0x4d14f0`/`0x43ba10` (corrected/extended), `0x4f3af0`/`0x4f3b10`/`0x4f5950` (new, named but not traced).
