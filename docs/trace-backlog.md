@@ -121,10 +121,26 @@ one with a different approach, or a later pop3-rev session may already have trac
   all-objects id-list - dozens of unrelated readers exe-wide filter it by their own class/type, it isn't
   angel-specific; doesn't change any Angel of Death conclusion, since that investigation's own filtering by
   class 1/type 8 was already correct.)
-- **`SET_ATTACK_VARIABLE`'s exact received value/meaning.** Still only the community wiki's own guess
-  (`ai-scripts.md`); `ATTACK`'s own worker function was traced down to its call into `0x4E5FD0`, but the other 12
-  `ATTACK` parameters' exact mapping onto the task record (including whichever one feeds `SET_ATTACK_VARIABLE`)
-  was never decoded. Chase: `0x4E5FD0`'s own parameter-to-field writes, one by one.
+- **RESOLVED this session: `SET_ATTACK_VARIABLE`'s real mechanism, and it's NOT the battle outcome.**
+  `SET_ATTACK_VARIABLE $v` is a pure "register" opcode: it stores `$v`'s own variable-slot id into a per-tribe
+  staging field (`tribe+0x5A8`) that has exactly one writer in the whole exe and is never reset - so the
+  registration is STICKY across every subsequent `ATTACK` call in that script, not a one-shot pairing. Each
+  `ATTACK` call (`0x4E5FD0`) reads that staged id at each of its 4 exit points and writes a literal result code
+  into it via the generic script-variable-store primitive (`0x48C650`, `script_vars[tribe_idx*3138+var_id]`,
+  base `0x9607B2`): **0 = attack task successfully queued, 1 = already at this tribe's per-ATTACK concurrency cap
+  (`0x4627F0`'s own per-task-type gate), 2 = no free AI task slot (10 per tribe), 3 = no valid target found
+  matching `target_type`.** So `ai-scripts.md`'s "a variable the AI may update with the attack's outcome" was
+  roughly right in spirit but imprecise: it's the immediate accept/reject status of the `ATTACK` call itself,
+  not the eventual battle's result (kills, damage, win/lose) - a meaningfully different, now-precise answer.
+  Side finding from the same pass: `m3` (`ATTACK`'s 13th/last parameter) is confirmed to be read past (PC
+  advanced) but never actually resolved or used anywhere - not just unused in practice, the original interpreter
+  itself discards it, confirming `ai-scripts.md`'s own "(?)" doubt about it. The broader "other 12 ATTACK
+  parameters' exact mapping onto the task record" question is still open beyond `target_type` (now confirmed
+  tested directly in `0x4E5FD0`) - most get written into dedicated per-ATTACK task-slot fields rather than
+  `set_sub_struct`'s 3 generic params, but which field is which wasn't fully mapped. Also found and fixed a
+  pre-existing error in this catalog: `get_tribe_sub_struct`/`0x462730` had its return polarity backwards
+  (it returns the first FREE slot, not the first occupied one). Full write-up: `docs/functions.tsv` rows
+  `0x48cf50`/`0x48c650`/`0x4e5fd0`/`0x4627f0`/`0x462730`/`0x462d40`. Chase: `0x4E5FD0`'s own parameter-to-field writes, one by one.
 - **The guard/patrol group's actual movement order** (how a marker-assigned group walks or circles while
   guarding). Never found anywhere in the exe trace - `open-populous` currently reuses its own unrelated
   patrol-point mechanism as a stand-in. Chase: whatever task type(s) back `GUARD_AT_MARKER`/`GUARD_BETWEEN_MARKERS`
