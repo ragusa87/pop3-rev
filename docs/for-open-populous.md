@@ -305,61 +305,100 @@ Remaining open threads for a future session: `0x4f7aa0` (the actual site-search 
 `0x4f5d20`/`0x4f8490` (worker selection criteria), and 7 more untraced task-type handlers (ids 3,4,6,7,8,9,11
 all still only "named," not traced) if the same depth is wanted for train/defend/etc.
 
-## 7. Angel of Death spell - full cast-to-expiry behaviour (2026-10-30)
+## 7. Angel of Death spell - full cast-to-expiry behaviour (2026-10-30, substantially rewritten 2026-11-04)
 
 This section WAS also written directly into `open-populous/docs/specs/pop3-rev-analysis.md` (the "Angel of Death
-mechanics" section) and `open-populous/TODO.md` this session, since that repo happened to be attached - but
-those edits are sitting uncommitted in that repo's own working tree (AGENTS.md: no commits in `open-populous`),
-so nothing durable exists yet if that container is ever reset before a human commits them by hand. This section
-is the safety copy, written the way the user actually wants it read: as a plain description of the BEHAVIOUR a
-clean-room implementation needs to reproduce, not a dump of exe addresses. The exe references are kept to a
-short parenthetical per paragraph for anyone who wants to re-verify a claim - `functions.tsv`/`person_states.tsv`/
-`effect_states.csv`/`sound.tsv` carry every address, offset and byte-level detail this write-up deliberately
-leaves out.
+mechanics" section) and `open-populous/TODO.md` in the session that first wrote it, since that repo happened to be
+attached then - but those edits are sitting uncommitted in that repo's own working tree (AGENTS.md: no commits in
+`open-populous`), so nothing durable exists there yet if that container is ever reset before a human commits them
+by hand. This section is the safety copy, written the way the user actually wants it read: as a plain description
+of the BEHAVIOUR a clean-room implementation needs to reproduce, not a dump of exe addresses. The exe references
+are kept to a short parenthetical per paragraph for anyone who wants to re-verify a claim -
+`functions.tsv`/`person_states.tsv`/`effect_states.csv`/`sound.tsv`/`trace-backlog.md` carry every address, offset
+and byte-level detail this write-up deliberately leaves out.
+
+**Update, 2026-11-04**: a follow-up investigation (four further sessions, prompted by targeted user questions and
+corrections) resolved almost every open question the original version of this section listed, and corrected two
+things it got outright wrong (a particle count, and the throw-direction/self-damage claims in an earlier internal
+draft that never made it into the text below). Everything below is the current, corrected picture.
 
 **What casting it actually looks like.** Nothing happens on screen the instant the spell is cast - two sounds
 play, nothing is drawn. A short time later, something falls from the sky toward the target point. That falling
-object has **no shape of its own** - it is invisible - but it's trailed by a scatter of small glowing sparks, so
-what the player actually sees is a loose shower of embers dropping out of the sky, not a solid meteor. The
-instant that invisible object reaches the ground, the ground itself visibly reacts: a ring expands outward from
-the impact point, lifting the terrain as it passes and settling it back down behind it, over about three-quarters
-of a second, with an impact sound. This is a real, physical height change to the landscape, not a decal or a
-particle effect laid over flat ground - **it is mechanically the same idea as a drop hitting the surface of
-water, just implemented as an actual terrain ripple and shown on dry land.** Only after that ripple finishes does
-the real creature appear, and its own appearance comes with a second, separate burst: a small shower of debris
-(as if something nearby shattered) and a genuine damaging blast at the landing point, identical in strength and
-push to the ordinary Blast spell. So the full sequence a player sees is: two sounds, falling sparks, a ground
-ripple with an impact sound, then the creature appears already flying, accompanied by its own debris-and-blast
-flourish. (exe refs: `effect_aod` 0x5121C0/0x512240, meteor 0x50A3E2/0x514F60, ground ripple 0x514970/0x5149F0,
-`create_aod` 0x4DD700 - `functions.tsv`.)
+object has **no shape of its own** - it is invisible - but the instant it starts falling it releases a one-time
+burst of **42 small glowing spark particles** (not "about 36" - precisely 42, in 6 groups of 7), all spawned at
+once, each cosmetic (no damage of its own). These sparks ride along in a **fixed formation trailing the invisible
+object down** - they do not swirl or drift independently of it despite being called "orbiters" internally;
+picture a static shower of embers glued to the falling point, not a swarm with its own motion. The instant the
+falling object reaches the ground, two things happen together: the whole spark shower detaches and scatters,
+each spark independently popping outward and arcing down to the ground on its own before vanishing, AND the
+ground itself visibly reacts - a ring expands outward from the impact point, lifting the terrain as it passes and
+settling it back down behind it, over about three-quarters of a second, with an impact sound. This ground
+reaction is a real, physical height change to the landscape, not a decal or a particle effect laid over flat
+ground - **it is mechanically the same idea as a drop hitting the surface of water, just implemented as an actual
+terrain ripple and shown on dry land.** Only after that ripple finishes does the real creature appear, and its
+own appearance comes with a second, separate burst: a small shower of debris (as if something nearby shattered)
+and a genuine damaging blast at the landing point, identical in strength and push to the ordinary Blast spell. So
+the full sequence a player sees is: two sounds, a shower of falling sparks trailing an invisible object, sparks
+scattering outward at the same moment the ground ripples outward with an impact sound, then the creature appears
+already flying, accompanied by its own debris-and-blast flourish. (exe refs: `effect_aod` 0x5121C0/0x512240,
+meteor 0x50A3E2/0x514F60, orbiter sparks 0x514D00, ground ripple 0x514970/0x5149F0, `create_aod` 0x4DD700 -
+`functions.tsv`, `effect_states.csv` rows 56/57/59.)
 
 **What kind of thing it is.** The Angel of Death is a new kind of person-like unit, distinct from the seven
 ordinary ones (shaman, brave, warrior, preacher, spy, firewarrior, wildman). It belongs to the tribe that cast
 it, but the player never controls it directly: nothing in the exe lets it be clicked, boxed, or given an order,
 and it never enters a building. It is airborne for its entire existence - there is no code path anywhere that
 lets it touch down, so "never lands" is a flat guarantee, not just a design intention. From the moment it
-appears, it runs on its own built-in behaviour, independent of the normal player-order system entirely.
+appears, it runs on its own built-in behaviour, independent of the normal player-order system entirely. On
+certain spawns it does one extra thing before settling into its normal hunting loop: a one-time scripted approach
+flight toward roughly where the local human player is looking/positioned, climbing to a fixed cruising height,
+before it ever starts actually hunting - a deliberate "make an entrance toward the player" flourish, not part of
+the ordinary hunt cycle. (exe ref: `0x4DB980`'s outer case 9 - `person_states.tsv` row 28.)
 
 **How it hunts.** Every time it needs a new target, it first checks for a nearby ENEMY Angel of Death anywhere on
 the map - if one exists, that becomes the target, overriding anything else it might otherwise go after. Only if
 no rival angel is around does it fall back to looking for an ordinary enemy, and when it does, there is no
 protection for anyone: it can target a shaman exactly like any other follower, something no other attacker in the
 game can do (shamans are normally a protected target type). The one thing it explicitly leaves alone is a person
-who is mid-way through being converted by a preacher.
+who is mid-way through being converted by a preacher. **Confirmed this round: its target is always a PERSON, full
+stop** - the search that finds a victim never even looks at buildings or vehicles as candidates; see "Can it
+attack a building or a vehicle" below for the one real exception to "just a person."
 
-**Fighting an ordinary target.** Once it locks onto a victim, it closes the distance and keeps a little more
-space if that victim happens to be inside a tower than if they're out in the open, then moves in to grab them.
-Grabbing a victim who is inside ANY building pulls them out of it first, the same way an ordinary melee attacker
-would. Once grabbed, the victim is completely immobilised - they do not act on their own at all, they are simply
+**Fighting an ordinary target - now confirmed to be a real 3D swoop, not a flat glide-in.** Once it locks onto a
+victim, it closes in and keeps noticeably more distance (roughly twice as far) while approaching if that victim
+happens to be standing inside a watchtower specifically than if they're out in open ground - the angel visibly
+reacts to someone sheltering in a tower, even though (see below) it can never damage the tower itself. The
+approach height also actively changes to match: the angel genuinely climbs or dives toward the victim's real
+height as it closes in, calculated fresh for a coordinated arrival (so it reaches the right altitude at
+roughly the same moment it reaches the right horizontal position, easing in rather than snapping), and it will
+come down to within about 100 world units of the ground to grab someone standing there - this is a real,
+code-confirmed dive, not an approximation. Once close enough and correctly oriented, it moves in to grab the
+target. Once grabbed, the victim is completely immobilised - they do not act on their own at all, they are simply
 carried wherever the angel flies. The carry itself lasts a fixed stretch of time (about two and a half seconds),
 during which the angel visibly climbs and weaves rather than flying in a straight line. Near the end of that
-carry, the angel throws the victim forward, in the direction the VICTIM was already facing, and the victim then
-falls and dies exactly the way anyone falling from a height dies in this game - **there is no special killing
-blow belonging to the angel itself; the fall is what kills, through the same mechanism Whirlwind's own lifted
-victims die from.** No sprite exists for "being held in the angel's mouth or claws" - the victim most likely just
-keeps whatever pose they already had while being dragged along, rather than switching to a dedicated carried
-pose. (exe refs: person state 28/0x4DB980, the carry/release step 0x4E0A30, the held-victim state 40/0x4E0760 +
-0x4E05E0 - `person_states.tsv` rows 28 and 40.)
+carry, the angel throws the victim forward, in the direction the ANGEL itself is currently facing (not the
+victim's own facing, as an earlier internal draft of this write-up incorrectly said), and the victim then falls
+and dies exactly the way anyone falling from a height dies in this game - **there is no special killing blow
+belonging to the angel itself, and no self-damage cost charged to the angel for the kill either (also corrected
+from an earlier draft); the fall is what kills, through the same mechanism Whirlwind's own lifted victims die
+from.** No sprite exists for "being held in the angel's mouth or claws" - the victim most likely just keeps
+whatever pose they already had while being dragged along, rather than switching to a dedicated carried pose.
+(exe refs: person state 28/0x4DB980 - case-5 hunt/engage and the engagement-gate helper `0x4DADA0` - the
+carry/release step `0x4E0A30`, the held-victim state 40/0x4E0760 + 0x4E05E0 - `person_states.tsv` rows 28 and 40.)
+
+**Can it attack a building, or grab someone riding a vehicle? Mostly no, with one real exception.** It cannot
+target, damage, or destroy a building as an object anywhere in its code - the only thing a building affects is
+the STANDOFF DISTANCE while approaching a person who happens to be sheltering inside a watchtower specifically
+(see above); no other building type gets any special handling, and there is no building-occupant-extraction
+mechanic distinct from the ordinary person-grab. It also cannot directly evict someone riding in a boat or
+balloon - its targeting never even considers vehicles as objects. However: if a vehicle is destroyed by ANY
+means (not angel-specific - this is generic engine behaviour for every unit's destruction), its passengers are
+automatically ejected as part of that teardown, which could easily look like "the angel made people jump out of
+a boat" if the angel (or anything else) sinks/destroys the vehicle itself, even though the panic/fear effect
+below plays no part in that - a boarded passenger simply isn't released by being frightened. (exe refs: the
+candidate-search scan `0x4DB980` outer case 4, the engagement-gate helper `0x4DADA0`, the tower-door check
+`0x40A3F0`, boarding `0x4657D0`, disembarking `0x4659D0` (one of whose callers lives inside the generic unit
+deletion routine) - `person_states.tsv` row 28, `functions.tsv`.)
 
 **Fighting another Angel of Death.** This is NOT a choreographed duel - there's no grappling, no distinct
 attack animation, no circling. It's a straightforward, repeated exchange where each angel's current health is
@@ -373,7 +412,41 @@ getting knocked further and further away each time, rather than two creatures tr
 frightens anyone else nearby just by being close to them: every tick, anyone within a modest radius who is
 eligible (ordinary followers, not shamans and not another angel) gets forced into a panicked run, the same panic
 state Insect Plague's own sting causes. So even people it is never going to grab can be seen fleeing simply
-because the angel flew near them. (exe ref: `0x4DB5E0` - `functions.tsv`.)
+because the angel flew near them. This panic effect does NOT, by itself, pull anyone out of a vehicle they're
+riding in (see "Can it attack a building or a vehicle" above). (exe ref: `0x4DB5E0` - `functions.tsv`.)
+
+**Visual appearance in flight.** The flying body itself swaps between three distinct poses - a cruising pose, a
+diving pose, and a third, separate "launching/climbing" pose used only during a brief climb-out (e.g. the
+one-time player-approach entrance described above). The cruise-to-dive transition is a genuine short animation
+blend, not an instant toggle: it steps through the two extremes over up to five ticks, passing through three
+visibly distinct in-between poses along the way, so the switch should read as a quick morph rather than a snap-cut
+in any reimplementation. **The simulation also computes real pitch (nose up when flying slowly, levelling off as
+it speeds up, with a sharper scripted dip during the one-time entrance) and real banking (leaning into a turn,
+proportional to how sharply it's turning) every tick** - both are switched off while it's actively carrying a
+victim or sprinting after a release. Whether the game's own renderer ever actually applies these two values to
+the drawn mesh could not be confirmed from the code - no other reference to either value exists anywhere else in
+the executable, so it is genuinely possible the original game computed real pitch/bank and then never displayed
+it, which would be a strange but not unheard-of leftover. **A reimplementation should feel free to render visible
+pitch and banking matching this formula - it will match the original's own intent even if the original's own
+renderer may not have actually shown it**, and doing so would directly address the specific user complaint that
+drove the open question ("looks flat/odd, no banking" in the original). (exe refs: `0x4DE440`, `0x40CC30`,
+`0x4DDB30` - `functions.tsv`.)
+
+**What ends its life - fully resolved, two different endings.** The spell has both of its documented caps - a
+2500-turn duration limit and a 40-kill limit - checked literally in code, every tick, and either one hitting
+forces the SAME outcome: the angel retires. There are two different ways that retirement actually plays out,
+and which one happens depends on how the angel got there:
+- **Running out of time or kills (the common case): a graceful ending.** A short holding period (about a
+  second and a half), then it quietly vanishes with a sound effect and a small, soft death-puff visual - no
+  violence, no damage to anything nearby.
+- **Being killed by combat damage (almost always from fighting another angel, since nothing else can meaningfully
+  hurt it): a violent ending.** The instant its health would otherwise drop critically low, it immediately
+  shatters its own visible flying body into flying debris and detonates a real, damaging blast (identical in
+  strength to the ordinary Blast spell) at its position, then vanishes at once with no holding period and no
+  separate death-puff - the shatter-and-blast IS its death effect in this case.
+So: a natural expiry should look calm and quiet; a combat death should look like a small explosion. (exe refs:
+`0x4DB980`'s shared per-tick tail, `+0x97`/`+0xB2` fields, outer cases 6/7 - `person_states.tsv` row 28,
+`functions.tsv`.)
 
 **What it's immune to.** It shrugs off most things a player might try against it. A firewarrior's ranged shot
 still hurts it, but only for a small fraction of the damage it would do to an ordinary follower - noticeably
@@ -383,27 +456,28 @@ as excluded from Lightning's kill, Insect Plague's sting, Hypnotism's capture an
 protection-granting list - i.e. the pattern across the game is consistently "shamans and angels are both
 untouchable by ordinary spell effects," with the firewarrior's partial damage being the one confirmed exception.
 
-**What was looked for but not found.** No dedicated fire-breath attack exists anywhere in its behaviour - the
-"breathes fire" impression most likely comes from the one-off blast that happens when it first appears, not an
-ongoing attack. No code was found that lets it pull a building's remaining occupants out one by one the way it
-grabs a lone victim in the open, nor any rule that spares specific building types (the user has reported prison
-and totem/pyramid buildings as safe from it, but no such exception was located in what was read this session -
-it may simply not attack buildings as objects at all, only the people standing near them). Nothing was found that
-lets it grab someone riding inside a boat or balloon. And the exact mechanism that eventually ends its life - it
-is documented elsewhere as lasting at most 2500 turns or 40 kills, whichever comes first - was not pinned down in
-code; the leading guess is that each kill costs it some of its own health rather than a literal counter, but this
-is unconfirmed.
+**What was looked for but genuinely not found, even after the follow-up sessions.** No dedicated fire-breath
+attack exists anywhere in its behaviour - the "breathes fire" impression most likely comes from the one-off blast
+that happens when it first appears, not an ongoing attack. A handful of narrower loose ends remain, none of them
+load-bearing for how the spell plays: the exact mesh/pose used by the brief "launching" climb-out beyond knowing
+it's a genuinely distinct third pose; a couple of still-unopened minor flight sub-states that appear to be further
+scripted-approach or patrol variants, not part of the ordinary hunt loop; and (as above) whether the computed
+pitch/banking values were ever actually wired into the original's own renderer.
 
 **What this means for implementing it.** A new, player-uncontrollable flying unit kind that is spawned by a
-multi-stage cast effect (an invisible falling object, a real terrain-ripple impact, then the creature itself with
-its own small blast), runs its own built-in AI loop instead of going through the normal order system, can never
-land or be selected, grabs and carries a single victim at a time before releasing it to die by ordinary fall
-physics, fights a rival angel through a pure health-comparison-and-knockback exchange rather than a scripted
-fight, and should be exempted from the same "shaman-and-angel-proof" spell-damage list every other immune-type
-exemption in the game already uses, with one partial exception for firewarrior fire. The open questions above
-(building exclusions, vehicle grabbing, the literal expiry counter, exact sprite frame count) are implementation
-details that can reasonably be decided by our own judgement if a future session doesn't resolve them first -
-nothing about them is load-bearing for the spell reading correctly in play.
+multi-stage cast effect (an invisible falling object trailing a fixed 42-spark formation, a real terrain-ripple
+impact with the sparks scattering at the same instant, then the creature itself with its own small blast), runs
+its own built-in AI loop instead of going through the normal order system, can never land or be selected, swoops
+down in genuine 3D to grab a victim (closer to the ground for someone caught in the open, further back but still
+reactive for someone sheltering in a tower), carries a single victim at a time before releasing it to die by
+ordinary fall physics, fights a rival angel through a pure health-comparison-and-knockback exchange rather than a
+scripted fight, never touches buildings or vehicles directly, and ends its own life in one of two ways depending
+on cause (a quiet fade-out on natural expiry, a violent self-detonation if beaten in combat) - and should be
+exempted from the same "shaman-and-angel-proof" spell-damage list every other immune-type exemption in the game
+already uses, with one partial exception for firewarrior fire. Visually, it's worth giving it real pitch and bank
+while flying (formula above) even though the original engine's own use of those values couldn't be confirmed -
+it is very unlikely to look worse than flat yaw-only flight, and directly answers the one visual complaint that
+prompted this whole follow-up investigation.
 
 ### 6d. Follow-up (2026-10-30, same day): task type 1 (resource-gathering, likely FETCH_WOOD) traced
 
