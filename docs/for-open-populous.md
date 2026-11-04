@@ -37,6 +37,29 @@ were lost when that container reset. This is exactly the failure mode this file 
 so re-check the live `open-populous3` state before assuming anything below is already done, even
 if an earlier log entry here says it was "written directly" into that repo.
 
+- **§1 (2026-11-04 update) "tribe_cmd 0x15/0x17/0x1f/0x20 identified" -> `open-populous3`'s pause/
+  game-speed implementation (if any) + `TODO.md`; `tribe_cmd 0x17` itself is almost certainly NOT
+  worth porting.** §1 below now has three previously-open leads fully resolved and cross-corroborated
+  against already-traced code elsewhere in this catalog:
+  - `tribe_cmd 0x1f`/`0x20` **is the game's PAUSE/UNPAUSE command** (sets/clears the already-confirmed
+    "paused" bit of `game_flags_1`, freezes/resumes the game clock, and raises a multiplayer-aware
+    "Game Paused"/"Paused by `<tribe>`" banner). If `open-populous` has its own pause implementation,
+    check it against this mechanism (especially the "paused by \<tribe\>" naming in multiplayer, and that
+    unpause's own trigger (menu button vs. keybind) is still not located exe-side - worth noting as a gap
+    either way) and cite accordingly; if it has none yet, this is a `TODO.md`-worthy real feature.
+  - `tribe_cmd 0x15` **is a hidden "game speed" multiplier** - cycling an integer 0-4 (0-32 with the
+    BYRNE cheat active) that `main_loop_outer` reads directly to run 1-5 (or up to 33) simulation turns
+    per real-time catch-up step instead of the normal one. Confirm whether `open-populous` has an
+    equivalent fast-forward/turbo mode; if this is meant to be a hidden debug feature rather than a
+    normal setting, note that distinction rather than treating it as a public option.
+  - `tribe_cmd 0x17` **is the hidden cheat/debug settings menu itself** - a 76-entry table-driven
+    toggle/stepper console, gated behind the same cheat-enable flag as the known BYRNE cheats. The
+    mechanism is fully documented in `commands.tsv`/`functions.tsv` (`0x443520`'s own row) for
+    completeness, but the actual 76 item names are unreadable without a live memory dump (they live in
+    a runtime-only string table, not in the exe file) and this is very unlikely to be something
+    `open-populous` needs to reimplement - flag it as "documented, probably skippable" rather than
+    queuing a `TODO.md` entry, unless a future session reads the live strings and finds something
+    genuinely player-relevant hiding in the 76 entries.
 - **§7 "Angel of Death mechanics" -> `open-populous3`'s `docs/specs/pop3-rev-analysis.md` +
   `TODO.md`.** §7 below is a full, corrected rewrite (42 particles not 36, the literal
   `AOD_KILL_COUNT`/`AOD_DURATION` expiry mechanism with its two death types, the real 3D dive-to-grab,
@@ -112,38 +135,57 @@ if an earlier log entry here says it was "written directly" into that repo.
 - **Nothing left genuinely open from this file's own Native AI backlog** - `docs/trace-backlog.md`'s entire
   "Native AI / AI scripting" section is now marked RESOLVED, item by item, as of this session.
 
-## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED, mostly not actionable
+## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED
 
 Update (2026-10-30, later same day): all 7 original handlers (plus a newly-found companion,
-0x20) have now been traced in `docs/commands.tsv`. Net result - **none of this looks like a
-missing player-facing feature**:
+0x20) have now been traced in `docs/commands.tsv`.
+
+Update (2026-11-04): the three leads this file had left as "plausible real feature but purpose
+unidentified" or "genuinely open" are now resolved, each cross-corroborated against other
+already-traced code in this catalog rather than resting on this one function alone:
 
 - **0x14**: calls a 1-byte `ret` stub - a genuine no-op, nothing to port.
 - **0x28 / 0x29**: their predicate helpers (`0x442f40`/`0x443260`) both build a message using
   template `0x5999ec` via `0x4fffe0` - the EXACT template/helper `ui_cmd 0x51`'s row already ties
   to the hidden "BYRNE" cheat text-entry overlay. Very likely more of that same cheat subsystem,
-  not a "game speed" setting as `tribe_cmd 0x29`'s own 0-4 threshold byte might otherwise suggest.
-  Matches this file's section 5 prediction.
-- **0x1f / 0x20**: a clean start/stop pair showing a banner via the shared `0x479f00` dispatcher -
-  plausible real feature, but no banner text/trigger was identified, so still unclear if it's
-  worth anything to `open-populous`.
-- **0x15**: a stepper (range 0-4 or 0-32 depending on a flag) that announces the new selection by
-  name via a message table - plausible real feature (e.g. cycling some list), but what's actually
-  being selected wasn't identified.
-- **0x17**: the one genuinely open lead - its callee `0x443520` indexes a 0x34-byte-stride table
-  at `0x5a8ab8` (the list `ui_cmd 0x49-0x4e`'s "select next/previous" cluster cycles through) with
-  a type-tag sub-dispatch not yet read. Worth a dedicated pop3-rev session before concluding
-  anything.
+  not a "game speed" setting as `tribe_cmd 0x29`'s own 0-4 threshold byte might otherwise suggest
+  (see 0x15 below for where that "game speed" guess actually belongs). Matches this file's
+  section 5 prediction.
+- **0x1f / 0x20 - RESOLVED, a real feature**: this is the game's **PAUSE/UNPAUSE command**.
+  `0x479f00`'s category dispatch (a 15-entry jump table, category `0xa`/`5` share one handler at
+  `0x47a1ba`) sets/clears `game_flags_1`/`0x89c661` bit 0x2 (the "paused" bit `0x89c661`'s own row
+  already confirms), calls what's almost certainly a freeze/resume-clock pair (`0x48b4b0`/`0x48b4e0`),
+  and raises an on-screen banner that reads the focused tribe to show a plain "Paused" or a
+  "Paused by `<tribe>`" variant - i.e. multiplayer-aware. `tribe_cmd 0x1f` is queued by `ui_cmd 0x10`
+  (gated on a mode check + a generic per-tribe permission gate); `0x20`'s own trigger (menu button,
+  not a `ui_cmd` case, is the likely explanation) is still not located.
+- **0x15 - RESOLVED, a real (likely debug-only) feature**: this is a hidden **"game speed"
+  multiplier**. The counter it cycles (`0x895dac`, range 0-4 normally / 0-32 with the BYRNE cheat
+  active) is read directly by `main_loop_outer`'s fixed-step catch-up loop (3 near-identical sites)
+  as `counter+1` - that many simulation turns (`on_turn`/`0x4ec6f0`) now run per catch-up step
+  instead of the normal one, a genuine fast-forward/turbo effect. `clear_level_global_vars` resets
+  it to 0 (1x) on level load. Queued by `ui_cmd 0x3e`/`0x3f`, gated the same cheat-adjacent way as
+  the rest of this cluster.
+- **0x17 - RESOLVED, but likely not worth porting**: its callee `0x443520` is **the hidden cheat/
+  debug settings menu itself** - a 76-entry, table-driven get/set/announce engine (toggles and
+  clamped numeric steppers, each with its own storage pointer, optional "apply" callback, and
+  on-screen name/value banner), reachable only once the BYRNE cheat flag is on (confirmed via
+  `ui_cmd 0x14`, which force-sets one specific entry and shares that exact gate). The table itself
+  was dumped and fully decoded statically (see `commands.tsv`/`functions.tsv`'s own rows for the
+  per-item breakdown: which flags/ranges each of the 76 entries controls), but the actual item
+  *names* live in a runtime-only string table outside the exe file, so what each entry is literally
+  called needs a live memory read - not done this session.
 - **0x5f**: a clean, fully round-tripped per-tribe flag toggle (`tribe_struct+0x93d` bit 0x80,
   sibling to tribe_cmd 0x41's "all mana" bit 0x8) - functionally simple, but what the flag
   controls isn't confirmed, so still nothing concrete to port.
 
-**Conclusion for `open-populous`**: nothing here currently warrants a TODO.md entry - the two
-items with the clearest cheat/debug signature (0x28/0x29) are probably skippable the same way
-section 3's UI-state bitmask is, and the remaining ones (0x15/0x17/0x1f/0x20/0x5f) need their
-*purpose* identified (what list, what mode, what flag) before they're spec-ready, not just their
-mechanics. Leaving this section in as a pointer rather than removing it, in case a future session
-resolves `0x443520`'s table and it turns out to be something `open-populous` actually needs.
+**Conclusion for `open-populous`**: `0x1f`/`0x20` (pause) and `0x15` (game speed) are real engine
+features worth checking against `open-populous`'s own implementation (see this file's propagation
+plan at the top for the concrete `TODO.md`/spec pointers). `0x28`/`0x29` (BYRNE text-entry) and
+`0x17` (the 76-item cheat console) are internal debug/cheat machinery, almost certainly skippable
+the same way section 3's UI-state bitmask is - `0x17`'s own item names are the only loose end left
+if a future session wants to read them live and double-check nothing player-relevant is hiding in
+there. `0x5f` still needs its flag's real-world effect confirmed before it's spec-ready.
 
 ## 2. Notification "clear/dismiss all" (ui_cmd 0xb7 / 0xb8)
 
