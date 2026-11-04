@@ -37,10 +37,12 @@ were lost when that container reset. This is exactly the failure mode this file 
 so re-check the live `open-populous3` state before assuming anything below is already done, even
 if an earlier log entry here says it was "written directly" into that repo.
 
-- **§1 (2026-11-04 update) "tribe_cmd 0x15/0x17/0x1f/0x20 identified" -> `open-populous3`'s pause/
-  game-speed implementation (if any) + `TODO.md`; `tribe_cmd 0x17` itself is almost certainly NOT
-  worth porting.** §1 below now has three previously-open leads fully resolved and cross-corroborated
-  against already-traced code elsewhere in this catalog:
+- **§1 (2026-11-04 update, extended same day) "tribe_cmd 0x15/0x17/0x1f/0x20 identified" ->
+  `open-populous3`'s pause/game-speed implementation (if any) + `TODO.md`; `tribe_cmd 0x17` is a
+  hidden dev/debug console, not a player feature, but a few of its 76 entries are genuinely useful
+  DEBUG/TESTING toggles `open-populous` might want of its own.** §1 below now has three previously-
+  open leads fully resolved and cross-corroborated against already-traced code elsewhere in this
+  catalog:
   - `tribe_cmd 0x1f`/`0x20` **is the game's PAUSE/UNPAUSE command** (sets/clears the already-confirmed
     "paused" bit of `game_flags_1`, freezes/resumes the game clock, and raises a multiplayer-aware
     "Game Paused"/"Paused by `<tribe>`" banner). If `open-populous` has its own pause implementation,
@@ -53,13 +55,22 @@ if an earlier log entry here says it was "written directly" into that repo.
     equivalent fast-forward/turbo mode; if this is meant to be a hidden debug feature rather than a
     normal setting, note that distinction rather than treating it as a public option.
   - `tribe_cmd 0x17` **is the hidden cheat/debug settings menu itself** - a 76-entry table-driven
-    toggle/stepper console, gated behind the same cheat-enable flag as the known BYRNE cheats. The
-    mechanism is fully documented in `commands.tsv`/`functions.tsv` (`0x443520`'s own row) for
-    completeness, but the actual 76 item names are unreadable without a live memory dump (they live in
-    a runtime-only string table, not in the exe file) and this is very unlikely to be something
-    `open-populous` needs to reimplement - flag it as "documented, probably skippable" rather than
-    queuing a `TODO.md` entry, unless a future session reads the live strings and finds something
-    genuinely player-relevant hiding in the 76 entries.
+    toggle/stepper console, gated behind the same cheat-enable flag as the known BYRNE cheats, reached
+    in-game by holding `O` and using the arrow keys once the BYRNE cheat is active (`docs/cheat.md`'s
+    own section has the full control scheme). The mechanism and per-item flag/storage/callback
+    breakdown are fully documented in `commands.tsv`/`functions.tsv` (`0x443520`'s own row). **Update
+    (same day)**: a third-party source ([`ystartgo/Populous_3_Tool`](https://github.com/ystartgo/Populous_3_Tool),
+    cross-checked this session and lining up well) names ~20 of the 76 entries - most are developer
+    testing switches (texture/sync/pathfinding debug toggles) not worth porting, but a handful are
+    genuinely useful DEBUG/TESTING aids `open-populous` might want its own equivalent of: **"Computer
+    Player off"** (disables enemy AI - useful for isolated manual testing), **"Fog of war"** (toggle),
+    and **"Autocast spell"**. The rest (Sky/Sea/Lens Flare/Animating Water on-off, hires textures,
+    footsteps, camera zoom, island level, auto-vehicles, min-population maintenance, human shaman
+    omnipresence, flip rotation/swap rotate-move/auto-deselect, show-attack-areas/show-flat-areas
+    overlays) are much lower priority - nice-to-have debug visualizations/QoL at most, not missing
+    gameplay features. The exact item name TEXT is still third-party testimony, not independently
+    read from this exe (the runtime string table itself wasn't readable statically) - a live session
+    could confirm it directly if that ever matters.
 - **§7 "Angel of Death mechanics" -> `open-populous3`'s `docs/specs/pop3-rev-analysis.md` +
   `TODO.md`.** §7 below is a full, corrected rewrite (42 particles not 36, the literal
   `AOD_KILL_COUNT`/`AOD_DURATION` expiry mechanism with its two death types, the real 3D dive-to-grab,
@@ -166,26 +177,35 @@ already-traced code in this catalog rather than resting on this one function alo
   instead of the normal one, a genuine fast-forward/turbo effect. `clear_level_global_vars` resets
   it to 0 (1x) on level load. Queued by `ui_cmd 0x3e`/`0x3f`, gated the same cheat-adjacent way as
   the rest of this cluster.
-- **0x17 - RESOLVED, but likely not worth porting**: its callee `0x443520` is **the hidden cheat/
-  debug settings menu itself** - a 76-entry, table-driven get/set/announce engine (toggles and
-  clamped numeric steppers, each with its own storage pointer, optional "apply" callback, and
-  on-screen name/value banner), reachable only once the BYRNE cheat flag is on (confirmed via
-  `ui_cmd 0x14`, which force-sets one specific entry and shares that exact gate). The table itself
-  was dumped and fully decoded statically (see `commands.tsv`/`functions.tsv`'s own rows for the
-  per-item breakdown: which flags/ranges each of the 76 entries controls), but the actual item
-  *names* live in a runtime-only string table outside the exe file, so what each entry is literally
-  called needs a live memory read - not done this session.
+- **0x17 - RESOLVED, mostly not worth porting, but see the note below**: its callee `0x443520` is
+  **the hidden cheat/debug settings menu itself** - a 76-entry, table-driven get/set/announce engine
+  (toggles and clamped numeric steppers, each with its own storage pointer, optional "apply"
+  callback, and on-screen name/value banner), reachable only once the BYRNE cheat flag is on
+  (confirmed via `ui_cmd 0x14`, which force-sets one specific entry and shares that exact gate),
+  in-game by holding `O` and using the arrow keys (`docs/cheat.md`). The table itself was dumped and
+  fully decoded statically (see `commands.tsv`/`functions.tsv`'s own rows for the per-item
+  breakdown: which flags/ranges each of the 76 entries controls); the actual item *names* live in a
+  runtime-only string table outside the exe file and weren't read directly this session, but a
+  third-party source (`ystartgo/Populous_3_Tool`, see the propagation plan above and `docs/cheat.md`)
+  names ~20 of them, cross-checked here and lining up well. Most are developer-only testing switches,
+  but "Computer Player off", "Fog of war" and "Autocast spell" are worth a second look as debug/
+  testing aids, not full gameplay features.
 - **0x5f**: a clean, fully round-tripped per-tribe flag toggle (`tribe_struct+0x93d` bit 0x80,
   sibling to tribe_cmd 0x41's "all mana" bit 0x8) - functionally simple, but what the flag
   controls isn't confirmed, so still nothing concrete to port.
 
 **Conclusion for `open-populous`**: `0x1f`/`0x20` (pause) and `0x15` (game speed) are real engine
 features worth checking against `open-populous`'s own implementation (see this file's propagation
-plan at the top for the concrete `TODO.md`/spec pointers). `0x28`/`0x29` (BYRNE text-entry) and
-`0x17` (the 76-item cheat console) are internal debug/cheat machinery, almost certainly skippable
-the same way section 3's UI-state bitmask is - `0x17`'s own item names are the only loose end left
-if a future session wants to read them live and double-check nothing player-relevant is hiding in
-there. `0x5f` still needs its flag's real-world effect confirmed before it's spec-ready.
+plan at the top for the concrete `TODO.md`/spec pointers). `0x28`/`0x29` (BYRNE text-entry) is
+internal cheat machinery, almost certainly skippable the same way section 3's UI-state bitmask is.
+`0x17` (the 76-item cheat console) is mostly the same kind of skippable developer machinery, EXCEPT
+for a small handful of entries ("Computer Player off", "Fog of war", "Autocast spell" - named by a
+third-party source, see the propagation plan above) that look like genuinely useful debug/testing
+toggles `open-populous` might want its own equivalent of, even though the console itself isn't worth
+porting wholesale. `0x17`'s own item names remain third-party testimony, not independently read
+from the exe - the only loose end left if a future session wants to read them live and double-check
+nothing else player-relevant is hiding in the other ~56 unnamed entries. `0x5f` still needs its
+flag's real-world effect confirmed before it's spec-ready.
 
 ## 2. Notification "clear/dismiss all" (ui_cmd 0xb7 / 0xb8)
 

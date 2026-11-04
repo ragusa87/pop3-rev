@@ -49,6 +49,56 @@ open(p, "wb").write(b)
 
 Confirmed working (reported by the user). The rest of this 177-byte file is unexplored.
 
+## Hidden developer settings menu (BYRNE cheat + hold O)
+
+Not a file/memory edit - a feature already built into the game, reachable with only the keyboard.
+Source: [`ystartgo/Populous_3_Tool`](https://github.com/ystartgo/Populous_3_Tool) (third-party,
+player-discovered); this session cross-checked it against `D3DPOPTB.EXE`'s own disassembly (see
+`commands.tsv`'s `tribe_cmd 0x17` row and `functions.tsv`'s `0x443520` row for the full static
+trace) and found a strong, consistent match - treat the exact item *names* below as that
+third-party's testimony, not independently read from the game (the actual strings live in a
+runtime-only table this session couldn't read statically; see "Open problems" at the end of this
+section for how a future live session could confirm them directly).
+
+**They're hidden developer settings left in the game, which you can change once cheat mode is
+on.** To use them: turn on cheats (`Tab+F11`, type `BYRNE`, press Enter), then hold the `O` key.
+While holding it, use `↑`/`↓` to scroll through the settings and `←`/`→` to change the selected
+one.
+
+Most of the ~72-76 entries (this session's own static count of the exe's table found 76; the
+source above describes about 72 - possibly a different game build, or a few the source didn't list
+individually) are technical switches the developers used for testing, such as turning off texture
+drawing, sync checks, or pathfinding ("jnav"/"jav") values. These are the ones a regular player (or
+`open-populous`) is most likely to care about. The number is the 1-based position you'd reach by
+holding `O` and pressing `↓` that many times from the first entry - this session confirmed it lines
+up exactly with 1 + the 0-based record index in the exe's own `0x5a8ab8` table (`commands.tsv`'s
+own per-item breakdown), and several of these specific matches are corroborated by a real,
+non-null "apply" callback firing exactly where you'd expect one (texture mode, AI on/off, fog of
+war, auto-vehicles, the attack-area overlay, flip rotation all have one; a plain visual toggle like
+sky/sea/lens-flare correctly has none):
+
+- **Gameplay**: Fog of war (48), Computer Player off (29, turns off the enemy AI), Auto use
+  vehicles (49), Maintain minimum population (50), Human shaman omnipresence (66), Autocast spell
+  (68)
+- **Controls and camera**: Camera Zoom on (40), Flip Rotation (70), Swap Rotate/Move (72), Auto
+  Deselect (71), Continuous raise/lower (51, for terrain)
+- **Visuals**: Sky On (21), Sea On (43), Lens Flare (64), Animating Water (25), Footsteps (24), Use
+  32x32 Hires Textures (23)
+- **Info overlays**: Show attack areas (57), Show flat areas darkened (55, shows ground you can
+  build on)
+- **Fun**: Island Level (44) raises or lowers the sea level
+
+A word of caution: many of the remaining options (like No Draw, No poly draw, or the sync checks)
+can blank the screen or make the game unstable. If something goes wrong, set the option back or
+restart the level.
+
+**Open problems** (worth a future live session): read the runtime string table at `0x972ba8` while
+the menu is open to get the literal name text for all 76 entries directly from the game instead of
+via the third-party source above; confirm the exact `O`+arrow-key input remap this session didn't
+trace (likely rerouting the normal camera-scroll arrow keys into the `ui_cmd 0x49`-`0x4e` stepper
+cluster while `O` is held); and resolve the 72-vs-76 count discrepancy (could just confirm this
+session's build has 4 extra entries past what the source's build/version had).
+
 ## Wine/Wayland: keyboard not registering in-game
 
 Likely cause: the game runs true fullscreen, which plays badly with a Wayland compositor's input
