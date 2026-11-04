@@ -755,6 +755,9 @@ the engine's generic script-variable store:
   up to a per-tribe limit - it's a cap, not a strict single-instance lock).
 - **2** - no free AI task slot (each tribe has 10, shared across every AI task type).
 - **3** - no valid target was found matching the given `target_type` (marker/building/person).
+- **6** (found a later session, prompted by a user hypothesis about vehicle-attack gating) - for an
+  `ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON` attack specifically: not enough ready vehicles of the needed model exist
+  to carry the force. See the addendum at the end of this section for the full mechanism.
 
 So `ai-scripts.md`'s own "(?)"-marked guess ("a variable the AI may update with the attack's outcome") was right
 in spirit but imprecise: **it's the immediate accept-or-reject status of the `ATTACK` call itself, reported the
@@ -765,6 +768,19 @@ Side finding from the same trace, also worth a citation: `ATTACK`'s 13th/last pa
 script's own program counter is advanced over it) but its value is never actually resolved or used anywhere in
 the chain - confirms `ai-scripts.md`'s own "(?)"-flagged suspicion that `m3` has no visible effect; it's not just
 unused in practice, the original interpreter itself discards it outright.
+
+**Addendum (2026-11-04), a user hypothesis checked directly and confirmed**: does an `ATTACK_BY_BOAT`/
+`ATTACK_BY_BALLOON` attack only proceed if the tribe already plans/has built up vehicles for it, with the same
+guard applying to actually building the boat/balloon hut in the first place? Half confirmed, half not. `ATTACK`'s
+own transport sub-routine (a separate state machine it calls into, distinct from `ATTACK`'s own main gather/
+regroup/attack phases) checks the tribe's CURRENT count of ready vehicles of the needed model against how many
+the force requires - the exact same check tasks 19 and 27 (§6p, §6q) use in their own entry gates - and simply
+**fails the attack (code 6 above) if short**, rather than waiting for or triggering more vehicles to be built.
+Tasks 19/27 are independent, continuously-running maintenance that keep the fleet topped up ahead of time, not
+triggered on demand by a pending attack. The SECOND half of the hypothesis - that building the hut itself is
+similarly gated on attack intent - does NOT hold: the AI's own top-priority "construct essential buildings" check
+(§6b, `0x4e5580`) unconditionally tries to maintain a minimum count of boat huts and air/balloon huts, exactly
+like it does for towers - baseline infrastructure, built regardless of whether any attack is ever planned.
 
 ### 6k. Follow-up (2026-11-04): worker selection is proximity-based, not id order - likely needs a code fix, not just a doc fix
 

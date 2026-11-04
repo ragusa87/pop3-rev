@@ -141,6 +141,21 @@ one with a different approach, or a later pop3-rev session may already have trac
   pre-existing error in this catalog: `get_tribe_sub_struct`/`0x462730` had its return polarity backwards
   (it returns the first FREE slot, not the first occupied one). Full write-up: `docs/functions.tsv` rows
   `0x48cf50`/`0x48c650`/`0x4e5fd0`/`0x4627f0`/`0x462730`/`0x462d40`. Chase: `0x4E5FD0`'s own parameter-to-field writes, one by one.
+  **Addendum, a later session: a 5th result code found, confirming a user hypothesis about vehicle-attack
+  gating.** `ATTACK`'s own transport/vehicle-readiness sub-state-machine (`0x4cceb0`, previously undercredited as
+  just "a pass-through to `0x4ce2c0`" - own row now) writes **code `6` = "not enough vehicles of the required
+  type"** via the SAME `0x48c650` primitive, when a vehicle-based attack (`ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON`)
+  doesn't have enough ready vehicles of the needed model - the exact same ceiling-division-vs-owned-count check
+  tasks 19/27 (`0x4caac0`/`0x4cf970`) use in their own entry gates. Confirms `tribe+0xba5[model]` (the field both
+  tasks 19/27 and this check read) is a LIVE, continuously-recounted headcount of the tribe's own vehicles of
+  that model (traced to its writer, `0x4ecac0`'s own per-tribe recount pass, class-4 dispatch case) - not a
+  script-configured "intends to attack by boat" flag as first guessed. **The actual relationship**: `ATTACK`
+  checks whatever vehicle stock already exists at the moment it's needed and simply fails (reporting code 6) if
+  short - it does not wait for or trigger tasks 19/27 to build more. Tasks 19/27 are independent, continuously
+  running maintenance keeping the fleet topped up ahead of time. Separately confirmed (already-documented,
+  `0x4e5580`'s own row): the AI's top-priority "construct essential buildings" check unconditionally tries to
+  maintain a minimum count of boat huts (building type 13) and air/balloon huts (type 15), same as towers (type
+  4) - building the HUT itself is baseline infrastructure, not gated on whether an attack is ever planned either.
 - **RESOLVED this session: the guard/patrol group's actual movement order - confirmed ABSENT, not just unknown.**
   Chased by fully tracing task 24's (`0x4cedd0`, `SET_MARKER_ENTRY`/`MARKER_ENTRIES`/`GUARD_AT_MARKER`/
   `GUARD_BETWEEN_MARKERS`'s own native handler) previously-unread "between m1/m2" gather sub-dispatch
