@@ -12,6 +12,21 @@ one with a different approach, or a later pop3-rev session may already have trac
 
 ## Angel of Death
 
+- **NEW lead, found this session while tracing mesh-shatter debris's own callers (unrelated starting point).**
+  A "statue to AoD" effect (class-7 type 0x5b, `functions.tsv` `0x479840`/`0x479890`, `effect_states.csv` state 76)
+  spawns a class-1/type-8 object - the SAME type `create_aod` confirms is the Angel of Death - directly above a
+  class-5/type-9 "head" statue while it crumbles over several turns, then despawns it (sound `0xB2`, the angel's
+  own confirmed self-despawn cue) once the statue is destroyed. The spawned object bypasses `create_aod` entirely
+  and is driven into outer sub-state **0xA** - one of the outer cases `person_states.tsv` row 28 lists as existing
+  but never opened (alongside `0xB`/`0xF`/`0x10`). **Open questions for a dedicated follow-up**: (1) what caseD_A
+  actually does - is this spawned object a real, functional hostile angel, or a purely decorative apparition that
+  never runs the normal hunting loop? (2) `FUN_004A9D90` (`functions.tsv`, the only alloc site for type 0x5b) is
+  gated behind the SAME global flag (`0x89C661` bit `0x8`) caseD_0 branches on - very likely the literal
+  level/campaign trigger for this whole "Angel of Death rises from its statue" set-piece; worth tracing fully to
+  confirm and to identify the untraced alternate type `0x63` it allocates under a different flag combination.
+  (3) `0x4A66C0` (called once per crumble-stage with args `(statue, 10, 157)`, not traced) and the mesh-record
+  "f1" byte mutation (`objs0_struct+0x6`, shared per-mesh-type data) both remain unexplained side effects.
+
 - **RESOLVED this session.** ~~The literal `AOD_KILL_COUNT` (40) / `AOD_DURATION` (2500-turn) expiry check.~~
   Both fully traced: `+0x97` (duration, init 2500, ticks down every turn except while `+0x63` is set) and `+0xB2`
   (kill count, init 0, incremented once per release in `0x4E0A30`) are checked together in `0x4DB980`'s own
