@@ -1,4 +1,5 @@
 sound_id	name	feature_area	status	trigger	role
+0x13	-	buildings	traced	0x502660	Flying mesh-shatter debris piece's own dust-puff thud: plays every tick the piece's current position is over non-water terrain (table 0x5AA328 bit 0x2 clear), right alongside spawning its class-7/type-3 puff effect, shortly before the piece's own 50%-chance/settle-counter self-delete - see controller_states.csv state 7 and functions.tsv 0x407860/0x502660.
 0x16	-	units	traced	0x4D60D0	Wildman-only ambient idle sound, ~1/256 chance per turn while in state 8 ("wildman idle tick").
 0x1A	-	units	traced	0x4E6D00 (0x4E75F3)	Take-off scream for the PLAYER's own shaman (current/local tribe, 0x89C6F0, matches self+0x2F) when it first goes BLOWN - "Person physics".
 0x1B	-	units	traced	0x4E6D00 (0x4E73C7)	Landing scream: played on touchdown for a BLOWN shaman (type 7) whose vel.y <= -100 at the moment of landing - "Person physics". Sibling of 0x9 (the non-shaman case).
