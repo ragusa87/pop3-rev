@@ -384,6 +384,42 @@ generic per-turn drowning check ("Drowning") while its own dedicated sink-and-di
 other check's own "not drowning if bit 0x2" reads backwards until you realize it means "already handled
 elsewhere," not "safe."
 
+## TODO (needs a live session - can't do this in the cloud): do the Reincarnation Centre's 8 pillars rise together, or one by one?
+
+Open dispute, not resolved this session: static tracing of the level-start Reincarnation Centre
+sequence (`docs/functions.tsv` rows `0x41c140`/`0x4a7d80`/`0x4a7eb0`) found all 8 standing stones
+allocated in one tight, uninterrupted loop with no turn boundary between them, and `alloc_unit`
+(`0x4ed8a0`) confirmed to call each one's type-specific init (and thus start its rise) synchronously
+- i.e. the code reads as "all 8 start rising in the same simulation tick." The user, from having
+actually watched/played it, is confident they rise one after another, just very close together -
+disassembly alone can't settle that against a first-hand observation, and this cloud session has no
+running game, no display, and no `sudo`, so it can't be checked here either.
+
+**How to check it, next session with the game actually running** (same `find_game()`/`ptrace`
+approach as "Live memory: measuring a Blast" above, read-only):
+1. Start a fresh level (or reload one) so the RC intro fires from scratch.
+2. Poll global byte `0x89D17C` each turn (synced to the turn counter `0x89D188`, not wall-clock -
+   turns run ~12/s) until bit `0x20` goes from clear to set - that's the turn Phase A
+   (`0x41c140`) fires.
+3. From that turn on, for the tribe(s) being watched, compute `tribe_struct = idx*0xC65 + 0x89D1C8`
+   and read its own 8-entry pillar-slot array at `tribe_struct+0xA0D` (word thing-indices, `0` =
+   empty slot); resolve each nonzero index through the generic thing-pointer table `0x890390` to
+   get each pillar's own unit record (`0x8E0428`-based pool, `0xB3` bytes/record, same layout
+   "Live memory: measuring a Blast" already confirmed: `+0x2C` state, `+0x41` height i16).
+4. Log, per turn, each of the 8 slots' own `+0x2C` (should read `6` once risen) and `+0x41` (height,
+   should climb from `ground-256` to `ground` over ~16 turns per the static trace). **The question
+   this settles**: do all 8 slots' height values move in lockstep turn-by-turn (confirms
+   "simultaneous," matching the static trace), or does each slot's own climb visibly START a turn
+   or more after the previous one's (confirms the user's "staggered, but close" observation,
+   meaning the static trace above missed something - worth a fresh disassembly pass on the 8-pillar
+   loop in `0x41c140` if so, since nothing in it currently explains a turn-by-turn stagger)?
+5. Also worth polling slot occupancy itself (when each of the 8 words in `tribe_struct+0xA0D`
+   transitions from `0` to a real thing-index) in case the ALLOCATION itself is staggered somehow
+   this session's static read of the loop didn't catch (e.g. a retry/skip on an invalid cell).
+
+Not yet written as a script (`measure_blast.py`-style) since it needs catching the exact level-load
+moment live, not just a running level - write one once this is actually run.
+
 ## Scripts this session (scratchpad, not preserved across sessions)
 
 Written to `/tmp/claude-1000/-home-laurent-compile-pop3-rev/<session>/scratchpad/`: `max_charges.py`
