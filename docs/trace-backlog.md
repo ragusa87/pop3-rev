@@ -12,20 +12,23 @@ one with a different approach, or a later pop3-rev session may already have trac
 
 ## Angel of Death
 
-- **NEW lead, found this session while tracing mesh-shatter debris's own callers (unrelated starting point).**
-  A "statue to AoD" effect (class-7 type 0x5b, `functions.tsv` `0x479840`/`0x479890`, `effect_states.csv` state 76)
-  spawns a class-1/type-8 object - the SAME type `create_aod` confirms is the Angel of Death - directly above a
-  class-5/type-9 "head" statue while it crumbles over several turns, then despawns it (sound `0xB2`, the angel's
-  own confirmed self-despawn cue) once the statue is destroyed. The spawned object bypasses `create_aod` entirely
-  and is driven into outer sub-state **0xA** - one of the outer cases `person_states.tsv` row 28 lists as existing
-  but never opened (alongside `0xB`/`0xF`/`0x10`). **Open questions for a dedicated follow-up**: (1) what caseD_A
-  actually does - is this spawned object a real, functional hostile angel, or a purely decorative apparition that
-  never runs the normal hunting loop? (2) `FUN_004A9D90` (`functions.tsv`, the only alloc site for type 0x5b) is
+- **"Statue to AoD" effect, follow-up session.** A `0x479890`-spawned Angel-of-Death-typed object (class-1/type-8,
+  bypassing `create_aod`, driven to outer raw +0x2D=0xA) - **RESOLVED: caseD_A ("climb-out") fully traced,
+  `person_states.tsv` row 28.** It is NEVER a functional hostile hunter: because the statue effect never runs
+  `init_unit_class_1`'s type-8 init, the spawned angel's own `AOD_DURATION` (`+0x97`) stays at 0, which the shared
+  tail (`0x4DD3DE`) unconditionally treats as instant expiry - each spawned angel gets exactly one tick of its
+  dramatic launch-climb pose, then is redirected into the ordinary 16-turn graceful retirement (caseD_6) and
+  self-deletes (caseD_7, sound `0xB2`) ~17-18 ticks after spawning, never reaching the hunting loop
+  (caseD_1/3/4/5). The statue's own stale-reference re-check almost certainly respawns a fresh one each time,
+  so the real visible effect is likely a repeating cycle of short-lived angels, not one persistent one - not
+  confirmed live. **Still open**: (1) `FUN_004A9D90` (`functions.tsv`, the only alloc site for type 0x5b) is
   gated behind the SAME global flag (`0x89C661` bit `0x8`) caseD_0 branches on - very likely the literal
-  level/campaign trigger for this whole "Angel of Death rises from its statue" set-piece; worth tracing fully to
-  confirm and to identify the untraced alternate type `0x63` it allocates under a different flag combination.
-  (3) `0x4A66C0` (called once per crumble-stage with args `(statue, 10, 157)`, not traced) and the mesh-record
-  "f1" byte mutation (`objs0_struct+0x6`, shared per-mesh-type data) both remain unexplained side effects.
+  level/campaign trigger for this whole set-piece; worth tracing fully to confirm and to identify the untraced
+  alternate type `0x63` it allocates under a different flag combination. (2) `0x4A66C0` (called once per
+  crumble-stage with args `(statue, 10, 157)`, not traced), the mesh-record "f1" byte mutation
+  (`objs0_struct+0x6`, shared per-mesh-type data), and caseD_b (`0x4DCE7D`, reached only if an angel somehow kept
+  a real duration long enough for caseD_a's own inner 18-tick countdown to expire - may be dead code for this
+  spawn path specifically) all remain unexplained/untraced.
 
 - **RESOLVED this session.** ~~The literal `AOD_KILL_COUNT` (40) / `AOD_DURATION` (2500-turn) expiry check.~~
   Both fully traced: `+0x97` (duration, init 2500, ticks down every turn except while `+0x63` is set) and `+0xB2`
