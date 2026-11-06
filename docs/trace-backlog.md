@@ -187,7 +187,34 @@ one with a different approach, or a later pop3-rev session may already have trac
   `set_sub_struct`'s 3 generic params, but which field is which wasn't fully mapped. Also found and fixed a
   pre-existing error in this catalog: `get_tribe_sub_struct`/`0x462730` had its return polarity backwards
   (it returns the first FREE slot, not the first occupied one). Full write-up: `docs/functions.tsv` rows
-  `0x48cf50`/`0x48c650`/`0x4e5fd0`/`0x4627f0`/`0x462730`/`0x462d40`. Chase: `0x4E5FD0`'s own parameter-to-field writes, one by one.
+  `0x48cf50`/`0x48c650`/`0x4e5fd0`/`0x4627f0`/`0x462730`/`0x462d40`.
+  **RESOLVED, a later session: the other 12 ATTACK operands' own field mapping, read directly from `0x4E5FD0`'s own
+  code plus its caller `0x48FC50`'s argument-push order (`add esp,0x38` = 14 pushed args, not 13 - `0x48FC50`
+  prepends the tribe pointer, then `team`, then the 11 real resolved values `num,target_type,model,damage,spell1,
+  spell2,spell3,attack_type,bring_back,m1,m2`, then a 14th slot that is NOT `m3` but a stale re-push of `m2`'s own
+  resolved value, since `m3`'s resolver call is skipped - sharpening the earlier `m3`-discarded finding: no
+  placeholder is even pushed for it).** `team` resolves to the TARGET tribe's own struct pointer (its `tribe_idx`
+  -> slot+0x54); `num` -> slot+0x6C (via `set_sub_struct`'s `param_b`); `target_type` -> slot+0x58 (raw, alongside
+  already-confirmed branching); `model` -> slot+0x59 (raw; also the MARKER index when `target_type==0`, and its
+  `0x4C7`/1223 sentinel is confirmed to be exactly `ai-scripts.md`'s own `INT_NO_SPECIFIC_BUILDING` token id);
+  `damage` -> slot+0x70 (via `param_c`, a DWORD despite `set_sub_struct`'s own row calling it `param_c_word`);
+  `spell1/spell2/spell3` -> slot+0x55/0x56/0x57; `attack_type` -> slot+0x5C (force-overridden to 1 if attacking
+  the enemy shaman while she's on a vehicle; remapped into a derived slot+0x5F); `bring_back` -> slot+0x5D; `m1`
+  -> slot+0x44 (resolved through the marker-position table `0x89B7A5`, or sentinel `0xFFFF` if -1); `m2` ->
+  slot+0x65 (raw - NOT looked up in the marker table, unlike `m1`); `m3` reconfirmed never passed, and the stray
+  14th argument (the stale `m2` duplicate) lands in slot+0x66, so that byte isn't a genuine operand either. Also
+  resolved `set_sub_struct`'s own `param_a` (slot+0x68): the resolved target's own `+0x24` id word, 0 for MARKER.
+  Every field in the previously-flagged `+0x44..+0x67`/`+0x7E..+0x83` range is now accounted for: the ones not
+  listed above are either the derived target position (+0x46/+0x50), the `SET_ATTACK_VARIABLE`-staged variable id
+  frozen at creation (+0x4E), per-tribe AI tuning-constant-table defaults unrelated to the script
+  (+0x60-0x63/+0x7E-0x83), a hardcoded 0 (+0x64), or two one-shot global per-tribe flag bits consumed on task
+  creation (+0x67) - none of these are script-controlled. Two things found but NOT chased this session: a sticky
+  per-tribe override path (`tribe+0x5B0`/`+0x5AC`/`+0x5AA`) that can replace the derived target position, staged
+  by some other not-yet-identified opcode; and an open structural question over whether the generic task-record
+  fields (+0x68 onward) genuinely fit within the 82-byte per-slot stride `0x4623E0`/`0x462730` otherwise use, since
+  `+0x85` (the task-type tag) exceeds it - doesn't affect any mapping above, but worth a future session if another
+  task type's own field ever appears to collide with these. Full write-up: `docs/functions.tsv` rows `0x4e5fd0`
+  (extended) and `0x462790` (extended).
   **Addendum, a later session: a 5th result code found, confirming a user hypothesis about vehicle-attack
   gating.** `ATTACK`'s own transport/vehicle-readiness sub-state-machine (`0x4cceb0`, previously undercredited as
   just "a pass-through to `0x4ce2c0`" - own row now) writes **code `6` = "not enough vehicles of the required
