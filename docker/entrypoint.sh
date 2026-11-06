@@ -12,6 +12,14 @@ done
 x11vnc -display ":${DISPLAY_NUM}" -forever -shared -nopw \
     -listen 0.0.0.0 -rfbport 5900 -bg -q -o /tmp/x11vnc.log
 
+# Minimal window manager: without one, no window (the game included) ever gets
+# real X input focus, so synthesized mouse clicks (xdotool, VNC) never reach
+# the game's own DirectInput acquisition - keyboard works regardless, but
+# clicks silently do nothing. openbox's default click-to-focus policy is
+# enough; no further config needed.
+openbox --sm-disable &
+sleep 1
+
 # Wine audio-disable and virtual-desktop registry settings are NOT set here:
 # ~/.wine is bind-mounted from the host, so this prefix's registry is shared,
 # mutable state that a host-side wine session can change between container

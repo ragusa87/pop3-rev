@@ -99,6 +99,7 @@ unit_class|unit_type|description
 6|4|debug flying
 6|5|debug flag
 6|6|trigger
+6|8|angel of death flight companion (ground-shadow/visible flying body, see person_states.tsv state 28)
 6|0xa|discovery marker
 --------------------------------
 7|*|effect

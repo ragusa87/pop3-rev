@@ -1,7 +1,7 @@
 FROM archlinux:base
 
 RUN pacman -Syu --noconfirm --needed \
-        wine xorg-server-xvfb x11vnc xdotool python imagemagick gdb \
+        wine xorg-server-xvfb x11vnc xdotool python imagemagick gdb openbox \
     && pacman -Scc --noconfirm
 
 ARG UID=1000
