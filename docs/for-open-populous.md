@@ -94,6 +94,20 @@ if an earlier log entry here says it was "written directly" into that repo.
   listener's pose is table-driven - supporting a single fixed preaching pose/animation on the caster's side, though
   the exact animation id was not independently confirmed (a separate, untraced generic rendering layer maps the
   underlying flag state to an actual sprite). See §9 below for the full re-derivation and exact addresses.
+- **§11 (new, 2026-11-06) "Patrol attack-type points: real and not person-only" -> `patrol.rs`/`units.md`
+  "Patrol orders".** Two previously-open questions about the player's 8-slot patrol-point mechanism, both
+  settled from the exe: (1) a dedicated attack-type patrol point is a REAL, persisted order kind chosen and
+  stored at set-time (not a reactive/non-stored proximity engagement) - model it as a genuine per-slot
+  move-or-attack discriminant with a stored target id, not as "waypoints plus ambient auto-engage." (2) nothing
+  in the exe's target-validity gate or in the handler that actually consumes the stored id excludes a BUILDING
+  as that id's referent - a building id would be processed as an ordinary building attack (door/hack/shake wear-
+  down), exactly like a normal attack order would. **Caveat, don't over-port this**: whether the shipped game's
+  OWN UI ever lets a player's click resolve to a building id for this specific command was not traced (the
+  UI-to-tribe_cmd code for this path wasn't located) - so "the engine would handle a building target correctly"
+  is confirmed, but "the original UI actually offers this to players" is not. If `open-populous`'s own patrol
+  data model is currently person-only by construction, treat that as a (possibly deliberate) simplification
+  rather than a confirmed divergence - only the engine-capability half of this is settled. See §11 below for
+  the full re-derivation and exact addresses.
 - **§7 "Angel of Death mechanics" -> `open-populous3`'s `docs/specs/pop3-rev-analysis.md` +
   `TODO.md`.** §7 below is a full, corrected rewrite (42 particles not 36, the literal
   `AOD_KILL_COUNT`/`AOD_DURATION` expiry mechanism with its two death types, the real 3D dive-to-grab,
@@ -1322,3 +1336,77 @@ Full exe detail and addresses: `pop3-rev/docs/functions.tsv` rows `0x51C4C0`, `0
 `0x43B540` (and the sibling `0x43B180`-`0x43BB54` family), `0x4BA9B0`, `0x51FCE0`, and `0x514330`
 (`effect_place_wild_man`) - all updated/cross-referenced 2026-11-06.
 ("conversion flash") - all updated 2026-11-06.
+
+## 11. Patrol attack-type points: confirmed real, and building targets are not excluded anywhere (2026-11-06)
+
+**Background**: `pop3-rev/docs/functions.tsv`'s `0x4BA9B0` row (the already-traced "patrol points, up to 8"
+mechanism, Ctrl+Alt+click) flagged two open questions for a future session: whether the exe really has a
+deliberate "attack this specific unit" patrol point TYPE at all (as opposed to patrol being purely reactive/
+non-stored engagement along plain waypoints), and separately, whether such an attack-type point could ever hold
+a BUILDING as its target rather than only a unit. Both chased this session via full disassembly of `0x4BA9B0`'s
+own two call sites (the only two in the whole exe) plus its downstream consumer.
+
+**(1) A dedicated attack-type patrol point is real - a persisted discriminant chosen at set-time, not a
+reactive scan.** `0x4BA9B0` is called from exactly two places, and they are structurally separate, each
+HARDCODING its own `is_unit_target` flag - this is not one call site choosing a mode at runtime:
+
+- The ordinary **ground/move-click path** - `0x4B9190`'s own tail call at `0x4B9394`, inside that function's
+  own class-0-4 click-type switch - always passes `is_unit_target=0` (a literal `push 0`). This branch builds
+  the stored order as kind 6 ("go near X"), with its target bytes computed from a freshly-allocated, invisible
+  class-9 marker object's OWN position fields.
+- The **attack-type path** is a previously-unidentified, separate `process_tribe_cmd` case: raw command id
+  **tribe_cmd 0x62** (Ghidra `caseD_62` of `switchD_0043e922`, body `0x440822-0x44085F`, containing the
+  already-known call at `0x440857`). This case always passes `is_unit_target=1` (`push 1`), and passes a target
+  id read directly out of the queued command record - never derived from any marker object's position. This
+  branch builds the stored order as kind 0xB (11, the "join/hold a melee ring" order, reused here), with the
+  caller's raw id copied VERBATIM into the order's target field and two placeholder position bytes hardcoded to
+  a literal 6/6 (position is irrelevant to this branch; only the stored id matters).
+
+So the kind byte actually written into the shared order record (6 vs 0xB) - and, for the attack branch, the
+target id alongside it - is chosen and persisted at the moment the patrol point is SET, not synthesized later by
+some reactive per-tick proximity check. When a unit's round-robin secondary-slot cursor (already documented,
+`order_advance`) later reaches that slot, `order_execute` dispatches kind 0xB to its handler (`0x519F10`), whose
+sub-state 0 unconditionally calls `attack_order_handler` (`0x51A2A0`) against the STORED id. This is a genuinely
+targeted, remembered engagement - not "whichever enemy happens to be nearby when the unit arrives."
+
+**(2) Nothing excludes a BUILDING as that stored target - confirmed at both the gate and the consumer.**
+
+- **The pre-issue gate.** Before `tribe_cmd 0x62` calls `0x4BA9B0`, it runs a validity check, `0x4B98F0`
+  (newly traced this session), against whatever the command's id currently resolves to. That function walks the
+  resolved cell's occupant chain and rejects only two specific classes: class 5 (scenery) objects whose type
+  isn't `0x11` (an undocumented scenery sub-type - a gap in `docs/unit_types`, not resolved this session), and
+  class 0xA (internal/controller) objects of type `0x10` ("guard post display") unless a side flag is set.
+  **Every other class - explicitly including class 1 (person), class 2 (building), class 3 (creature) and
+  class 4 (vehicle) - falls through the default branch and is accepted unconditionally.** There is no
+  person-only or class-2-exclusion logic anywhere in this gate.
+- **The consumer.** `attack_order_handler` (`0x51A2A0`) - the exact handler kind 0xB's wrapper (`0x519F10`)
+  calls - already has its own confirmed, pre-existing class dispatch (`cmp byte[target+0x2A],0x2` at `0x51B0E7`):
+  when the resolved target's class is 2 (building), it branches into the building door/hack/shake wear-down
+  sequence instead of the person-vs-person pre-fight/melee path. This is the SAME dispatch an ordinary kind-19
+  "attack (generic)" order uses to attack a building normally - one handler, one class branch, reused as-is.
+
+**Net**: mechanically, a building id passed through this path would be processed exactly like an ordinary
+building attack order - the data format (a raw id, generically resolved) and every piece of code that touches it
+between "patrol point set" and "attack resolved" are target-class-agnostic. **What this does NOT confirm**:
+whether the shipped game's own UI ever lets a player's click actually resolve to a building's id for this
+specific command (`tribe_cmd 0x62`) in the first place - the UI-side code that decides to queue that command
+(as opposed to the ordinary move-patrol click handled by `0x4B9190`) was not located this session, so it's
+possible the UI only ever offers this command when a PERSON was clicked, making the building-target capability
+real but practically unreachable in normal play. Also not traced: whether kind 0xB's own "ring companion"
+sub-states (`0x519F10`'s sub-states 1-3, built for a person-vs-person melee ring - orbiting a companion marker
+object, playing melee-adjacent animations) behave sensibly once sub-state 0's `attack_order_handler` call
+resolves to a building branch instead of a person - this could mean a building-targeted patrol point works fine
+(repeatedly re-invoking the attack each time the slot comes up), or it could mean the unit does something
+cosmetically odd (e.g. drifting toward a "ring" position near a building that doesn't make sense) after the
+first hit - genuinely unresolved from static analysis alone.
+
+**For `open-populous`'s `patrol.rs`/`units.md` "Patrol orders"**: model an attack-type patrol point as a real,
+persisted per-slot kind with its own stored target id (not a synthesized/reactive engagement check along plain
+waypoints) - that much is settled. Whether to also support a building as that id's referent is a judgment call:
+the exe's own code path would not reject one, but whether the original game's UI could ever actually produce one
+is unconfirmed, so this is better treated as "the engine primitive is generic, extend to buildings only if it's
+useful/desired" rather than "the original definitely lets players do this."
+
+Full exe detail and addresses: `pop3-rev/docs/functions.tsv` rows `0x4BA9B0`, `0x4B98F0` (new), `0x4B9190`,
+`0x51A2A0`, `0x519F10`, and the `process_tribe_cmd` case at `0x440822-0x44085F` (`tribe_cmd 0x62`,
+`switchD_0043e922::caseD_62`) - all updated/cross-referenced 2026-11-06.
