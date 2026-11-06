@@ -21,9 +21,10 @@ one with a different approach, or a later pop3-rev session may already have trac
   self-deletes (caseD_7, sound `0xB2`) ~17-18 ticks after spawning, never reaching the hunting loop
   (caseD_1/3/4/5). The statue's own stale-reference re-check almost certainly respawns a fresh one each time,
   so the real visible effect is likely a repeating cycle of short-lived angels, not one persistent one - not
-  confirmed live. **Still open: see the "traced to completion" bullet immediately below** for what was once
-  listed here as two open leads - the first (`FUN_004A9D90`) turned out to be a false lead, now corrected with a
-  replacement lead; the second (`0x4A66C0`/the "f1" byte mutation/caseD_b) is still open exactly as before.
+  confirmed live. **Both leads once listed here are now resolved** - see the two "traced to completion" bullets
+  below: the first (`FUN_004A9D90`) turned out to be a false lead, corrected with a replacement lead; the second
+  (`0x4A66C0`/the "f1" byte mutation/caseD_b) is fully traced, down to one small remaining sub-item (what reads
+  the "f1" byte itself) now narrowed to a concrete next step rather than left open-ended.
 
 - **RESOLVED this session.** ~~The literal `AOD_KILL_COUNT` (40) / `AOD_DURATION` (2500-turn) expiry check.~~
   Both fully traced: `+0x97` (duration, init 2500, ticks down every turn except while `+0x63` is set) and `+0xB2`
@@ -55,11 +56,22 @@ one with a different approach, or a later pop3-rev session may already have trac
   check `interpret_script`'s own opcode table for one whose argument feeds a class-7 type - to find it. Also
   found and named along the way, a tangential but confirmed correction: `alloc_unit`/`0x4ED8A0` does NOT lack a
   per-class init dispatch as a previous session's row claimed - it conditionally calls a newly-named generic
-  dispatcher (`init_unit_class`/`0x4ED580`, own new row) unless global `0x89CE37` is set. `0x4A66C0` (called
-  once per crumble-stage with args `(statue, 10, 157)`, not traced), the mesh-record "f1" byte mutation
-  (`objs0_struct+0x6`, shared per-mesh-type data), and caseD_b (`0x4DCE7D`, reached only if an angel somehow kept
-  a real duration long enough for caseD_a's own inner 18-tick countdown to expire - may be dead code for this
-  spawn path specifically) all remain unexplained/untraced, as before.
+  dispatcher (`init_unit_class`/`0x4ED580`, own new row) unless global `0x89CE37` is set.
+- **`0x4A66C0` and caseD_b (`0x4DCE7D`) both traced to completion a later session.** `0x4A66C0` (`functions.tsv`
+  own new row) is a shared "configure a scenery object's drawable + render flags" helper, also used by the
+  Reincarnation Centre pillar init - for the statue's own call `(statue, 10, 157)`, it sets up the statue's
+  drawable via `0x4EE700` and copies `objs0_struct[157].+0x7` (confirmed a DIFFERENT field from the "f1" byte at
+  `+0x6` - sibling properties in the same per-mesh-type row, not the same value) onto the statue's own `+0x3B`.
+  **This does not explain the "f1" byte itself** - narrowed, not resolved: a future session should search
+  specifically for a byte READ at `objs0_struct_row_base+6` (not just the table-base load alone, which 104
+  unrelated call sites across the exe also do) to find what actually consults it. `caseD_b` (`person_states.tsv`
+  row 28, full write-up there) turns out to be a 5-angel squadron spawn-and-launch sequence (a leader spawning 2
+  wingmen in a flanking V-formation, each of those spawning one more, then the leader joining the ordinary
+  hunting loop while the 4 escorts are routed into a newly-found, still-unopened case, raw `0x11`) - **confirming,
+  not contradicting, the "may be dead code for this spawn path" suspicion**: the statue's own hand-spawned angel
+  never survives long enough (its `AOD_DURATION` is never initialized) to reach raw `0xB` at all. Also corrected
+  in `person_states.tsv` row 28 along the way: caseD_b's own raw value is `0xB` (11), not the `12` a prior
+  session's text claimed - confirmed via `backup.xml`'s own `caseD_b` switch-case symbol.
 - **RESOLVED this session: yes, it genuinely dives/climbs to the victim's real height.** The moment case 5 commits
   to a grab (`0x4DB980`, `+0xA8` 0->1), it writes a precise target height into `+0x6A` (victim's own ground height
   `+0x41` plus a fixed grab-point offset `+0x1C`). `0x4DDB30` (`aod_flight_physics`) reads `+0x6A` every tick and
