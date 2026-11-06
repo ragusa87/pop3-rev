@@ -333,8 +333,24 @@ one with a different approach, or a later pop3-rev session may already have trac
   not traced from this side. Full write-up: `docs/functions.tsv` row `0x4caac0` (rewritten a second time),
   `0x4f77e0`/`0x4f92b0` (corrected from building- to vehicle-counting), `0x4cec10`/`0x4650d0`/`0x465440`
   (confirmed vehicle-exclusivity checks), `0x465650`/`0x4f3b20` (re-confirmed as vehicle-site checks in practice
-  despite being written generically). Open end: `0x4f2d40` (named, not traced), and the exact hand-off from
-  "vehicle loaded" to "vehicle departs."
+  despite being written generically).
+  **RESOLVED, a later session: `0x4f2d40` traced, and the "vehicle loaded -> vehicle departs" hand-off confirmed
+  absent from this task - both of this item's own open ends now closed.** `0x4f2d40` (`fn(pos, &out, radius) ->
+  bool`, own `functions.tsv` row) turns out to be an unrelated notification-positioning helper, not any kind of
+  order/movement primitive: it scans a `radius`-sized grid of cells around a candidate position for the first one
+  whose terrain is WATER (table `0x5aa328` bit `0x2`), used here (and, confirmed by the same session, in tasks
+  17/18 too) ONLY to refine the boat-hut's coarse facing-derived exit guess (`+0x12`) into a real nearby water
+  cell (`+0x1e`), fed straight into `0x435730`'s own category-3 "commit/refocus" notification broadcast - never
+  into a destination/order field. So the hand-off question is answered in the negative, not left open: task 19
+  genuinely never sets a vehicle moving or enqueues an attack, full stop. The actual hand-off was separately
+  found (by an even later session, before this correction was written back here) to live entirely in `ATTACK`'s
+  own task-20 vehicle sub-state-machine (`0x4cceb0`, own `functions.tsv` row) - it independently re-checks vehicle
+  stock, crews/boards the specific vehicle(s) a given attack needs, and sets them moving itself (its own state 7,
+  via `0x4d14f0`); tasks 19/27 never call into it and it never calls back into them (confirmed: no reference to
+  `0x4f2d40`, or to tasks 19/27's own code, anywhere in its body - it re-derives the boat's water-exit point with
+  its own separate, stricter inline check instead of sharing `0x4f2d40` or any of task 19's tables, correcting
+  that row's own earlier "the SAME search" wording). Full write-up: `docs/functions.tsv` rows `0x4f2d40` (fully
+  rewritten), `0x4caac0`/`0x4cceb0`/`0x4c9bf0` (updated).
 - **RESOLVED this session: task 27 fully traced, confirming a user hypothesis in substance ("board units into a
   vehicle, use/manage the vehicle, disembark") with one correction (it is FIREWARRIOR-specific, and it does not
   move a mis-parked vehicle).** All 11 states of `0x4cf970`'s own dispatch now read. State 0 checks the tribe can
