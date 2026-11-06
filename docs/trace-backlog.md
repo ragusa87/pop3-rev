@@ -21,14 +21,9 @@ one with a different approach, or a later pop3-rev session may already have trac
   self-deletes (caseD_7, sound `0xB2`) ~17-18 ticks after spawning, never reaching the hunting loop
   (caseD_1/3/4/5). The statue's own stale-reference re-check almost certainly respawns a fresh one each time,
   so the real visible effect is likely a repeating cycle of short-lived angels, not one persistent one - not
-  confirmed live. **Still open**: (1) `FUN_004A9D90` (`functions.tsv`, the only alloc site for type 0x5b) is
-  gated behind the SAME global flag (`0x89C661` bit `0x8`) caseD_0 branches on - very likely the literal
-  level/campaign trigger for this whole set-piece; worth tracing fully to confirm and to identify the untraced
-  alternate type `0x63` it allocates under a different flag combination. (2) `0x4A66C0` (called once per
-  crumble-stage with args `(statue, 10, 157)`, not traced), the mesh-record "f1" byte mutation
-  (`objs0_struct+0x6`, shared per-mesh-type data), and caseD_b (`0x4DCE7D`, reached only if an angel somehow kept
-  a real duration long enough for caseD_a's own inner 18-tick countdown to expire - may be dead code for this
-  spawn path specifically) all remain unexplained/untraced.
+  confirmed live. **Still open: see the "traced to completion" bullet immediately below** for what was once
+  listed here as two open leads - the first (`FUN_004A9D90`) turned out to be a false lead, now corrected with a
+  replacement lead; the second (`0x4A66C0`/the "f1" byte mutation/caseD_b) is still open exactly as before.
 
 - **RESOLVED this session.** ~~The literal `AOD_KILL_COUNT` (40) / `AOD_DURATION` (2500-turn) expiry check.~~
   Both fully traced: `+0x97` (duration, init 2500, ticks down every turn except while `+0x63` is set) and `+0xB2`
@@ -43,6 +38,28 @@ one with a different approach, or a later pop3-rev session may already have trac
   ANGEL's own facing, not the victim's as previously written, and `0x4E0A30` charges NO self-damage at all (that
   was unconfirmed speculation that didn't survive a full read). Full write-up: `docs/person_states.tsv` row 28,
   `docs/functions.tsv` rows `0x4db980`/`0x4e0a30`/`0x407860`/`0x50b6f0`.
+- **`0x4A9D90` traced to completion this session - corrects, rather than confirms, the lead below.** It is a
+  generic "set/toggle a named option by id" dispatcher, not an alloc site at all: the literal `0x5b`/`0x63` it
+  pushes are `process_cmd` dispatch ids (`ui_cmd`), not class-7 effect TYPE values. Decoded process_cmd's own
+  remap/jump tables precisely (`docs/functions.tsv` row `0x4a9d90` has the full method): id `0x63` lands on the
+  ALREADY-TRACED, unrelated `commands.tsv` `ui_cmd 0x63` row (a turn-counter-gated pause/resume-ish toggle); id
+  `0x5b` lands on process_cmd's own shared NO-OP/unhandled-id fallback - does nothing. **The "untraced alternate
+  type 0x63" does not exist**, and `0x4A9D90` has no connection to the Angel-of-Death statue set-piece - the
+  shared flag `0x89C661` bit `0x8` is just the general, pervasively-checked "cheat mode enabled" bit, not a
+  signal unique to this set-piece. **New lead replacing it**: the real alloc site for class-7 type `0x5b` is
+  still unlocated - the literal `push 0x5b` appears exactly once in the whole exe (the now-corrected
+  `0x4A9D90` site) and NONE of the 106 `alloc_unit(class=7, ...)` call sites push a literal type immediate of
+  `0x5b` either, so the real spawn must compute the type in a register rather than an immediate - most plausibly
+  level/script-driven (the same pattern `CALL_TO_ARMS`/`0x48E2B7` already shows for a different native hand-off).
+  A future session should walk the register-typed (non-immediate) `alloc_unit(class=7, ...)` call sites - or
+  check `interpret_script`'s own opcode table for one whose argument feeds a class-7 type - to find it. Also
+  found and named along the way, a tangential but confirmed correction: `alloc_unit`/`0x4ED8A0` does NOT lack a
+  per-class init dispatch as a previous session's row claimed - it conditionally calls a newly-named generic
+  dispatcher (`init_unit_class`/`0x4ED580`, own new row) unless global `0x89CE37` is set. `0x4A66C0` (called
+  once per crumble-stage with args `(statue, 10, 157)`, not traced), the mesh-record "f1" byte mutation
+  (`objs0_struct+0x6`, shared per-mesh-type data), and caseD_b (`0x4DCE7D`, reached only if an angel somehow kept
+  a real duration long enough for caseD_a's own inner 18-tick countdown to expire - may be dead code for this
+  spawn path specifically) all remain unexplained/untraced, as before.
 - **RESOLVED this session: yes, it genuinely dives/climbs to the victim's real height.** The moment case 5 commits
   to a grab (`0x4DB980`, `+0xA8` 0->1), it writes a precise target height into `+0x6A` (victim's own ground height
   `+0x41` plus a fixed grab-point offset `+0x1C`). `0x4DDB30` (`aod_flight_physics`) reads `+0x6A` every tick and
