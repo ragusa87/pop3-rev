@@ -78,6 +78,22 @@ if an earlier log entry here says it was "written directly" into that repo.
   right. The only actionable item: the exe also makes **spy** an eligible conversion target alongside
   brave/warrior/firewarrior - check `may_preach`'s type list includes spy, or note the omission deliberately if it
   doesn't. See §8 below for the full re-derivation.
+- **§9 (new, 2026-11-06) "Sermon residue: range/capacity, conversion visual, single preacher pose" -> concrete
+  numbers/behaviour for `sermon.rs` and its visual-effect counterpart, plus one closed non-finding (no "halving"
+  exists on the conversion check - nothing to port there).** Three traceable facts: (1) the auto-triggered
+  conversion-strike scan covers a 3x3 (or 5x5, if the striker started in a building doorway) grid of 256-world-unit
+  cells around the striker, strikes only the first eligible candidate per scan, and the exe code has no found cap
+  stopping a second candidate from being struck by the same still-active striker later (unconfirmed whether this
+  produces simultaneous listeners in practice); the PLAYER-issued Preach order is architecturally single-target (a
+  scalar field, never a list) - at most 1 listener per that order. (2) The dedicated conversion visual is NOT a
+  beam/soul travelling from the preacher to the convert: it's an 8-tick "flash" effect spawned at the dying unit's
+  position on a SUCCESSFUL roll only, which then teleport-tracks the brand-new replacement unit's live position
+  every tick before vanishing - if `open-populous` wants to model this effect, "spawn a short flash at the kill
+  point, then follow the new unit for ~0.66s" is the accurate shape, not a point-to-point travel animation. (3) The
+  preacher's own body never selects among multiple poses/animations anywhere in its order-handler code - only the
+  listener's pose is table-driven - supporting a single fixed preaching pose/animation on the caster's side, though
+  the exact animation id was not independently confirmed (a separate, untraced generic rendering layer maps the
+  underlying flag state to an actual sprite). See §9 below for the full re-derivation and exact addresses.
 - **§7 "Angel of Death mechanics" -> `open-populous3`'s `docs/specs/pop3-rev-analysis.md` +
   `TODO.md`.** §7 below is a full, corrected rewrite (42 particles not 36, the literal
   `AOD_KILL_COUNT`/`AOD_DURATION` expiry mechanism with its two death types, the real 3D dive-to-grab,
@@ -1172,3 +1188,69 @@ Full exe detail and the raw byte values: `pop3-rev/docs/functions.tsv` rows `0x4
 sibling note on `0x4D6F90`, a related per-type table one byte over at `0x5A7091` whose own previously-documented
 byte read turned out to be wrong too and is now flagged as open rather than re-claimed), and
 `pop3-rev/docs/person_states.tsv` row `23` - all updated 2026-11-06.
+
+## 9. Sermon residue: range/capacity, the conversion visual, single preacher pose (2026-11-06)
+
+Four specific open questions about the preacher-conversion mechanic were chased this session, all from static
+disassembly (no live memory access used). One resolves to "no action needed" (a claimed "halving flag" does not
+exist); the other three give concrete numbers/behaviour worth checking against `sermon.rs` and its effect
+counterpart, if one exists or is planned.
+
+**(1) Range and capacity.** Two separate code paths exist, with different capacities:
+
+- The **player-issued Preach order** (kind 33, handler `0x43C7A0`) is architecturally single-target: it resolves
+  exactly one listener into a scalar field (`+0x89`, seeded once from `+0x72`), with no array/list/count anywhere
+  in its ~600-instruction body. **At most 1 listener per active Preach order, full stop** - this is a hard
+  structural fact, not a tuning constant.
+- The **auto-triggered conversion strike** (`preacher_strike_scan`, driven by order kinds 17/31/32 - not preacher-
+  exclusive, see §8) scans a square block of 256-world-unit map cells centred on the striker: `radius_byte` cells
+  per side, where `radius_byte` is the striker's own byte field, set to **3** at order start and bumped to **5** if
+  the striker happens to be standing in any building's doorway at that moment. So the scan covers roughly a 3x3 or
+  5x5 grid of 256-unit cells - not a circular radius. It strikes only the FIRST eligible candidate found per scan
+  call. **No cap was found** preventing a second, different candidate from being struck by the same still-active
+  striker on a later successful roll (nothing resets/blocks the scan based on an existing in-progress conversion) -
+  whether this produces 2+ simultaneous "listeners" under one striker in actual play is NOT confirmed statically;
+  a live check would need to watch one striker's own id appear as the back-reference on 2+ simultaneously-live
+  conversion-roll candidates.
+
+**(2) The conversion visual.** There is no beam/soul effect that visibly travels from the preacher to the convert.
+What exists instead: a dedicated class-7 effect (type 0x3A, "conversion flash") is spawned, but ONLY on a
+SUCCESSFUL conversion roll (never on a mere "being preached to" tick) - at the OLD (dying) unit's position. Every
+tick for 8 ticks (~0.66s) it then copies the BRAND-NEW replacement unit's current position onto itself (and
+re-snaps its height to terrain), before deleting itself. Net visible effect: a short flash appears where the old
+unit died, then clings to/trails the newly-spawned convert as it starts walking away, for under a second. If
+`sermon.rs`/a VFX layer wants to model this, "spawn a brief flash at the kill point, then follow the new unit each
+frame for ~8 ticks" is the accurate shape - not a point-to-point travelling animation between caster and target.
+Separately (not the same mechanism): the MANUAL Preach order (kind 33) attaches a 3D prop/mesh overlay to the
+listener (not the preacher) via a different function while being preached to - ids in the `objs0_struct`
+building/scenery mesh table, name/model not identified this session, likely a `sermon.rs`-irrelevant visual detail
+unless an exact look is wanted.
+
+**(3) Single pose vs. a sequence, for the preacher.** Traced the preacher's own per-substate code in the Preach
+order handler end to end: it never selects among multiple poses/animations for ITSELF via any table, anywhere.
+Every per-type/per-substate pose or prop table lookup in that function is applied to the TARGET/listener, never to
+the preacher. The preacher's own body only ever toggles a pair of low-level flag bits (walking vs.
+"stopped, facing, gesturing") and never varies them again for the rest of the stationary preaching phase. This is
+solid static evidence AGAINST the preacher cycling through a sequence of distinct gesture poses while preaching,
+and supports treating it as a single fixed pose (matching whatever `Pose::Preach`/anim-22 assumption `open-populous`
+already uses) - **but this isn't 100% final**: the exact VSTART animation id that underlying flag-bit state maps to
+is chosen by a separate, generic render-side animation-selection layer (shared across person types/states) that
+was not traced this session: it's possible (though not evidenced) that layer free-runs through a short loop of
+frames for that one flag state on its own. If the current single-pose assumption already matches observed
+gameplay, no action needed; this note just upgrades it from "a guess" to "supported by the order-handler's own
+code, with one named remaining gap."
+
+**(4) The "halving flag."** Looked for a conditional halving gating the conversion roll/check (in the Preach
+handler, the strike scan, the roll handler, and the order approach handler) and found none. The actual success
+check is a flat roll (engine LCG, remainder against a fixed divisor of 5 - i.e. a flat 1-in-5 chance once a
+per-candidate resist counter expires) read from a single global constant that is never modified by any flag
+anywhere in the binary (confirmed: that address has exactly one reference in the whole executable). Two genuine
+`/2` operations exist nearby but neither is flag-gated and neither matches "the check being halved": an
+unconditional symmetric-jitter centering term on a failed-roll resist-counter rearm, and a flag-gated DOUBLING
+(not halving) of a newly-converted unit's own walk speed as a cosmetic post-success detail. **Nothing to port here**
+- if a specific different mechanic was meant by "halving flag," it isn't reachable from this order/roll pipeline as
+traced this session.
+
+Full exe detail and addresses: `pop3-rev/docs/functions.tsv` rows `0x43C7A0` (the main writeup), `0x43ABF0`,
+`0x4D83B0`, `0x4F14B0`, `0x5138B0`, `0x404420`/`0x40A980`, and `pop3-rev/docs/effect_states.csv` state 45
+("conversion flash") - all updated 2026-11-06.
