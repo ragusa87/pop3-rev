@@ -71,6 +71,13 @@ if an earlier log entry here says it was "written directly" into that repo.
     gameplay features. The exact item name TEXT is still third-party testimony, not independently
     read from this exe (the runtime string table itself wasn't readable statically) - a live session
     could confirm it directly if that ever matters.
+- **§8 (new, 2026-11-06) "Preacher-conversion target eligibility resolved" -> confirms `may_preach`/`sermon.rs`
+  need NO change, plus one gap to check.** A long-open contradiction between this repo's own exe tracing and
+  `may_preach`'s "ordinary followers only, never preachers/shamans" model turned out to be a byte-read error in an
+  earlier `pop3-rev` session, not a real divergence - the corrected table confirms `may_preach`'s own shape is
+  right. The only actionable item: the exe also makes **spy** an eligible conversion target alongside
+  brave/warrior/firewarrior - check `may_preach`'s type list includes spy, or note the omission deliberately if it
+  doesn't. See §8 below for the full re-derivation.
 - **§7 "Angel of Death mechanics" -> `open-populous3`'s `docs/specs/pop3-rev-analysis.md` +
   `TODO.md`.** §7 below is a full, corrected rewrite (42 particles not 36, the literal
   `AOD_KILL_COUNT`/`AOD_DURATION` expiry mechanism with its two death types, the real 3D dive-to-grab,
@@ -1117,3 +1124,51 @@ mechanism a land attack would. If `open-populous`'s own `ATTACK_BY_BOAT`/`ATTACK
 any exists yet) doesn't check current vehicle availability and fail gracefully when short, or doesn't route the
 vehicle-borne force through the same attack-order mechanism as a land force, those are the two concrete gaps this
 session found. Full exe detail: `docs/functions.tsv` row `0x4cceb0` (substantially extended).
+
+## 8. Preacher-conversion ("Sermon") target eligibility - `may_preach` confirmed correct (2026-11-06)
+
+A long-open contradiction in this repo's own docs is now resolved, and it bears directly on `open-populous`'s
+`may_preach`/`sermon.rs` logic - good news, not a bug report: **that logic already matches the real exe**, and an
+earlier `pop3-rev` session's own byte-level re-derivation (which looked like it contradicted `may_preach`) was
+simply wrong.
+
+**Background**: person state 23 ("the conversion roll") is entered only one way in the whole executable - a
+single literal `mov byte [candidate+0x2C], 0x17` instruction inside `preacher_strike_scan` (exe address
+`0x43ABF0`), confirmed this session by an exhaustive search of every write to a unit's state field across the
+entire disassembly (277 generic "set state" call sites checked; only one of them stores the literal immediate
+`0x17`, and it's this one). That function gates which nearby unit can become the roll's candidate through a
+per-type eligibility table at exe address `0x5A7090` (50 bytes per type, byte 0 bit `0x20`). A prior `pop3-rev`
+session read that table's raw bytes and reported the bit set ONLY for type 4 (preacher) and type 6 (firewarrior) -
+which would have meant the roll can only ever target an enemy preacher or firewarrior, directly contradicting
+`may_preach`'s "ordinary followers only, never preachers/shamans" model, and also contradicting a live memory
+capture from an even earlier session (`diag6.txt`) that had recorded ordinary brave/warrior (type 2/3) units being
+killed-and-replaced under a different tribe at the same position - exactly what a successful conversion looks
+like, but on types the table claimed were ineligible.
+
+**What this session found**: that earlier byte read was simply incorrect. Re-reading the exact same table three
+independent ways (a raw file read computed from the confirmed `.data` section VMA-to-file-offset mapping,
+`objdump -s -j .data`, and `od -tx1`, all three agreeing, and the identical method independently reproducing a
+different, already-confirmed table's values byte-for-byte as a sanity check) gives the opposite result: bit `0x20`
+of `0x5A7090` is **SET for brave (type 2), warrior (3), spy (5) and firewarrior (6)**, and **CLEAR for wildman
+(1), preacher (4), shaman (7) and angel (8)**. Also confirmed directly from the disassembly that the type byte
+tested is read from the scan's own candidate (the nearby unit being considered as a target), never from the
+striker - so this is unambiguously a target restriction, not a "who may strike" restriction.
+
+**The real rule, re-derived from the exe**: `preacher_strike_scan`'s target-eligibility gate is "ordinary
+attackable followers - brave, warrior, spy, firewarrior - never wildman, preacher, shaman or angel." This is
+exactly `may_preach`'s own "ordinary followers, never preachers/shamans" shape (modulo firewarrior/spy also being
+eligible per the exe - see the gap noted below), and it fully explains the `diag6.txt` live capture that had
+looked unexplained: those brave/warrior conversions are legitimate instances of this exact mechanism, not evidence
+of a separate, undocumented pathway. No second "convert an ordinary follower" mechanism exists or is needed - this
+one already does it. **No action needed against `may_preach`'s core eligibility logic; it was already right.**
+
+**One real gap worth checking**: the corrected table also makes **spy** (type 5) an eligible target/candidate for
+this roll, alongside brave/warrior/firewarrior. If `may_preach` (or whatever type list `sermon.rs` uses) excludes
+spy, that's a small, concrete divergence from the exe worth either fixing or deliberately noting as a known
+simplification - worth a quick check against `open-populous`'s own type-list for this check next time that repo
+is attached.
+
+Full exe detail and the raw byte values: `pop3-rev/docs/functions.tsv` rows `0x43ABF0` and `0x4D83B0` (and the
+sibling note on `0x4D6F90`, a related per-type table one byte over at `0x5A7091` whose own previously-documented
+byte read turned out to be wrong too and is now flagged as open rather than re-claimed), and
+`pop3-rev/docs/person_states.tsv` row `23` - all updated 2026-11-06.
