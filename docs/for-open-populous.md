@@ -37,6 +37,17 @@ were lost when that container reset. This is exactly the failure mode this file 
 so re-check the live `open-populous3` state before assuming anything below is already done, even
 if an earlier log entry here says it was "written directly" into that repo.
 
+- **§14 (2026-11-06, new) "ground-fire duration resolved" -> `open-populous3`'s `crates/game-core/src/firestorm.rs`/
+  `lightning.rs`/`ground_fire.rs`, `TODO.md`'s "Earthquake and Firestorm" bullet.** `ground_fire::TICKS` (currently
+  a guessed `9`, shared by both casters) should split into two real, exe-confirmed values: **22 turns for
+  Firestorm's own fireball-impact fire, 24 turns for Lightning's own strike-point fire** (≈1.83s/2.0s at 12
+  turns/sec). `tree::BURN_TICKS` (currently a guessed `127`) stays an open guess - this session could NOT pin down
+  what, if anything, the exe sets a freshly-ignited tree's own burn-length field to (every known ignition trigger
+  passes `ticks=0` to the shared ignite helper). New mechanic found, not currently modelled at all: a burning tree
+  spawns its own separate, free-standing 76-turn (≈6.33s) companion fire-patch effect at its base, on top of its
+  own (unresolved-length) charring. See §14 below for the full mechanism (trigger conditions, per-tick behaviour,
+  and what happens once the timer ends - a final type-scaled building-damage pass, already-documented
+  `0x4A9030`/`0x409200` pipeline).
 - **§13 (2026-11-06, new) "vehicle hut wood-delivery RATE traced end to end" -> `open-populous3`'s
   `docs/specs/vehicles.md` "Vehicle huts" section (replaces the `LAUNCH_WORK`/"added turn of work" guess
   entirely) + `TODO.md`.** This resolves the exact question that section's own exe-trace note left open
@@ -1555,3 +1566,63 @@ distinction between the two different "building-type+vehicle-type" wood tables):
 rows `0x406600`, `0x4A7860` (`transfer_wood`), `0x495520` (corrected from an earlier "generic go-near-X utility"
 guess), `0x495D70`, `0x496750`, plus sibling stub rows `0x4958F0`/`0x496220`/`0x497030`/`0x497690`/`0x497A30` -
 all added/updated 2026-11-06.
+
+## 14. Ground-fire duration resolved - `ground_fire::TICKS` and `tree::BURN_TICKS` were both guesses, one is now concrete (2026-11-06)
+
+Resolves the open item `TODO.md` itself flagged: "the original's own ground-fire object (scenery class 5 type
+0xA, not an effect) gets its burn countdown from `0x4A8C60` with param 22, the exact resulting turn count not yet
+decoded; trace that function and the original's scenery state 5." Both are now fully traced
+(`pop3-rev/docs/functions.tsv` rows `0x4A8C60`, `0x4A6B20`, `0x4A7170`, `0x4A7BD0`, `0x4A6E20`, `0x4A8950`,
+`0x4A7B60`, `0x4A9030` (partial), `0x4A5EF0`, `0x4A6480`; new catalog `pop3-rev/docs/scenery_states.csv`, states
+1-13, focused on 3/5/6/11/12).
+
+**1. `ground_fire::TICKS` (currently `9`, explicitly commented as a guess in `ground_fire.rs`): replace with the
+real, caster-specific values - 22 for Firestorm, 24 for Lightning, not one shared constant.** The exe's own
+`0x4A8C60(fire_obj, param)` sets `+0x7c` (the burn-length countdown, decremented by exactly 1 per GAME TURN,
+confirmed by reading its own per-turn handler) directly to `param` turns for any duration <28 or >=38 (the
+relevant band for both real callers). Read straight from the immediate operands at each call site, at this
+engine's independently-established 12 turns/sec (`pop3-rev/docs/functions.tsv` `0x41C140`'s own row): **Firestorm's
+fireball-impact ground fire (`0x511800`) is 22 turns ≈ 1.83s; Lightning's own strike-point ground fire (`0x511AE0`,
+at `0x511BFB`) is 24 turns ≈ 2.0s** - 2 turns longer than Firestorm's. Both are vastly shorter than `9`'s own
+intent ("brief, like the blast's own explosion burst") suggested as a plausible range, but also neither is `9`
+itself - `open-populous`'s current single shared constant should become two (or a per-`Owner`/caster parameter),
+one per spell.
+
+**2. `tree::BURN_TICKS` (currently `127`, also an explicit guess) - NOT independently confirmed by this trace;
+flag as still-open rather than replacing it with a wrong number.** The exe's own "a tree/plant catches fire"
+mechanism (scenery state 5, `0x4A7BD0`) reuses the SAME `+0x7c` countdown field, but **every known ignition
+trigger in the exe passes `ticks=0` to the shared ignite helper (`0x4A7B60`)** - meaning none of them explicitly
+arms the tree's own burn length; it inherits whatever `+0x7c` already held before catching fire (an ordinary
+tree's own resting value for that field was not pinned down this session - its own `init_unit_type_5` case
+routes to a generic, non-type-specific init hook). This is a genuine gap this trace could not close statically;
+`127` should stay flagged as a guess, not be "confirmed" off the back of this session, and a future session
+would need to find what (if anything) seeds a tree's `+0x7c` at placement/growth time to close it properly.
+
+**3. A newly-discovered mechanic `open-populous`'s current architecture doesn't model at all: an ignited tree
+spawns its OWN companion free-standing fire-patch effect.** On the very first tick after catching fire, the
+burning scenery object (state 5) spawns a second, independent class-5 type-0xA "fire" object at its own exact
+position and arms IT with a fixed **76-turn (≈6.33s) duration** - the actual flame/smoke visual the tree shows,
+decoupled from the tree's own (unresolved-length) burn-down. If `open-populous` wants the original's exact visual
+behaviour for a burning tree, it's "the tree itself chars down over an unknown duration AND a separate 76-turn
+ground-fire-style flame/smoke effect plays at its base," not a single unified "tree on fire" visual.
+
+**4. What ends a ground-fire patch, confirmed end to end**: once `+0x7c` reaches 0 (state 3, `0x4A7170`), a
+finish helper (`0x4A6E20`) hands it into state 12 (`0x4A8950`), which makes ONE final type-scaled building-damage
+pass on whatever building occupies its cell (via the already-documented `0x4A9030`->`0x409200` pipeline, amount =
+`per-building-type wear-threshold/4`, attacker = none/`0xFFFFFFFF`), runs a brief multi-tick "settling ash" sink
+animation, then is deleted. A tree-ignited fire that is NOT the "flag=1" ignition variant (every spell/area-fire
+trigger found this session) is instead simply deleted outright once its own countdown ends - no burnt-stump
+remap was observed on any currently-known trigger path, despite the code having one (table `0x5A79C1`) for a
+trigger this session could not identify (`0x439BF9`).
+
+**5. Per-tick behaviour while burning** (if `open-populous` wants to model more than just the duration): ambient
+crackling sound every turn; a drifting smoke puff (class 7 type 3 - matches `effect_states.csv`'s already-named
+"smoke" state) spawned almost every turn; one extra "final ember" effect 4 turns before extinguishing; a
+visual-intensity value that shrinks from a per-instance baseline toward a floor over the fire's lifetime (not
+currently modelled client-side as far as this session checked, `ground_fire.rs`/`ground_fire::GroundFireView`).
+
+Not yet re-confirmed against `open-populous3`'s current source by a session with it attached for write access -
+this entry is queue-only per this file's own stated purpose; a session that attaches `open-populous3` should
+update `crates/game-core/src/firestorm.rs`/`lightning.rs`/`ground_fire.rs`/`tree.rs` and `TODO.md`'s own line (the
+"Burning trees... and the ground fire... have guessed lengths" bullet, `TODO.md` "Earthquake and Firestorm")
+accordingly, then trim this section.

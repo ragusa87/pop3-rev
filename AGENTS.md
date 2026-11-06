@@ -29,14 +29,15 @@ Agents working from this repo analyse the original game and document it. They ne
 ## Docs in this repo
 - `docs/functions.tsv`: standalone catalog of exe addresses (one row per function: address, name, feature_area,
   status, role), built incrementally by the `exe-function-map` skill. Never points into `open-populous`.
-- `docs/person_states.tsv`, `docs/effect_states.csv`, `docs/controller_states.csv`: catalogs of the `+0x2C`
-  per-turn **state** number for each of the three "stateful" unit classes - class 1 (person), class 7 (effect),
-  class 10 (internal controller) respectively. These are THREE SEPARATE numbering spaces: the same number means
-  a different thing in each file (e.g. person state 24 is Whirlwind's own lift state, effect state 24 is erosion,
-  controller states only go up to 18) - always say which class/file a bare "state N" comes from. Update the
-  matching file whenever a state's handler or role is traced or corrected, the same way `functions.tsv` rows are
-  kept current; `pop3-rev-analysis.md`'s own state write-ups should point at these files rather than re-listing
-  every state inline.
+- `docs/person_states.tsv`, `docs/effect_states.csv`, `docs/controller_states.csv`, `docs/scenery_states.csv`:
+  catalogs of the `+0x2C` per-turn **state** number for each "stateful" unit class - class 1 (person), class 7
+  (effect), class 10 (internal controller), class 5 (scenery, added when ground fire was traced) respectively.
+  These are SEPARATE numbering spaces: the same number means a different thing in each file (e.g. person state 24
+  is Whirlwind's own lift state, effect state 24 is erosion, controller states only go up to 18, scenery state 5
+  is a tree/plant that has just caught fire while person state 5 is an unrelated "idle near a reference unit")
+  - always say which class/file a bare "state N" comes from. Update the matching file whenever a state's handler
+  or role is traced or corrected, the same way `functions.tsv` rows are kept current; `pop3-rev-analysis.md`'s own
+  state write-ups should point at these files rather than re-listing every state inline.
 - `docs/unit_types`: per-class unit/person/building/etc. type ids and names (a different axis from the state
   catalogs above - `+0x2B` type vs. `+0x2C` state).
 - `docs/sound.tsv`: catalog of sound ids, keyed by the `type_id` argument to `0x48A050` (`fn(unit, type_id, flag)`,
