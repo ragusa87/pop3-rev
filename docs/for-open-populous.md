@@ -37,6 +37,16 @@ were lost when that container reset. This is exactly the failure mode this file 
 so re-check the live `open-populous3` state before assuming anything below is already done, even
 if an earlier log entry here says it was "written directly" into that repo.
 
+- **§13 (2026-11-06, new) "vehicle hut wood-delivery RATE traced end to end" -> `open-populous3`'s
+  `docs/specs/vehicles.md` "Vehicle huts" section (replaces the `LAUNCH_WORK`/"added turn of work" guess
+  entirely) + `TODO.md`.** This resolves the exact question that section's own exe-trace note left open
+  ("what actually increments `+0xA4` per turn was not located"): there is NO flat per-turn work increment
+  anywhere in the exe - the hut's own `+0xA4` accumulator is incremented ONLY by a crew member physically
+  completing a chop-then-carry-then-deliver round trip (flat 100 wood per trip, the universal "one wood
+  piece" constant, truncated near the goal), gated by a one-new-recruit-per-turn throttle when over half
+  the hut's resolved crew is idle. See §13 below for the full mechanism and exact addresses/tables -
+  `open-populous`'s own simulation should drop the separate "work timer" layer entirely and model this as
+  crew members independently round-tripping to a wood source and dumping their carry.
 - **§1 (2026-11-04 update, extended same day) "tribe_cmd 0x15/0x17/0x1f/0x20 identified" ->
   `open-populous3`'s pause/game-speed implementation (if any) + `TODO.md`; `tribe_cmd 0x17` is a
   hidden dev/debug console, not a player feature, but a few of its 76 entries are genuinely useful
@@ -1481,3 +1491,67 @@ the two contexts above), and nothing in this exe ever needs more than 6 occupant
 Full exe detail and the raw per-type table read: `pop3-rev/docs/functions.tsv` rows `0x407490`, `0x405B80`,
 `0x40B450`, `0x4C8910`, `0x4E67B0` (`unit_type_building`/`unit_struct` STRUCTURE cross-checked against
 `backup/backup.xml`) - all updated 2026-11-06.
+
+## 13. Vehicle hut wood-delivery RATE: resolved, there is no per-turn flat increment - it's crew round trips (2026-11-06)
+
+Resolves the open question `open-populous3`'s own `docs/specs/pop3-rev-analysis.md` "Vehicle huts: how the hut
+itself produces a vehicle" section flagged and left explicitly unanswered: "what actually increments `+0xA4` per
+turn was not located this session." Picked up as `pop3-rev` task backlog item #10 (a sibling session's task #9
+had just settled the related `+0x86` crew-array question). The per-vehicle wood COST (600 for either boat-hut
+type, 1000 for either balloon/airship-hut type) was already right; this session traced the RATE question fully,
+independently, straight from the disassembly (not by trusting the earlier write-up) and cross-confirmed the same
+600/1000 figures via a SECOND, different table.
+
+**Short answer: there is no flat "N wood per turn" constant anywhere in the exe.** `+0xA4` (the hut's own
+wood-delivery accumulator, separate from the hut's OWN construction-material stock) is incremented ONLY by a
+generic resource-transfer primitive, `0x4A7860` (`transfer_wood`), called once per completed "deliver" event by
+a crew member who has physically walked to the hut's door with wood already in hand. There is no continuous
+per-tick drip and no multiplier that scales a single increment by crew count - each crew member's delivery is
+its own independent event, landing whenever that specific worker finishes its own round trip.
+
+**The full mechanism, traced end to end**:
+1. **Recruitment throttle, `0x406600` (the vehicle hut's own per-turn operational handler, building types
+   13-16 only)**: every turn, prunes the hut's 6-slot crew array (same array `+0x86` task #9 already fixed at a
+   physical size of 6, operationally capped to 4 for either boat-hut type / 6 for either airship-hut type) into
+   idle vs. busy counts. If MORE than half the resolved crew is currently idle, it sends out exactly ONE
+   additional idle crew member this turn (sets that one person's own work sub-state, `+0xA8=31`, plus a
+   "committed" flag) - not the whole idle pool at once. This is the real throughput bottleneck: a boat hut with
+   4 crew slots never has more than ~2-3 workers round-tripping simultaneously, ramping up by one recruit per
+   turn rather than instantly.
+2. **The round trip, `0x495520` (order kind 6's handler) + its own work sub-states**: a recruited brave walks to
+   a wood source (sub-state 3, `0x495D70`, the SAME chopping state used for ordinary construction/tree-felling),
+   picks up wood into its own carry up to a flat per-type max of **100** (every working person type - brave,
+   warrior, preacher, spy, firewarrior, shaman - reads the identical value from a per-type table whose field
+   Ghidra's own struct export independently names `wood`; wildmen/the Angel read 0, they can't carry), governed
+   by an internal chop-cooldown timer; then walks to the hut's door and, on arrival, sub-state 7 (`0x496750`)
+   dumps its ENTIRE current carry (up to that same 100) into the hut in one lump via `transfer_wood`.
+3. **`transfer_wood` (`0x4A7860`) clamps the lump to whatever room remains** before the hut's own threshold -
+   so the LAST delivery of a build cycle can be smaller than 100, never an overshoot. For a vehicle hut
+   specifically (gated on a building-type flag, `unit_type_building[type]+0x48` bit `0x40`, true only for
+   types 13-16), the "room" is computed against a per-VEHICLE-TYPE table at **`0x5A7940` (base), stride 23
+   bytes/entry, field at `+0xB`** - read raw from the shipped exe: **600 for vehicle type 1 and 2 (boat hut 1/2)
+   and 1000 for vehicle type 3 and 4 (balloon/airship hut 1/2)** - an independent SECOND confirmation of the
+   600/1000 figures, via a completely different table than the one that gave the hut's own 1100 wood
+   BUILDING-material cost (`0x5A7242`, `0x4BA2C0`'s own table - that one is a different number entirely, the
+   cost of constructing the hut itself, not of producing a vehicle inside it).
+4. **`0x406600` reads `+0xA4` back** every turn: while `+0xA4` is still below the 600/1000 threshold above, it
+   does nothing further; once it reaches or exceeds it, `+0xA4` resets to 0 and the hut actually spawns the
+   vehicle (class 4, boat or balloon per the hut's own 1:1 type mapping, already documented).
+
+**What this means for `vehicles.md`'s "Vehicle huts" section**: drop the `LAUNCH_WORK`/"each crew member inside
+adds a turn of work" guess entirely - there is no separate work-timer layer on top of wood delivery in the
+original. The faithful model is: each ACTIVELY-ASSIGNED crew member (capped at 4 boat / 6 balloon, ramped up one
+recruit per turn while over half the current crew is idle) independently cycles chop (up to 100 wood, gated by a
+chop-cooldown and travel time to the nearest available wood source) -> walk to hut -> dump full carry (clamped
+to remaining room) -> repeat, with no cap on how many such cycles happen per vehicle beyond reaching the flat
+600/1000-wood goal. This makes the real-world "turns per vehicle" figure depend on wood-source distance/
+availability near a given hut, which has no single static number - if `open-populous` needs a concrete
+turns-per-vehicle estimate for balancing, it will need to either reproduce this travel-time dependency or pick a
+deliberate, labelled approximation; it should not invent a new fixed "work" constant to replace it, since the
+original has none.
+
+Full exe detail (table addresses, the person work-state dispatch table with every sub-state's address, and the
+distinction between the two different "building-type+vehicle-type" wood tables): `pop3-rev/docs/functions.tsv`
+rows `0x406600`, `0x4A7860` (`transfer_wood`), `0x495520` (corrected from an earlier "generic go-near-X utility"
+guess), `0x495D70`, `0x496750`, plus sibling stub rows `0x4958F0`/`0x496220`/`0x497030`/`0x497690`/`0x497A30` -
+all added/updated 2026-11-06.
