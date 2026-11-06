@@ -1253,4 +1253,72 @@ traced this session.
 
 Full exe detail and addresses: `pop3-rev/docs/functions.tsv` rows `0x43C7A0` (the main writeup), `0x43ABF0`,
 `0x4D83B0`, `0x4F14B0`, `0x5138B0`, `0x404420`/`0x40A980`, and `pop3-rev/docs/effect_states.csv` state 45
+
+## 10. Wildman attack orders: `attack::may_attack`'s `[ours]` guess settled - NO, an explicit order does not go through either (2026-11-06)
+
+**Background**: `open-populous`'s `attack.rs` was relaxed so `may_attack` no longer treats wildmen as entirely
+unattackable, while its own auto-proximity-scan exclusion (`spotting::first_seen`) still excludes them from
+AUTO-targeting - that auto-scan exclusion is independently confirmed `[exe]` correct (see below). The separate
+`[ours]`, NOT independently traced, guess was that an EXPLICIT PLAYER ATTACK ORDER on a wildman should still
+succeed (the auto-scan excludes them, but a direct manual order doesn't) - reasoning that the old blanket
+"nobody can ever attack a wildman" rule was simply too strict. **Traced against the real exe this session: this
+guess is wrong.** A manual order does not go through either - and the reason is structurally important: the exe
+does not implement this as a wildman/type-specific check at all, anywhere.
+
+**What actually excludes wildmen, exe-side**: wildmen are always spawned with **tribe byte 0xFF ("no tribe")**
+- confirmed directly: `effect_place_wild_man` (exe `0x514330`) calls `alloc_unit(class=1, type=1, tribe=0xFF,
+pos)`, the ONLY class-1/type-1 `alloc_unit` call site found anywhere in the exe - and keep that tribe until a
+successful Convert (at which point they stop being wildmen at all, becoming a brave on a real tribe). Every
+melee/attack-target eligibility check in the exe rejects a candidate outright if **either** the attacker's or
+the candidate's tribe byte is 0xFF, or if they share a tribe - before even consulting the per-tribe diplomacy
+bitmask. This is a blanket "you cannot fight a tribeless (or same-tribe) unit via the ordinary attack machinery"
+rule, of which "you cannot fight a wildman" is simply one consequence - there is no `person_type == wildman`
+comparison anywhere in this code path. (This tribe-based rule is a plausible, closer analogue for `may_attack`
+than a hardcoded wildman exception - see "for open-populous" below.)
+
+**Why this applies identically to an explicit player order, not just the auto-scan**: the exact same tribe
+check (byte-for-byte identical logic, same offsets) exists in BOTH of the two places that matter:
+- The auto-attack candidate SCAN itself (exe `0x51EAB0`, reached via `0x4D4690`'s per-type continuation ->
+  `0x51E5E0` for any non-preacher/firewarrior/shaman attacker type, including wildmen themselves) - this is the
+  scan `open-populous`'s own `spotting::first_seen` models.
+- The SHARED per-turn target re-validation (exe `0x51C4C0`, the "generic attack-target eligibility" reached via
+  `0x51C3C0` from `attack_order_handler`/`0x51A2A0`) - and this function runs every turn for an active attack
+  order regardless of how that order originated: **order kind 19** (the "generic/external" attack kind - the
+  one a player's own explicit attack command would use), **order kind 21** (self-issued only by the auto-scan),
+  **order kind 11** ("join a melee ring" - confirmed via `0x4BA9B0`'s own tracing, the patrol-point mechanism,
+  that a unit-click issues kind 11 and its sub-state 0 unconditionally calls `attack_order_handler`), and
+  **order kind 28** (the reactive counter-attack order, via `0x51FCE0` -> `0x51A2A0`) all funnel into this same
+  handler and therefore this same gate.
+- Separately, the eight generic "give this unit an order" helper functions (exe `0x43B180`-`0x43BB54`, one per
+  order kind) that actually WRITE an attack order's target id were checked directly: none of them perform any
+  target-eligibility check of their own - they blindly install the order (kind + target), and ALL validation
+  happens downstream, in the shared handler above. So there is no code path where issuing the order itself is
+  gated differently depending on who/what issued it.
+
+**Net conclusion**: whether a wildman ends up as an attack order's target via the auto-scan or via a literal
+player click, the SAME shared per-turn check runs from the very first tick that order is processed and rejects
+it (tribe 0xFF). The order is written successfully (nothing stops a player from clicking "attack" on a wildman),
+but it can never produce an actual attack - the unit's own attack-order handler would reject the target
+immediately and the order would just fail/retry forever, exactly like `0x4BA9B0`'s own already-documented kind-11
+"exiting having done nothing on failure, retried every tick" behaviour. **For `open-populous`**: `attack.rs`'s
+relaxation of `may_attack` to allow explicit wildman targeting does not match the exe and should be reverted (or
+re-framed) - but consider reframing the rule itself as tribe-based ("reject if attacker or candidate has no
+tribe, or they share a tribe") rather than reintroducing a wildman-specific special case, since that is the
+actual, more general rule the exe implements and it has the same practical effect for wildmen (tribe-less)
+without being a species-specific carve-out. The one part of the original relaxation that doesn't need reverting:
+`may_attack` allowing OTHER tribe-less-adjacent cases (if any exist) should be reconsidered under this same
+tribe-based framing rather than per-species.
+
+**Caveat / what wasn't found**: the literal UI code that turns a player's right-click-to-attack into an order
+(as opposed to the ~9 already-catalogued callers of the kind-19 "give order" helper, all of which are
+spell-effect/AI code, not UI) was not located this session either, same gap a prior session already noted on
+`0x43B540`'s own row - this doesn't weaken the conclusion above since the shared gate is reached identically
+however the order is issued, but it remains an open lead if a future session wants the exact click handler
+address. One confirmed real player-input path was traced into the same shared gate: the patrol-point mechanism
+(`0x4BA9B0`, Ctrl+Alt+click, confirmed wired to `process_tribe_cmd`) issues kind 11 for a unit-click target, which
+reaches `attack_order_handler` exactly as described above.
+
+Full exe detail and addresses: `pop3-rev/docs/functions.tsv` rows `0x51C4C0`, `0x51EAB0`, `0x51C3C0`, `0x51A2A0`,
+`0x43B540` (and the sibling `0x43B180`-`0x43BB54` family), `0x4BA9B0`, `0x51FCE0`, and `0x514330`
+(`effect_place_wild_man`) - all updated/cross-referenced 2026-11-06.
 ("conversion flash") - all updated 2026-11-06.
