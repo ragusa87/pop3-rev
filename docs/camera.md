@@ -937,6 +937,180 @@ call `0x4e6a70` - it's a different operation (see below).
   release the drag" momentum system. Worth a dedicated session if that's ever user-visible enough
   to matter for `flyby.rs`/manual-pan parity; not pursued further here.
 
+## Camera zoom presets resolved: what advances `vconfig_index`/`vconfig_index_start` (open-populous TODO.md's "VCONFIG0.DAT" question, CLOSED)
+`open-populous3`'s own `TODO.md` (`zoom_to_pitch`/`flyby.rs` notes) flags this investigation's earlier discovery of
+the real preset data source (`vconfig_dat_mem`, `backup.xml`'s own name for the table at `0x88F0C0` this file
+already uses as "the table at 0x88F0C0" throughout - see "The real AI-script zoom chain" above) as needing one more
+thing before the 80-100 zoom numbers can be read off directly: "what advances the 'current preset' index during a
+real zoom/flyby." Fully resolved this session, **entirely by static tracing** (`dis.txt` + `backup.xml`'s own
+`vconfig_struct`/`vconfig_index`/`vconfig_index_start`/`get_vconfig_index` names, cross-checked against each other)
+- no live capture needed, confirming the TODO.md note's own expectation.
+
+**The table and its indexing, confirmed exactly via `backup.xml`'s own struct/symbol names:**
+`vconfig_dat_mem` (`0x88F0C0`) is `vconfig_struct[50]` (struct size `0x5e`=94 bytes, confirmed matching every
+`rep movs ecx=0x17` + trailing word copy this investigation has already traced through it). It is addressed as a
+**2D array, not a flat list**: `byte_offset = (vconfig_index*5 + vconfig_index_start) * 94`, where `vconfig_index`
+(`0x89C6EE`, 0-9 - "ROW") and `vconfig_index_start` (`0x89C6EC`, 0-4 - "COLUMN/sub-level") are TWO SEPARATE globals
+this file previously treated as one ("indexed by 0x89C6EE/0x89C6EF" in the old `0x417510`/`0x41C700` notes above -
+`0x89C6EF` was never actually a second index, just the next byte of `0x89C6EE`'s own 2-byte-aligned read). This
+exact formula is used consistently by `update_vfconfig`/`0x417338` (the function that actually snaps the live
+render block, `0x88F004`, to the current combined preset) and by `0x417510`'s own multi-frame blend target lookup.
+
+**`vconfig_index` (the ROW, "which built-in resolution profile") is NOT a zoom dimension at all - it tracks the
+live window/screen resolution, continuously, and nothing a player does to "zoom" touches it.** `get_vconfig_index`
+(`0x4171F0`, Ghidra's own name) takes `(width, height)` and returns whichever of the table's 10 rows has the
+closest-matching own tag (`vconfig_struct+0x30`/`+0x32`, `backup.xml`'s own member names are literally `width`/
+`height` - independent confirmation): an exact match short-circuits immediately, otherwise it minimises a
+squared-difference-style metric across all 10 rows. Its 4 callers all pass the CURRENT viewport pixel size
+(**correction, a later session**: `0x89C6CF`=width, `0x89C6D1`=height - this session had it backwards; re-confirmed
+two independent ways: `cmp WORD PTR 0x89c6cf,0x280` paired with `cmp WORD PTR 0x89c6d1,0x1e0` right next to it at
+`0x410e84`/`0x410e8f` - a joint "is the mode exactly 640x480" check, `0x280`=640 against `0x89c6cf` and `0x1e0`=480
+against `0x89c6d1` - and `get_vconfig_index`'s own call site at `0x42abc9` pushes `0x89c6cf` as arg1/`width` (checked
+against the table's own `+0x30`/"width" field) and `0x89c6d1` as arg2/`height` (`+0x32`/"height"). Matters for the
+screen-origin trace below, which depends on getting this pairing right. Compared against literal VGA/SVGA
+constants like 640x480/800x600 dozens of times elsewhere in `dis.txt`): `init_all` (once with the hardcoded
+640x480 startup default, once with the live resolution), **`draw_main`, every single frame**, and
+`reload_hspr_sprites` (after a sprite-bank/resolution-change reload). So `vconfig_index` just continuously re-snaps
+to "whichever built-in profile best matches the window's current pixel size" - normally constant during a play
+session (the window doesn't resize), never advanced by zoom input or by the flyby.
+
+**`vconfig_index_start` (the COLUMN, 0-4) IS the real, player-facing "camera zoom preset" control - set directly,
+never incrementally, by exactly 4 raw UI commands.** `process_cmd`'s own switch (`switchD_004abc0e`, `backup.xml`'s
+own `caseD_26`/`caseD_27`/`caseD_28`/`caseD_29` all sharing one target, `0x4abcc0`) computes
+`bl = ui_cmd_id - 0x26` (giving literal 0/1/2/3) and calls the shared `0x479F00` dispatcher (`functions.tsv`'s own
+row, previously catalogued only as a "banner/message hub" - this session traced its until-now-unread category 0xC)
+with `(0xC, bl, 0)`. Category 0xC's handler (`0x47a40f`) saves the OLD value to `0x89C6EB`, writes the new value
+into `vconfig_index_start` (clamped/wrapped to 0-4), computes a frame-rate-scaled transition length
+(`0x4174B0`, 8-32 frames) into the blend-step counter `0x89CE34`, and snapshots the CURRENT live render block into
+a "from" buffer (`0x88F062`) - exactly the setup `0x417510`'s own per-frame multi-frame ease (already traced above,
+"Camera-PRESET multi-frame blend") then consumes every frame via `cur += (target-cur)/(steps_left-1)` until it
+reaches the new preset. **This is a direct "jump to preset N" command, not a relative +/- step** - there is no
+code path anywhere that increments/decrements `vconfig_index_start` by one; each of the 4 raw ids IS one specific
+target value. Exhaustively grepped every "call 0x479f00" site in `dis.txt` (~100 call sites) confirms these 4 are
+the ONLY callers of category 0xC anywhere in the exe. The physical keybind/menu button for `ui_cmd 0x26-0x29`
+wasn't identified this session (not found under this name in `open-populous3`'s own `docs/specs/shortcuts.md`;
+that doc's own "+/- zoom" entries correspond to the CONFIRMED-DEAD debug pan/zoom key handlers this file's own
+"Ruled out" list already flags, a different, unrelated global, `0x89C6C3`/`0x417270`, not `vconfig_index_start` -
+see `functions.tsv`'s `0x417270` row, added this session, for that disambiguation).
+
+**The flyby's own live zoom channel (`tribe_struct+0x34`, "The real AI-script zoom chain" above) never writes
+EITHER index - it only reads `vconfig_index` (the row) to pick two FIXED neighbours within that row to blend
+between, ignoring whatever `vconfig_index_start` currently is.** Re-reading `0x41C700`/`preset_blend_by_fraction`'s
+index arithmetic in full this session (an earlier pass through this investigation missed one extra `*5` term)
+shows presetA is ALWAYS `vconfig_dat_mem[vconfig_index].sub[0]` and presetB is ALWAYS
+`vconfig_dat_mem[vconfig_index].sub[2 or 3]` (2 for zoom-out/positive `signed_delta`, 3 for zoom-in) - a hardcoded
+sub0-to-sub(2|3) blend within whichever row the live screen resolution currently matches, completely independent
+of the live `vconfig_index_start` value a player's own zoom-preset command might have set. So during a flyby, the
+ZOOM channel and a player's own manual zoom-preset keys (if pressed at the same time) don't interact or conflict -
+they drive genuinely separate preset slots of the same table. `functions.tsv`'s `0x41C700` row has the full
+corrected index derivation.
+
+**A 5th code path, confirmed DEAD, would have let something set `vconfig_index` (the row) directly with wraparound
+- never reachable from anywhere.** `0x479F00` category 0xE (`0x47a4e4`) does `vconfig_index = bl`, wrapped mod-10
+(`<0 -> 9`, `>9 -> 0`) - looks exactly like a generic "advance the zoom row with wraparound" primitive, but
+exhaustively grepping every "call 0x479f00" site in `dis.txt` found NONE passing `arg1=0xE` (14) - this branch is
+unreachable code in this build. Worth knowing if a different game version/patch ever turns out to wire a caller to
+it, but in this build `vconfig_index` is never advanced by anything resembling a zoom command, direct or
+incremental - only by the per-frame resolution re-match described above.
+
+**Net answer to "what advances the current preset index during a real zoom or flyby,"** fully resolved, no live
+memory needed: **nothing "advances" either index by a delta; both are always SET outright.** `vconfig_index` (the
+resolution row) is continuously reset every frame from the live window size, never touched by zoom/flyby logic at
+all. `vconfig_index_start` (the actual zoom-preset dimension a player can change) is set directly to one of 4
+literal values (0-3) by 4 dedicated raw UI commands (`ui_cmd 0x26-0x29`, `docs/commands.tsv`'s own new rows), each
+triggering a smooth multi-frame ease to the new preset; there is no continuous/relative zoom-stepper command for
+it anywhere in this build. The AI-script flyby's own zoom channel is a third, independent mechanism again (already
+fully traced above) that blends within fixed sub-slots 0/2/3 of the row, untouched by and not touching either
+index. **Practical implication for `open-populous`'s `flyby.rs`/`zoom_to_pitch`**: the "80-100 zoom" extrapolation
+TODO.md flags doesn't need `vconfig_index_start` tracing after all - the flyby's own `ZOOM` channel (script values
+-100..100) only ever reaches sub-presets 0/2/3 of whatever row the current resolution matches, a closed, already-
+enumerable set (10 rows * 3 relevant sub-slots = 30 `vconfig_struct` records total) rather than all 50 - reading
+those presets' own `K`/`D`-adjacent fields directly (once `vconfig_dat_mem`'s on-disk/in-memory layout is dumped,
+a static read, no live capture) would settle the pitch-at-extreme-zoom question exactly instead of extrapolating.
+
+## Screen origin (`origin_x`/`origin_y`) asymmetry SOLVED: the ~50px X offset is a real, deliberate UI-panel inset, not a bug or a bad measurement
+`open-populous3`'s own `TODO.md`/`pop3-rev-analysis.md` "Landscape projection" flags an open item from the per-axis
+screen-scale trace: `origin_x`/`origin_y` (screen center, added after the `focal_px·x'/z'` perspective divide) were
+found as `render_block[+0x2a or +0x2c] + screen_width_or_height/2`, live-confirmed exact for Y but off by a
+constant ~50px for X "for a reason not yet found." Fully resolved this session, **entirely by static tracing**
+(`dis.txt` only, no live memory needed) - and the root cause is a genuine, intentional asymmetry in the code, not a
+mismeasurement or a mislabeled axis.
+
+**The exact formula**, read straight out of `coord_pnts_global_convert`/`0x46DE00` (Ghidra's own name,
+`backup.xml`'s `SYMBOL` entry - confirms the identity `pop3-rev-analysis.md`/`TODO.md` already used for this
+address; `functions.tsv`'s own row for it had the formula but not the name, now fixed) and its near-duplicate
+`0x46DC40`:
+
+```text
+origin_x = render_block[+0x2a] + render_block[+0x26] / 2
+origin_y = render_block[+0x2c] + render_block[+0x28] / 2
+```
+
+confirming the TODO.md note's own guessed shape exactly (word-sized fields throughout, standard arithmetic shift
+for the `/2`). The asymmetry isn't in this formula - both axes are structurally identical here. It's in what feeds
+`render_block[+0x26]` vs `[+0x28]` (the "half-dimension" terms): traced to `FUN_00417270`/`0x417270` (own
+`functions.tsv` row, previously catalogued this session's history as "a map/minimap scroll-row-and-column
+viewport" - that read was a plausible guess from the write targets alone, now corrected with the actual data-flow
+traced):
+
+```text
+reserved_px = 0x44BB80()                         # 0 if the UI side panel is hidden, else a pixel width (below)
+margin = si                                      # the fn's own byte argument, always called with si = global 0x89C6C3
+
+render_block[+0x22] = reserved_px + margin*8     # clip-rect LEFT  (copied onward to 0x87CA8C, "Landscape projection")
+render_block[+0x24] = margin*8                   # clip-rect TOP   (copied onward to 0x87CA8E)
+render_block[+0x26] = SCREEN_WIDTH  - reserved_px - margin*16   # <- origin_x's own half-dimension term
+render_block[+0x28] = SCREEN_HEIGHT               - margin*16   # <- origin_y's own half-dimension term
+```
+
+(`SCREEN_WIDTH`/`SCREEN_HEIGHT` here are `0x89C6CF`/`0x89C6D1` respectively - see the correction just above this
+section; getting this pairing right was what made the formula fall into place, after an earlier pass through this
+same instruction sequence briefly read it backwards.) **`render_block[+0x26]` (the X half-dimension) has
+`reserved_px` subtracted; `render_block[+0x28]` (the Y half-dimension) does NOT** - the entire asymmetry comes from
+this one term being X-only. Since `origin_x` ends up `(SCREEN_WIDTH - reserved_px - margin*16)/2` instead of the
+naive `SCREEN_WIDTH/2`, it reads low by `reserved_px/2` (the `margin` term affects both axes equally via the
+`*16`/`*2`, so it cancels out of the X-vs-Y *difference* - it's not the source of the asymmetry, `reserved_px` is).
+
+**`reserved_px` is the game's UI side panel's own pixel width - confirmed by the flag that gates it.**
+`0x44BB80` (own new `functions.tsv` row) returns `0` outright if global `0x89C661` bit `0x4` is set, else either a
+flat fallback of `128` (if a per-resolution lookup table at `0x684220` has no matching row) or
+`table_entry * SCREEN_WIDTH / 65536` (a resolution-proportional fraction, Q16, from whichever row a key at
+`0x68C6C5` selects) - i.e. a pixel width that scales with the window, exactly how a HUD panel's width would be
+expressed. `0x89C661` bit `0x4` is independently confirmed to mean "the UI panel is hidden": every caller of
+`0x417270` sets/clears/toggles this exact bit immediately before calling it (`0x42B4CA`, `0x458105`/`0x4580FE`,
+`0x47A3A2`/`0x47A392`/`0x47A39B` - the last three live inside `0x479F00`'s own dispatcher, gated on a 3-way
+positive/negative/zero argument that reads exactly like a show/hide/toggle UI command), and `0x44BB80` is the ONLY
+reader of that bit anywhere that also touches a per-resolution pixel-width table. So: **with the panel visible
+(the normal play state, and presumably the state during whatever live measurement produced the original "~50px"
+figure), `origin_x` is centered on a viewport that's narrower than the full screen by the panel's own width,
+because the panel occupies screen space on one side only (horizontally) - nothing analogous ever reduces
+`SCREEN_HEIGHT` for `origin_y`, because the panel doesn't eat into vertical space.** This is the concrete,
+code-grounded answer to all three of the task's candidate explanations: it's not a FOV/aspect correction and not a
+general screen-centering offset (those would move both axes, or scale with aspect ratio, not drop a fixed amount
+from X alone) - it is, literally, **UI-sidebar-width compensation**, baked into the one place (`[+0x26]`) that
+feeds the horizontal half-dimension and nowhere else.
+
+**What a live check would need to pin the exact "~50px" figure, if ever wanted precisely** (not required for the
+mechanism above, which is fully static): `0x44BB80` caches its own return value at `0x59CD7C` every call - a
+single live read of that global gives `reserved_px` directly, no need to re-derive the table lookup. Divide by 2
+(for the "/2" in the origin formula) and that should equal the originally-measured X-vs-naive-half-width gap
+exactly, for whatever resolution/panel-visibility state that measurement was taken at. The `margin` term (global
+`0x89C6C3`, 0-32 range, set by other `0x479F00` UI commands, unrelated to the already-ruled-out dead debug
+pan/zoom keys despite superficially similar code shape - `functions.tsv`'s `0x417270` row has the disambiguation)
+affects both `[+0x26]` and `[+0x28]` identically and so doesn't change the X-vs-Y gap, but would need to be read
+too if reproducing the absolute `origin_x`/`origin_y` values rather than just their difference.
+
+**Not pursued further this session, smaller remaining threads**: `render_block[+0x2a]`/`[+0x2c]` (the additive
+terms ahead of the halved dimensions, both default to a small constant - `0`/`0x10` respectively, from the
+render-block-defaults function `0x416F50`, own row expanded this session with the full default dump) are
+themselves eased every frame toward a camera-preset's own `+0x2a`/`+0x2c` fields by the same multi-frame blend
+function already traced for `K`/`D`/etc (`0x417510`, "Camera-PRESET multi-frame blend" above) - so in principle a
+*second*, independent source of X-vs-Y difference could live inside the `vconfig_struct` preset table's own data
+(if a preset's `+0x2a` and `+0x2c` aren't both zero). Not read this session (would need the live/on-disk
+`vconfig_dat_mem` dump already flagged as a useful follow-up above); the panel-width mechanism above is already a
+complete, sufficient, confirmed explanation for an asymmetry that's X-specific and roughly constant, so this is a
+secondary lead, not a gap in the main finding.
+
 ## Open questions / next steps
 1. ~~Pin `FLYBY_START`'s turn exactly~~ **SOLVED** this session: **turn 72**, read straight from the compiled
    script's own `Every{period:8} / IF INT_GAME_TURN>70 / IF $57==0` gate via the `ai_script_info` example
@@ -979,14 +1153,40 @@ call `0x4e6a70` - it's a different operation (see below).
    the two-phase branch's blend (past where it splits the duration into a "kill existing rate" piece and a
    remainder) wasn't fully re-derived - a further session could finish that if the precise acceleration curve
    ever matters for `flyby.rs` (it's plausibly within smoothstep/easing error tolerance already).
-8. ~~Check the POS channel's raw-byte-to-cell scale against `open-populous`'s own 128-cell map~~ **SOLVED**,
+8. ~~What advances the "current preset" index (`vconfig_index`/`vconfig_index_start`) during a real zoom or
+   flyby~~ **SOLVED**, a later session, entirely statically (no live capture, confirming `open-populous`
+   `TODO.md`'s own expectation): neither index is ever incremented - `vconfig_index` (the resolution-ROW) is
+   reset every frame from the live window size via `get_vconfig_index`/`0x4171F0`, untouched by any zoom/flyby
+   logic; `vconfig_index_start` (the real zoom-preset dimension) is SET directly (never stepped) to one of 4
+   literal values by 4 dedicated raw UI commands (`ui_cmd 0x26-0x29`, `docs/commands.tsv`); the flyby's own zoom
+   channel (`0x41C700`) reads `vconfig_index` only, to blend within two fixed sub-slots of that row, and touches
+   neither index. See "Camera zoom presets resolved" above for the full derivation. **This also resolves item 13
+   below's own "genuine open contradiction" from a parallel investigation thread that reached this same question
+   from the other direction** (via `0x89C6EE`/`vconfig_index` itself, not `vconfig_index_start`): that thread's
+   four found writers of `0x89C6EE` (`0x42ABE1`/`reload_hspr_sprites`, `0x4A49DE`/`draw_main`,
+   `0x4A5086`/`0x4A51F5`/`init_all`) are exactly the same resolution-row-reset call sites this item's own
+   derivation already accounts for - `0x89C6EE` was never the zoom control to begin with, so there is no
+   contradiction left to explain once `vconfig_index_start` (a different global, `0x89C6EC`) is recognised as the
+   real zoom dimension.
+9. ~~Why does `origin_x` carry a constant ~50px offset `origin_y` doesn't~~ **SOLVED**, a later session, entirely
+   statically: `origin_x`'s own half-dimension term (`render_block+0x26`) has the UI side panel's live pixel width
+   subtracted before halving; `origin_y`'s (`render_block+0x28`) does not, because the panel only occupies
+   horizontal screen space. A real, deliberate asymmetry, not a bug or a bad measurement. See "Screen origin
+   (origin_x/origin_y) asymmetry SOLVED" above for the full derivation and what a live check would still need to
+   pin the exact pixel figure.
+
+**Items 10-13 below are from a separate, parallel investigation thread that worked through this same backlog
+independently (merged in from `origin/main`) - its own item numbers 8-11 collided with the two items just above
+and have been renumbered 10-13 to fit after them; nothing in its own text was otherwise changed.**
+
+10. ~~Check the POS channel's raw-byte-to-cell scale against `open-populous`'s own 128-cell map~~ **SOLVED**,
    found via a user's screenshot comparison rather than new live memory: raw x/z are HALF-cell units
    (`actual cell = raw / 2`), not literal cell indices - see "Correction: POS/TOOLTIP/end-target raw x/z are
    HALF-cell units" above. Also connects the already-known "zoom=0 is neutral" finding to `flyby.rs`'s own
    pitch mapping - see "Correction: flyby zoom value 0 means 'idle'" above. Yaw's own offset/sign convention
    (open question 5's D3D axis caveat) was the one item left over from that same comparison - now also
    **SOLVED**, see item 5 above and the next item.
-9. ~~Calibrate `ANGLE`'s yaw sign/scale and `ZOOM`'s pitch curve for real, with >=2 ground-truth points each~~
+11. ~~Calibrate `ANGLE`'s yaw sign/scale and `ZOOM`'s pitch curve for real, with >=2 ground-truth points each~~
    **SOLVED, a later session, from data already on hand**: re-ran the same flat-hold-detection pipeline (built
    for the yaw check, item 5) against `cam5.txt`/`cam7.txt`'s matrix pitch instead of yaw, matched to level 1's
    4 `ZOOM` keyframes - see "`flyby.rs::zoom_to_pitch` calibrated against the same traces" above. Confirms
@@ -995,7 +1195,7 @@ call `0x4e6a70` - it's a different operation (see below).
    `zoom_to_pitch` was fit against the wrong input's range entirely. `D` (distance) remains untestable from
    these traces (wrong struct) but was already settled two other ways (live round-trip test + static chain
    trace) - zoom never touches it, scripted or manual.
-10. Derive `S`'s real equivalent FOV for the "Distance vs. FOV" question (above). **SOLVED, a later session**:
+12. Derive `S`'s real equivalent FOV for the "Distance vs. FOV" question (above). **SOLVED, a later session**:
     whether level 1's own flyby touches the OTHER, untraced camera-distance mechanism (`0x417510`, blends `D`/
     `S`) was checked and RULED OUT (level 1's actual `cpscr010.dat`, parsed via `ai_script_info`, uses none of
     `ZOOM_TO`/`TRACK_SHAMAN_TO_ANGLE`/`TRACK_TO_MARKER`/`CREATE_MSG_INFORMATION_ZOOM`/other `SET_MSG_*ZOOM*`
@@ -1011,7 +1211,14 @@ call `0x4e6a70` - it's a different operation (see below).
     `origin_x` discrepancy (predicted 320, observed 270, constant offset, cause unfound), what `0x417510`'s real
     trigger is (not level 1), whether MANUAL zoom also moves `Q`/`render_block+0x2c` the same way (untested),
     and `render_block+0x20`/`+0x2e` (the 2 still-unnamed fields of the same 5-field zoom blend).
-11. **The preset TABLE itself, found and decoded from pure static data - no live memory needed for the numbers.**
+13. **The preset TABLE itself, found and decoded from pure static data - no live memory needed for the numbers.**
+    **Note added when merging this thread back in: the "current index must itself advance past 0" puzzle and the
+    Q-mismatch "genuine open contradiction" raised a few paragraphs below are both resolved by item 8 above,
+    found independently by a parallel thread - `0x89C6EE` (`vconfig_index`) is only ever the resolution-ROW
+    matcher, reset every frame; the real zoom-preset control is a DIFFERENT global, `vconfig_index_start`
+    (`0x89C6EC`), set directly by 4 dedicated UI commands (`ui_cmd 0x26-0x29`). The writers of `0x89C6EE` found
+    below (`0x42ABE1`, `0x4A49DE`, `0x4A5086`/`0x4A51F5`) are exactly that resolution-row reset, not a second
+    zoom mechanism - there was no contradiction left once the two globals are told apart.**
     `preset_blend_by_fraction`'s (`0x41C700`) own table (`0x88F0C0`, 10 presets × 470 bytes, confirmed by the
     indexing arithmetic in that function) is runtime data, but it's loaded verbatim from a real file,
     `data/VCONFIG0.DAT` (4700 bytes = 10 × 470 exactly, confirmed), via `init_vconfig`/`0x4170FA`'s own

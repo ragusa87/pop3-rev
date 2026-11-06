@@ -49,6 +49,56 @@ open(p, "wb").write(b)
 
 Confirmed working (reported by the user). The rest of this 177-byte file is unexplored.
 
+## Hidden developer settings menu (BYRNE cheat + hold O)
+
+Not a file/memory edit - a feature already built into the game, reachable with only the keyboard.
+Source: [`ystartgo/Populous_3_Tool`](https://github.com/ystartgo/Populous_3_Tool) (third-party,
+player-discovered); this session cross-checked it against `D3DPOPTB.EXE`'s own disassembly (see
+`commands.tsv`'s `tribe_cmd 0x17` row and `functions.tsv`'s `0x443520` row for the full static
+trace) and found a strong, consistent match - treat the exact item *names* below as that
+third-party's testimony, not independently read from the game (the actual strings live in a
+runtime-only table this session couldn't read statically; see "Open problems" at the end of this
+section for how a future live session could confirm them directly).
+
+**They're hidden developer settings left in the game, which you can change once cheat mode is
+on.** To use them: turn on cheats (`Tab+F11`, type `BYRNE`, press Enter), then hold the `O` key.
+While holding it, use `↑`/`↓` to scroll through the settings and `←`/`→` to change the selected
+one.
+
+Most of the ~72-76 entries (this session's own static count of the exe's table found 76; the
+source above describes about 72 - possibly a different game build, or a few the source didn't list
+individually) are technical switches the developers used for testing, such as turning off texture
+drawing, sync checks, or pathfinding ("jnav"/"jav") values. These are the ones a regular player (or
+`open-populous`) is most likely to care about. The number is the 1-based position you'd reach by
+holding `O` and pressing `↓` that many times from the first entry - this session confirmed it lines
+up exactly with 1 + the 0-based record index in the exe's own `0x5a8ab8` table (`commands.tsv`'s
+own per-item breakdown), and several of these specific matches are corroborated by a real,
+non-null "apply" callback firing exactly where you'd expect one (texture mode, AI on/off, fog of
+war, auto-vehicles, the attack-area overlay, flip rotation all have one; a plain visual toggle like
+sky/sea/lens-flare correctly has none):
+
+- **Gameplay**: Fog of war (48), Computer Player off (29, turns off the enemy AI), Auto use
+  vehicles (49), Maintain minimum population (50), Human shaman omnipresence (66), Autocast spell
+  (68)
+- **Controls and camera**: Camera Zoom on (40), Flip Rotation (70), Swap Rotate/Move (72), Auto
+  Deselect (71), Continuous raise/lower (51, for terrain)
+- **Visuals**: Sky On (21), Sea On (43), Lens Flare (64), Animating Water (25), Footsteps (24), Use
+  32x32 Hires Textures (23)
+- **Info overlays**: Show attack areas (57), Show flat areas darkened (55, shows ground you can
+  build on)
+- **Fun**: Island Level (44) raises or lowers the sea level
+
+A word of caution: many of the remaining options (like No Draw, No poly draw, or the sync checks)
+can blank the screen or make the game unstable. If something goes wrong, set the option back or
+restart the level.
+
+**Open problems** (worth a future live session): read the runtime string table at `0x972ba8` while
+the menu is open to get the literal name text for all 76 entries directly from the game instead of
+via the third-party source above; confirm the exact `O`+arrow-key input remap this session didn't
+trace (likely rerouting the normal camera-scroll arrow keys into the `ui_cmd 0x49`-`0x4e` stepper
+cluster while `O` is held); and resolve the 72-vs-76 count discrepancy (could just confirm this
+session's build has 4 extra entries past what the source's build/version had).
+
 ## Wine/Wayland: keyboard not registering in-game
 
 Likely cause: the game runs true fullscreen, which plays badly with a Wayland compositor's input
@@ -333,6 +383,42 @@ speed, unlike the fall damage. Bit `0x2` very likely exists to exempt a sinking 
 generic per-turn drowning check ("Drowning") while its own dedicated sink-and-die sequence runs - that
 other check's own "not drowning if bit 0x2" reads backwards until you realize it means "already handled
 elsewhere," not "safe."
+
+## TODO (needs a live session - can't do this in the cloud): do the Reincarnation Centre's 8 pillars rise together, or one by one?
+
+Open dispute, not resolved this session: static tracing of the level-start Reincarnation Centre
+sequence (`docs/functions.tsv` rows `0x41c140`/`0x4a7d80`/`0x4a7eb0`) found all 8 standing stones
+allocated in one tight, uninterrupted loop with no turn boundary between them, and `alloc_unit`
+(`0x4ed8a0`) confirmed to call each one's type-specific init (and thus start its rise) synchronously
+- i.e. the code reads as "all 8 start rising in the same simulation tick." The user, from having
+actually watched/played it, is confident they rise one after another, just very close together -
+disassembly alone can't settle that against a first-hand observation, and this cloud session has no
+running game, no display, and no `sudo`, so it can't be checked here either.
+
+**How to check it, next session with the game actually running** (same `find_game()`/`ptrace`
+approach as "Live memory: measuring a Blast" above, read-only):
+1. Start a fresh level (or reload one) so the RC intro fires from scratch.
+2. Poll global byte `0x89D17C` each turn (synced to the turn counter `0x89D188`, not wall-clock -
+   turns run ~12/s) until bit `0x20` goes from clear to set - that's the turn Phase A
+   (`0x41c140`) fires.
+3. From that turn on, for the tribe(s) being watched, compute `tribe_struct = idx*0xC65 + 0x89D1C8`
+   and read its own 8-entry pillar-slot array at `tribe_struct+0xA0D` (word thing-indices, `0` =
+   empty slot); resolve each nonzero index through the generic thing-pointer table `0x890390` to
+   get each pillar's own unit record (`0x8E0428`-based pool, `0xB3` bytes/record, same layout
+   "Live memory: measuring a Blast" already confirmed: `+0x2C` state, `+0x41` height i16).
+4. Log, per turn, each of the 8 slots' own `+0x2C` (should read `6` once risen) and `+0x41` (height,
+   should climb from `ground-256` to `ground` over ~16 turns per the static trace). **The question
+   this settles**: do all 8 slots' height values move in lockstep turn-by-turn (confirms
+   "simultaneous," matching the static trace), or does each slot's own climb visibly START a turn
+   or more after the previous one's (confirms the user's "staggered, but close" observation,
+   meaning the static trace above missed something - worth a fresh disassembly pass on the 8-pillar
+   loop in `0x41c140` if so, since nothing in it currently explains a turn-by-turn stagger)?
+5. Also worth polling slot occupancy itself (when each of the 8 words in `tribe_struct+0xA0D`
+   transitions from `0` to a real thing-index) in case the ALLOCATION itself is staggered somehow
+   this session's static read of the loop didn't catch (e.g. a retry/skip on an invalid cell).
+
+Not yet written as a script (`measure_blast.py`-style) since it needs catching the exact level-load
+moment live, not just a running level - write one once this is actually run.
 
 ## Scripts this session (scratchpad, not preserved across sessions)
 

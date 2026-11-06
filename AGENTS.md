@@ -2,6 +2,23 @@
 
 Read `CONTEXT.md` first for a big-picture overview before diving into the exe, memory, or docs.
 
+## Where the exe lives
+The game executable (`D3DPOPTB.EXE`, the Direct3D build every address in this repo is traced against; sha256
+`5234beab740375608ca35bdcd436626f1a6a5677230e1ce7be0fab8f4ef93da5` - spot-checked byte-identical to
+`backup/backup.xml` at several independent landmarks across sessions despite not matching `Makefile`'s own pinned
+hash, safe to keep using) lives in **`game/` at this repo's own root** - gitignored, never committed (the
+clean-room boundary below), but persistent on disk across sessions in the same container, unlike a session's own
+scratchpad. `setup.sh` (used by both skills) now checks there FIRST, before falling back to a couple of known
+local Wine install paths and a bounded filesystem search - run it with no `GAME=` override and it should just
+find it. If `game/D3DPOPTB.EXE` is missing (a brand-new container with no persistent disk from a prior session,
+or it was never placed there): ask the user to re-upload the game zip (`Populous_-_A_laube_de_la_cr_ation.zip` or
+similar, containing `D3DPopTB.exe`/`popTB.exe`/`HW_SW_Select.exe`), extract it, and copy `D3DPopTB.exe` to
+`game/D3DPOPTB.EXE` (uppercase - case matters) yourself so it persists from then on, rather than re-deriving a
+scratchpad-only copy that won't survive the next session. Also worth checking for the SOFTWARE-renderer sibling,
+`POPTB.EXE` (same code, different link order, same `game/` dir) - never analysed directly (`sl.py`/`dis.txt`
+assume the Direct3D build), but useful for live-memory checks when it runs better; `docs/poptb_map.tsv` maps
+addresses between the two builds.
+
 ## Role: document only
 Agents working from this repo analyse the original game and document it. They never implement anything:
 - No code changes in `open-populous` (`crates/`, tests, tools): no fixes, even when asked to "fix" a difference.
@@ -12,14 +29,15 @@ Agents working from this repo analyse the original game and document it. They ne
 ## Docs in this repo
 - `docs/functions.tsv`: standalone catalog of exe addresses (one row per function: address, name, feature_area,
   status, role), built incrementally by the `exe-function-map` skill. Never points into `open-populous`.
-- `docs/person_states.tsv`, `docs/effect_states.csv`, `docs/controller_states.csv`: catalogs of the `+0x2C`
-  per-turn **state** number for each of the three "stateful" unit classes - class 1 (person), class 7 (effect),
-  class 10 (internal controller) respectively. These are THREE SEPARATE numbering spaces: the same number means
-  a different thing in each file (e.g. person state 24 is Whirlwind's own lift state, effect state 24 is erosion,
-  controller states only go up to 18) - always say which class/file a bare "state N" comes from. Update the
-  matching file whenever a state's handler or role is traced or corrected, the same way `functions.tsv` rows are
-  kept current; `pop3-rev-analysis.md`'s own state write-ups should point at these files rather than re-listing
-  every state inline.
+- `docs/person_states.tsv`, `docs/effect_states.csv`, `docs/controller_states.csv`, `docs/scenery_states.csv`:
+  catalogs of the `+0x2C` per-turn **state** number for each "stateful" unit class - class 1 (person), class 7
+  (effect), class 10 (internal controller), class 5 (scenery, added when ground fire was traced) respectively.
+  These are SEPARATE numbering spaces: the same number means a different thing in each file (e.g. person state 24
+  is Whirlwind's own lift state, effect state 24 is erosion, controller states only go up to 18, scenery state 5
+  is a tree/plant that has just caught fire while person state 5 is an unrelated "idle near a reference unit")
+  - always say which class/file a bare "state N" comes from. Update the matching file whenever a state's handler
+  or role is traced or corrected, the same way `functions.tsv` rows are kept current; `pop3-rev-analysis.md`'s own
+  state write-ups should point at these files rather than re-listing every state inline.
 - `docs/unit_types`: per-class unit/person/building/etc. type ids and names (a different axis from the state
   catalogs above - `+0x2B` type vs. `+0x2C` state).
 - `docs/sound.tsv`: catalog of sound ids, keyed by the `type_id` argument to `0x48A050` (`fn(unit, type_id, flag)`,
@@ -58,6 +76,12 @@ Agents working from this repo analyse the original game and document it. They ne
 - `docs/camera.md`: working log for the camera/flyby investigation (raw addresses, candidate tribe_struct
   fields, confidence levels, dead ends, tools) - the fuller record behind what's written into `open-populous`
   `docs/specs/pop3-rev-analysis.md` "Camera flyby state (tribe_struct)".
+- `docs/trace-backlog.md`: queued tracing targets for a future session, one topic at a time (currently Angel of
+  Death and native-AI/AI-scripting follow-ups) - each item names the concrete exe lead to chase, found by reading
+  what `open-populous`'s own TODO.md/specs left open after building on a prior session's findings here. Check
+  this file before starting a fresh investigation from scratch; add to it (with the same "what to chase, and
+  where" shape) whenever `open-populous`'s own docs surface a new open question this repo should resolve, rather
+  than letting it go untracked.
 - `backup/backup.xml`: the Ghidra export both skills read function names/ranges from. **It holds much more than that**
   (found by an agent session, previously unused): full `STRUCTURE`/`MEMBER` type definitions for this exact game
   (`unit_struct`, `tribe_struct`, `unit_type_person`, `sprite_bank`, `vstart_struct`/`vfra_struct`/`vele_struct`,

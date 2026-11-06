@@ -1,0 +1,1836 @@
+# Queue for `open-populous`
+
+This session (and any other pop3-rev session without that repo attached) has no access to
+`open-populous`, so none of its findings can be written directly into
+`open-populous/docs/specs/pop3-rev-analysis.md` or `open-populous/TODO.md` the way AGENTS.md's
+normal pipeline expects. This file is the holding area instead: a future session that DOES have
+`open-populous` attached should read it, decide what's actually spec-ready, port it over (spec
+write-ups via the `original-game-spec` skill, implementation gaps as `open-populous/TODO.md`
+entries), and then trim the corresponding entry from this file.
+
+Nothing below should be copied in verbatim - everything here is still at "named"/un-confirmed
+status in `docs/commands.tsv` (see that file for the actual addresses/roles), one step short of
+what `original-game-spec` normally expects as input. Treat this as a punch list of "go look at
+this before deciding if `open-populous` needs anything," not as finished findings.
+
+## Provenance caveat (applies to everything below)
+
+Traced this session (2026-10-30) against a copy of `D3DPopTB.exe` that does **not** match the
+sha256 pinned in `Makefile` - spot-checked byte-identical to `backup/backup.xml` at three
+independent landmarks (`process_tribe_cmd`/0x43e8e0, the `process_cmd` switch at 0x4aab80, and
+`switchD_00d1138f`), but not exhaustively verified. Low risk, but worth re-confirming against the
+exact pinned build before anything here is treated as final.
+
+## Open-populous propagation plan (updated 2026-11-04) - read this first
+
+This file has grown into a long chronological log, oldest material first. A session that just got
+`open-populous3` attached and wants to work efficiently, rather than read top to bottom, should
+start here: what's actually outstanding right now, grouped by target file/section, newest findings
+first. Once a bullet below is ported, delete it (and, if its source section further down is now
+fully absorbed, trim that too, per this file's own stated purpose above).
+
+**Known starting condition, confirm before trusting anything else in this checklist**: as of
+2026-11-04, `open-populous3`'s own `docs/specs/pop3-rev-analysis.md` "Angel of Death mechanics"
+section and `TODO.md` Angel-of-Death line(s) are STALE - an earlier session's edits there were
+left uncommitted (per `open-populous3`'s own `AGENTS.md`, this repo never commits to that one) and
+were lost when that container reset. This is exactly the failure mode this file exists to prevent,
+so re-check the live `open-populous3` state before assuming anything below is already done, even
+if an earlier log entry here says it was "written directly" into that repo.
+
+- **§17 (2026-11-06, new) "screen-origin X/Y asymmetry resolved" -> `open-populous3`'s `TODO.md` "Landscape
+  projection"/`zoom_to_pitch` note (the one flagging `origin_x`'s unexplained ~50px offset vs `origin_y`) +
+  possibly `docs/specs/pop3-rev-analysis.md` "Landscape projection".** Resolves backlog task #14 entirely
+  statically, no live capture needed. The asymmetry is REAL and INTENTIONAL, not a bug or a bad live measurement:
+  `origin_x`'s own half-screen-width term has the UI side panel's live pixel width subtracted before halving;
+  `origin_y`'s half-screen-height term does not, because the panel only occupies horizontal screen space. Also
+  corrects a width/height field-pairing mix-up this same investigation introduced earlier in this session (see
+  §16 above, `docs/camera.md`'s "Camera zoom presets resolved") - `0x89C6CF` is WIDTH and `0x89C6D1` is HEIGHT, not
+  the reverse; doesn't change §16's own conclusions (neither field's role in that write-up depended on which was
+  which) but is worth knowing if anything built on that section's exact field names. See §17 below for the full
+  mechanism and exact addresses.
+- **§16 (2026-11-06, new) "camera zoom-preset index advancement resolved" -> `open-populous3`'s `TODO.md`
+  `zoom_to_pitch`/`flyby.rs` note (the one citing `pop3-rev docs/camera.md` item 11/"VCONFIG0.DAT") + possibly
+  `docs/specs/pop3-rev-analysis.md` "Camera flyby state (tribe_struct)".** Resolves backlog task #13 entirely
+  statically, no live capture (matching that TODO.md note's own stated expectation). Two globals previously
+  conflated as one ("the current preset index") are actually independent: the RESOLUTION-ROW index is reset every
+  frame from the live window size (not player/zoom-driven at all); the real player-facing zoom-preset control is a
+  SEPARATE field, set directly (never incrementally) by exactly 4 raw UI commands - no relative +/- zoom-preset
+  stepper exists anywhere in this build. The AI-script flyby's own zoom channel touches neither field; it only
+  reads the resolution-row index to pick two fixed table slots to blend between. **Concrete, immediately useful
+  implication for `zoom_to_pitch`**: the flyby's `ZOOM` channel (script values -100..100) only ever reaches 3 of
+  the table's 5 sub-presets per resolution row (slots 0/2/3) - a small, fully enumerable set (10 rows x 3 slots =
+  30 relevant `vconfig_struct` records) - so the pitch-at-zoom-80-100 extrapolation this TODO.md note currently
+  relies on `KNOTS` for could instead be read off directly from those records (a static data dump, once
+  `vconfig_dat_mem`'s exact field layout for pitch/K is nailed down) rather than extrapolated. See §16 below for
+  the full mechanism and exact addresses/UI-command ids.
+- **§15 (2026-11-06, new) "ordinary-construction worker throttling and wood-delivery mechanism traced" -> `open-populous3`'s
+  `docs/specs/buildings.md` "Construction"/"Building it" section + `TODO.md`.** Resolves backlog item #12
+  (`docs/trace-backlog.md` had no entry yet for this - picked up via a direct task assignment). Key corrections to
+  check against the current `[ours]` design: (1) **worker concurrency is `max(1, floor(assigned/2))`, not "every
+  assigned brave works every tick"** - at most half a construction/repair plan's currently-assigned braves are
+  ever simultaneously sent out to fetch wood; the exe found no separate hard per-building-kind cap enforced in the
+  per-tick controller itself (a per-type table is read but never used there - the real "max assignable braves per
+  kind" `buildings.md` already describes may be enforced only at the Assign-brave command, not checked this
+  session). (2) **A fresh plan/upgrade gets one wood piece (100 units) for free at creation**, via a direct
+  `+100` stock injection, not fetched by a brave - matches `buildings.md`'s own "the first piece of wood is
+  brought to the site... as in the game" line almost exactly, except the exe does it by fiat. (3) **Ordinary
+  construction wood-gathering reuses the SAME low-level pickup primitive and per-type max-carry constant as
+  vehicle-hut wood-gathering (task #10/§13's own finding) but through a COMPLETELY SEPARATE order/state machine**,
+  not `0x495520`/`0x496750` at all - so "vehicle huts and ordinary construction share one wood-delivery system" is
+  NOT quite right; they share a primitive, not the orchestration. (4) **A brave does NOT deposit its carried wood
+  directly into the construction site's wood stock** - it DROPS its full carry on the ground near the door as an
+  ordinary wood-pile object, exactly matching `buildings.md`'s own "drops the piece on the ground next to the
+  door" line; this session could not find the function that then moves a dropped pile's wood into the site's own
+  stock counter (every caller of the two candidate primitives was checked and none fit) - flagged as a genuinely
+  open question, not papered over, with a concrete next step (a live memory watch of a plan's own stock vs. a
+  dropped pile across several ticks) for whichever session next has the game running. See §15 below for the full
+  trace (addresses, tables, and exactly what was and wasn't resolved).
+- **§14 (2026-11-06, new) "ground-fire duration resolved" -> `open-populous3`'s `crates/game-core/src/firestorm.rs`/
+  `lightning.rs`/`ground_fire.rs`, `TODO.md`'s "Earthquake and Firestorm" bullet.** `ground_fire::TICKS` (currently
+  a guessed `9`, shared by both casters) should split into two real, exe-confirmed values: **22 turns for
+  Firestorm's own fireball-impact fire, 24 turns for Lightning's own strike-point fire** (≈1.83s/2.0s at 12
+  turns/sec). `tree::BURN_TICKS` (currently a guessed `127`) stays an open guess - this session could NOT pin down
+  what, if anything, the exe sets a freshly-ignited tree's own burn-length field to (every known ignition trigger
+  passes `ticks=0` to the shared ignite helper). New mechanic found, not currently modelled at all: a burning tree
+  spawns its own separate, free-standing 76-turn (≈6.33s) companion fire-patch effect at its base, on top of its
+  own (unresolved-length) charring. See §14 below for the full mechanism (trigger conditions, per-tick behaviour,
+  and what happens once the timer ends - a final type-scaled building-damage pass, already-documented
+  `0x4A9030`/`0x409200` pipeline).
+- **§13 (2026-11-06, new) "vehicle hut wood-delivery RATE traced end to end" -> `open-populous3`'s
+  `docs/specs/vehicles.md` "Vehicle huts" section (replaces the `LAUNCH_WORK`/"added turn of work" guess
+  entirely) + `TODO.md`.** This resolves the exact question that section's own exe-trace note left open
+  ("what actually increments `+0xA4` per turn was not located"): there is NO flat per-turn work increment
+  anywhere in the exe - the hut's own `+0xA4` accumulator is incremented ONLY by a crew member physically
+  completing a chop-then-carry-then-deliver round trip (flat 100 wood per trip, the universal "one wood
+  piece" constant, truncated near the goal), gated by a one-new-recruit-per-turn throttle when over half
+  the hut's resolved crew is idle. See §13 below for the full mechanism and exact addresses/tables -
+  `open-populous`'s own simulation should drop the separate "work timer" layer entirely and model this as
+  crew members independently round-tripping to a wood source and dumping their carry.
+- **§1 (2026-11-04 update, extended same day) "tribe_cmd 0x15/0x17/0x1f/0x20 identified" ->
+  `open-populous3`'s pause/game-speed implementation (if any) + `TODO.md`; `tribe_cmd 0x17` is a
+  hidden dev/debug console, not a player feature, but a few of its 76 entries are genuinely useful
+  DEBUG/TESTING toggles `open-populous` might want of its own.** §1 below now has three previously-
+  open leads fully resolved and cross-corroborated against already-traced code elsewhere in this
+  catalog:
+  - `tribe_cmd 0x1f`/`0x20` **is the game's PAUSE/UNPAUSE command** (sets/clears the already-confirmed
+    "paused" bit of `game_flags_1`, freezes/resumes the game clock, and raises a multiplayer-aware
+    "Game Paused"/"Paused by `<tribe>`" banner). If `open-populous` has its own pause implementation,
+    check it against this mechanism (especially the "paused by \<tribe\>" naming in multiplayer, and that
+    unpause's own trigger (menu button vs. keybind) is still not located exe-side - worth noting as a gap
+    either way) and cite accordingly; if it has none yet, this is a `TODO.md`-worthy real feature.
+  - `tribe_cmd 0x15` **is a hidden "game speed" multiplier** - cycling an integer 0-4 (0-32 with the
+    BYRNE cheat active) that `main_loop_outer` reads directly to run 1-5 (or up to 33) simulation turns
+    per real-time catch-up step instead of the normal one. Confirm whether `open-populous` has an
+    equivalent fast-forward/turbo mode; if this is meant to be a hidden debug feature rather than a
+    normal setting, note that distinction rather than treating it as a public option.
+  - `tribe_cmd 0x17` **is the hidden cheat/debug settings menu itself** - a 76-entry table-driven
+    toggle/stepper console, gated behind the same cheat-enable flag as the known BYRNE cheats, reached
+    in-game by holding `O` and using the arrow keys once the BYRNE cheat is active (`docs/cheat.md`'s
+    own section has the full control scheme). The mechanism and per-item flag/storage/callback
+    breakdown are fully documented in `commands.tsv`/`functions.tsv` (`0x443520`'s own row). **Update
+    (same day)**: a third-party source ([`ystartgo/Populous_3_Tool`](https://github.com/ystartgo/Populous_3_Tool),
+    cross-checked this session and lining up well) names ~20 of the 76 entries - most are developer
+    testing switches (texture/sync/pathfinding debug toggles) not worth porting, but a handful are
+    genuinely useful DEBUG/TESTING aids `open-populous` might want its own equivalent of: **"Computer
+    Player off"** (disables enemy AI - useful for isolated manual testing), **"Fog of war"** (toggle),
+    and **"Autocast spell"**. The rest (Sky/Sea/Lens Flare/Animating Water on-off, hires textures,
+    footsteps, camera zoom, island level, auto-vehicles, min-population maintenance, human shaman
+    omnipresence, flip rotation/swap rotate-move/auto-deselect, show-attack-areas/show-flat-areas
+    overlays) are much lower priority - nice-to-have debug visualizations/QoL at most, not missing
+    gameplay features. The exact item name TEXT is still third-party testimony, not independently
+    read from this exe (the runtime string table itself wasn't readable statically) - a live session
+    could confirm it directly if that ever matters.
+- **§8 (new, 2026-11-06) "Preacher-conversion target eligibility resolved" -> confirms `may_preach`/`sermon.rs`
+  need NO change, plus one gap to check.** A long-open contradiction between this repo's own exe tracing and
+  `may_preach`'s "ordinary followers only, never preachers/shamans" model turned out to be a byte-read error in an
+  earlier `pop3-rev` session, not a real divergence - the corrected table confirms `may_preach`'s own shape is
+  right. The only actionable item: the exe also makes **spy** an eligible conversion target alongside
+  brave/warrior/firewarrior - check `may_preach`'s type list includes spy, or note the omission deliberately if it
+  doesn't. See §8 below for the full re-derivation.
+- **§9 (new, 2026-11-06) "Sermon residue: range/capacity, conversion visual, single preacher pose" -> concrete
+  numbers/behaviour for `sermon.rs` and its visual-effect counterpart, plus one closed non-finding (no "halving"
+  exists on the conversion check - nothing to port there).** Three traceable facts: (1) the auto-triggered
+  conversion-strike scan covers a 3x3 (or 5x5, if the striker started in a building doorway) grid of 256-world-unit
+  cells around the striker, strikes only the first eligible candidate per scan, and the exe code has no found cap
+  stopping a second candidate from being struck by the same still-active striker later (unconfirmed whether this
+  produces simultaneous listeners in practice); the PLAYER-issued Preach order is architecturally single-target (a
+  scalar field, never a list) - at most 1 listener per that order. (2) The dedicated conversion visual is NOT a
+  beam/soul travelling from the preacher to the convert: it's an 8-tick "flash" effect spawned at the dying unit's
+  position on a SUCCESSFUL roll only, which then teleport-tracks the brand-new replacement unit's live position
+  every tick before vanishing - if `open-populous` wants to model this effect, "spawn a short flash at the kill
+  point, then follow the new unit for ~0.66s" is the accurate shape, not a point-to-point travel animation. (3) The
+  preacher's own body never selects among multiple poses/animations anywhere in its order-handler code - only the
+  listener's pose is table-driven - supporting a single fixed preaching pose/animation on the caster's side, though
+  the exact animation id was not independently confirmed (a separate, untraced generic rendering layer maps the
+  underlying flag state to an actual sprite). See §9 below for the full re-derivation and exact addresses.
+- **§11 (new, 2026-11-06) "Patrol attack-type points: real and not person-only" -> `patrol.rs`/`units.md`
+  "Patrol orders".** Two previously-open questions about the player's 8-slot patrol-point mechanism, both
+  settled from the exe: (1) a dedicated attack-type patrol point is a REAL, persisted order kind chosen and
+  stored at set-time (not a reactive/non-stored proximity engagement) - model it as a genuine per-slot
+  move-or-attack discriminant with a stored target id, not as "waypoints plus ambient auto-engage." (2) nothing
+  in the exe's target-validity gate or in the handler that actually consumes the stored id excludes a BUILDING
+  as that id's referent - a building id would be processed as an ordinary building attack (door/hack/shake wear-
+  down), exactly like a normal attack order would. **Caveat, don't over-port this**: whether the shipped game's
+  OWN UI ever lets a player's click resolve to a building id for this specific command was not traced (the
+  UI-to-tribe_cmd code for this path wasn't located) - so "the engine would handle a building target correctly"
+  is confirmed, but "the original UI actually offers this to players" is not. If `open-populous`'s own patrol
+  data model is currently person-only by construction, treat that as a (possibly deliberate) simplification
+  rather than a confirmed divergence - only the engine-capability half of this is settled. See §11 below for
+  the full re-derivation and exact addresses.
+- **§7 "Angel of Death mechanics" -> `open-populous3`'s `docs/specs/pop3-rev-analysis.md` +
+  `TODO.md`.** §7 below is a full, corrected rewrite (42 particles not 36, the literal
+  `AOD_KILL_COUNT`/`AOD_DURATION` expiry mechanism with its two death types, the real 3D dive-to-grab,
+  tower-standoff behaviour, the "angel can't touch buildings/vehicles directly but eviction-on-death
+  still applies" nuance, confirmed pitch/bank actually reaching the renderer). Needs a wholesale
+  rewrite of that spec section from §7's text, not a patch - the current version predates the whole
+  follow-up investigation.
+- **§6i "`GIVE_UP_AND_SULK`" -> `open-populous3`'s `docs/specs/ai-scripts.md`.** Its own bullet
+  under "Other ON/OFF switches" still hedges "the actual retreat/guard behaviour... must come from
+  that other function, if the original really does that" - replace with §6i's confirmed mechanism:
+  NOT a retreat/guard order at all; it's vehicle eviction + Angel-of-Death crippling + hypnotism
+  re-timing + a ghost sweep + spy-disguise reveal + conversion-coordinator teardown.
+- **§6j "`SET_ATTACK_VARIABLE`" -> `open-populous3`'s `docs/specs/ai-scripts.md`.** Its own line
+  still carries a "(?)" marker ("a variable the AI may update with the attack's outcome (?)") -
+  replace with §6j's confirmed 4-code mechanism (the `ATTACK` call's own immediate accept/reject
+  status - queued / at concurrency cap / no free task slot / no valid target - NOT the eventual
+  battle's outcome).
+- **§6k "worker selection" -> `open-populous3`'s own `game_core` code + `TODO.md`.** If
+  `open-populous3`'s worker-selection is still "idle braves in id order" (this file's own earlier
+  note, not independently re-checked against the current crate this session - verify first), §6k
+  found that's the wrong one of two real native code paths: real `ATTACK`/construction/training
+  worker assignment is nearest-eligible-candidate(s) to the work site, not id order. Likely a CODE
+  change, not just a doc update - flag for a coding session once confirmed against the current crate.
+- **§6l "`ATTACK`'s gather/regroup state machine" -> `open-populous3`'s `docs/specs/ai-scripts.md`
+  (citation) + `TODO.md` (implementation gap).** `ai-scripts.md`'s own "Sequence" bullet for `ATTACK`
+  ("the force gathers... leaves, regroups at `m1`... then attacks") is already roughly right but had
+  no exe confirmation behind it; §6l gives the full state machine (percentage-of-budget quota per
+  unit type, advances once merely non-empty rather than at full quota, then a genuine regroup-and
+  -re-kick-stragglers poll loop) if open-populous wants to implement or cite it precisely.
+- **§6m "the native guard/patrol group never walks or circles" -> `open-populous3`'s `docs/specs/ai-scripts.md`
+  "Markers, guards and the base" section.** That section's own "Open gap" bullet currently reads "the actual
+  walk/circle movement order for a gathered group is still unknown" - replace with §6m's confirmed finding: it
+  isn't unknown, it's absent. The native mechanism recruits troops near the marker(s) by proximity and parks
+  them in the generic idle/fidget state (no movement, no circuit, no release for non-preachers) - there is no
+  native walk/patrol behaviour to document as unknown. Also worth a `TODO.md` note if `open-populous`'s current
+  implementation (reusing its own player-facing 8-slot patrol-point system as a stand-in) should be flagged as a
+  deliberate deviation from the original rather than an unconfirmed approximation.
+- **§6n "`PUT_PERSON_IN_DT` found - its own dedicated opcode" -> `open-populous3`'s `docs/specs/ai-scripts.md`
+  `PUT_PERSON_IN_DT` entry + `TODO.md`.** The spec currently just says `PUT_PERSON_IN_DT model x z puts a
+  follower of that model in the tower at x z` with no mechanism behind it (and this repo's own prior session had
+  flagged the engine side as a genuine dead end) - replace with §6n's confirmed chain: it resolves `(x,z)` to the
+  tribe's OWN NEAREST drum tower (not a named building), does nothing if no free AI task slot/no nearby tower/
+  already correctly staffed, and otherwise asynchronously evicts any wrong-type non-shaman occupant and walks the
+  nearest eligible follower of the given type in - not a one-shot teleport of a specific unit. Worth a `TODO.md`
+  entry if `open-populous` doesn't yet model this as "resolve nearest tower, then evict+recruit" rather than a
+  direct placement.
+- **§6o "task 2 is the shaman's own autonomous wildman-hunting Convert behaviour" -> `open-populous3`'s AI/
+  native-behaviour docs + `TODO.md`.** If `open-populous` currently has nothing modelling an unscripted,
+  always-on "the shaman wanders toward and casts Convert on small wildman pockets on her own" behaviour, this is
+  new ground to add, not a correction - worth a `TODO.md` entry citing §6o's mechanism (hill-climb toward the
+  nearest few-wildmen spot, cast once in range, cooldown via a per-tribe busyness accumulator).
+- **§6p "task 19 is vehicle mission-readiness/loading, corrected from an initial 'population expansion'
+  misreading within the same session" -> `open-populous3`'s AI/native-behaviour docs + `TODO.md`.** If there's
+  no existing native-AI behaviour modelling "maintain enough ready boats/balloons for the difficulty level, then
+  load gathered troops aboard once one has room," this is new ground worth a `TODO.md` entry citing §6p's
+  mechanism - vehicle readiness counted by type (boat vs balloon), a staging/launch spot found (a boat hut's
+  water-exit point for boats, a nearby vehicle-free cell for balloons), then crew/passenger slots filled by
+  committing troops to the generic "committed" person state. Note the exe trace did NOT find this task issuing
+  the actual `ATTACK`/departure order itself - it only manages readiness and loading; flag that hand-off as a
+  separate, still-open question rather than assuming one.
+- **§6q "task 27 is a firewarrior-crewed vehicle mission coordinator" -> `open-populous3`'s AI/native-behaviour
+  docs + `TODO.md`.** If there's no existing native-AI behaviour modelling "confirm enough vehicles of a kind,
+  disembark ones that have arrived, and specifically recruit firewarriors to crew the rest," this is new ground
+  worth a `TODO.md` entry citing §6q's mechanism - this is the counterpart to §6p's own task-19 finding (general
+  boat/balloon readiness) but specific to firewarrior transport, and (like task 19) stops at "vehicle loaded,"
+  never issuing the departure/attack order itself.
+- **§6r "the vehicle-attack loop, closed" -> `open-populous3`'s AI/native-behaviour docs + `TODO.md`.** Extends
+  §6j's own addendum: `ATTACK`'s vehicle-transport sub-machine crews the specific vehicles needed, departs them
+  as a group via the SAME primitive its own land-based regroup uses, and on arrival attacks via the SAME
+  per-person order sweep a land attack uses - not a separate vehicle-combat path. If `open-populous`'s own
+  vehicle-attack implementation (if any) doesn't re-check availability at attack time, or doesn't route combat
+  orders through the same mechanism as a land attack, flag those as the concrete gaps.
+- **Nothing left genuinely open from this file's own Native AI backlog** - `docs/trace-backlog.md`'s entire
+  "Native AI / AI scripting" section is now marked RESOLVED, item by item, as of this session.
+
+## 1. `tribe_cmd` opcodes queued from `process_cmd` (0x14, 0x15, 0x17, 0x1f, 0x20, 0x28, 0x29, 0x5f) - RESOLVED
+
+Update (2026-10-30, later same day): all 7 original handlers (plus a newly-found companion,
+0x20) have now been traced in `docs/commands.tsv`.
+
+Update (2026-11-04): the three leads this file had left as "plausible real feature but purpose
+unidentified" or "genuinely open" are now resolved, each cross-corroborated against other
+already-traced code in this catalog rather than resting on this one function alone:
+
+- **0x14**: calls a 1-byte `ret` stub - a genuine no-op, nothing to port.
+- **0x28 / 0x29**: their predicate helpers (`0x442f40`/`0x443260`) both build a message using
+  template `0x5999ec` via `0x4fffe0` - the EXACT template/helper `ui_cmd 0x51`'s row already ties
+  to the hidden "BYRNE" cheat text-entry overlay. Very likely more of that same cheat subsystem,
+  not a "game speed" setting as `tribe_cmd 0x29`'s own 0-4 threshold byte might otherwise suggest
+  (see 0x15 below for where that "game speed" guess actually belongs). Matches this file's
+  section 5 prediction.
+- **0x1f / 0x20 - RESOLVED, a real feature**: this is the game's **PAUSE/UNPAUSE command**.
+  `0x479f00`'s category dispatch (a 15-entry jump table, category `0xa`/`5` share one handler at
+  `0x47a1ba`) sets/clears `game_flags_1`/`0x89c661` bit 0x2 (the "paused" bit `0x89c661`'s own row
+  already confirms), calls what's almost certainly a freeze/resume-clock pair (`0x48b4b0`/`0x48b4e0`),
+  and raises an on-screen banner that reads the focused tribe to show a plain "Paused" or a
+  "Paused by `<tribe>`" variant - i.e. multiplayer-aware. `tribe_cmd 0x1f` is queued by `ui_cmd 0x10`
+  (gated on a mode check + a generic per-tribe permission gate); `0x20`'s own trigger (menu button,
+  not a `ui_cmd` case, is the likely explanation) is still not located.
+- **0x15 - RESOLVED, a real (likely debug-only) feature**: this is a hidden **"game speed"
+  multiplier**. The counter it cycles (`0x895dac`, range 0-4 normally / 0-32 with the BYRNE cheat
+  active) is read directly by `main_loop_outer`'s fixed-step catch-up loop (3 near-identical sites)
+  as `counter+1` - that many simulation turns (`on_turn`/`0x4ec6f0`) now run per catch-up step
+  instead of the normal one, a genuine fast-forward/turbo effect. `clear_level_global_vars` resets
+  it to 0 (1x) on level load. Queued by `ui_cmd 0x3e`/`0x3f`, gated the same cheat-adjacent way as
+  the rest of this cluster.
+- **0x17 - RESOLVED, mostly not worth porting, but see the note below**: its callee `0x443520` is
+  **the hidden cheat/debug settings menu itself** - a 76-entry, table-driven get/set/announce engine
+  (toggles and clamped numeric steppers, each with its own storage pointer, optional "apply"
+  callback, and on-screen name/value banner), reachable only once the BYRNE cheat flag is on
+  (confirmed via `ui_cmd 0x14`, which force-sets one specific entry and shares that exact gate),
+  in-game by holding `O` and using the arrow keys (`docs/cheat.md`). The table itself was dumped and
+  fully decoded statically (see `commands.tsv`/`functions.tsv`'s own rows for the per-item
+  breakdown: which flags/ranges each of the 76 entries controls); the actual item *names* live in a
+  runtime-only string table outside the exe file and weren't read directly this session, but a
+  third-party source (`ystartgo/Populous_3_Tool`, see the propagation plan above and `docs/cheat.md`)
+  names ~20 of them, cross-checked here and lining up well. Most are developer-only testing switches,
+  but "Computer Player off", "Fog of war" and "Autocast spell" are worth a second look as debug/
+  testing aids, not full gameplay features.
+- **0x5f**: a clean, fully round-tripped per-tribe flag toggle (`tribe_struct+0x93d` bit 0x80,
+  sibling to tribe_cmd 0x41's "all mana" bit 0x8) - functionally simple, but what the flag
+  controls isn't confirmed, so still nothing concrete to port.
+
+**Conclusion for `open-populous`**: `0x1f`/`0x20` (pause) and `0x15` (game speed) are real engine
+features worth checking against `open-populous`'s own implementation (see this file's propagation
+plan at the top for the concrete `TODO.md`/spec pointers). `0x28`/`0x29` (BYRNE text-entry) is
+internal cheat machinery, almost certainly skippable the same way section 3's UI-state bitmask is.
+`0x17` (the 76-item cheat console) is mostly the same kind of skippable developer machinery, EXCEPT
+for a small handful of entries ("Computer Player off", "Fog of war", "Autocast spell" - named by a
+third-party source, see the propagation plan above) that look like genuinely useful debug/testing
+toggles `open-populous` might want its own equivalent of, even though the console itself isn't worth
+porting wholesale. `0x17`'s own item names remain third-party testimony, not independently read
+from the exe - the only loose end left if a future session wants to read them live and double-check
+nothing else player-relevant is hiding in the other ~56 unnamed entries. `0x5f` still needs its
+flag's real-world effect confirmed before it's spec-ready.
+
+## 2. Notification "clear/dismiss all" (ui_cmd 0xb7 / 0xb8)
+
+`ui_cmd 0xb7` sets 6 bytes at `0x89d168-0x89d16d` to 0xff; `ui_cmd 0xb8` zeroes them. This is the
+same table functions.tsv's `0x40bd20` row (watchtower rally) ties to pop3-rev-analysis.md's
+existing "Notifications" feature. If confirmed as a real player action, this reads like
+"dismiss all notifications" / "clear all notifications" - worth checking whether
+`open-populous`'s notification system already exposes an equivalent action, and adding a
+TODO.md entry there if not. Not independently confirmed as a live keybind this session.
+
+## 3. UI-state bitmask `0x98e908`/`0x98e909` - probably skip, but confirm first
+
+A cluster of `ui_cmd` ids (0x47/0x48, 0x4f/0x50, 0xa0/0xa1/0xa2/0xa3, 0xa4-0xab, 0xbb/0xbc,
+0xbd/0xbe) just set/clear individual bits of one 16-bit word. Reads like a HUD/debug-overlay
+visibility bitmask (one bit per panel), i.e. likely original-developer debug tooling, not a
+player-facing feature a clean reimplementation needs. Recommend a quick live-memory check (toggle
+a bit, see what appears/disappears on screen) before deciding - if it's genuinely dev-only, the
+right `open-populous` action is probably "note as intentionally not implemented," not a TODO to
+build it.
+
+## 4. Camera/zoom stepper commands (ui_cmd 0x32-0x3f) - cross-check against `camera.md`
+
+Two min/max byte pairs (`0x89ce3f`/`0x89ce40`, enforcing a minimum-3 gap) and two signed
+offset axes (`0x89ce45`, `0x89ce49`, step 200, range ±28160), plus two unclamped byte counters
+(`0x89ce41`, `0x89ce42`). Possibly a free/debug camera control scheme. `docs/camera.md` already
+has a working log of camera/flyby tribe_struct fields - a pop3-rev session should check whether
+these globals overlap with anything already found there before this goes anywhere near
+`open-populous`.
+
+## 5. More debug/cheat-cluster candidates (ui_cmd 0x3e/0x3f, 0x40-0x42) - partly confirmed
+
+Resolved by section 1's update: `ui_cmd 0x40-0x42` (-> tribe_cmd 0x28/0x29) are now fairly
+strongly tied to the BYRNE cheat text-entry subsystem (shared message template with `ui_cmd
+0x51`), so likely safe to skip for `open-populous`. `ui_cmd 0x3e/0x3f` (-> tribe_cmd 0x15, the
+stepper) did NOT show the same cheat-template signature - still an open question whether it's a
+real feature, see section 1.
+
+## 6. AI-script interpreter (`interpret_script`) vs. `ai-scripts.md` (2026-10-30)
+
+**Status (2026-10-30, later session): ported into `open-populous`, not yet trimmed here.** `open-populous` was
+attached in that later session, so this whole section (6 through 6h) was written up as plain-prose findings
+directly into `open-populous/docs/specs/pop3-rev-analysis.md` (new section "Native AI: how a computer-controlled
+tribe actually decides what to do") and `open-populous/TODO.md`, and two concrete errors in
+`open-populous/docs/specs/ai-scripts.md` were corrected there (the `EVERY n m` timing formula was missing the
+confirmed per-tribe phase; `GIVE_UP_AND_SULK` was mischaracterised as "everyone guards the shaman" when the exe
+shows it sets a generic force-success flag instead). **Those edits are sitting UNCOMMITTED in `open-populous`'s
+own working tree** (AGENTS.md: no commits there) - this section is deliberately being LEFT IN PLACE, not trimmed
+per this file's own usual "port then trim" rule, until a human has actually committed them on the `open-populous`
+side; trim it at that point, not before, so this detailed byte-level version stays the only durable copy in the
+meantime.
+
+Follow-up to the user's "check how the AI works" question: `open-populous3`'s `docs/specs/ai-scripts.md`
+(community-sourced - PopScript Wiki, the ALACN editor, `popscript-upgrader`'s Lua converter - cross-checked
+against the 58 shipped `cpscrNNN.dat` files) already documents essentially the whole PopScript language and
+its ~200 opcodes. This session read ~30 of `interpret_script`'s (`0x48CC60`, `docs/functions.tsv`) opcode case
+handlers directly in the disassembly to check that community-sourced doc against the real exe. Read-only
+reference clone used for comparison only, at `/home/user/ragusa87/open-populous3` (not written to). Full detail
+is in each opcode's own `functions.tsv` row (`0x48cc94` onward); summary for whoever ports this:
+
+- **Confirms `ai-scripts.md`'s id/parameter tables exactly** for every opcode read: all ~24 `STATE_*` toggles,
+  `ATTACK`'s 13-parameter signature, `SPELL_ATTACK`, the whole marker/base-marker/drum-tower cluster,
+  `SET_SPELL_ENTRY`, `SET_MARKER_ENTRY`/`MARKER_ENTRIES`, `DISABLE/ENABLE_USER_INPUTS`, `NAV_CHECK`,
+  `SET_BUCKET_COUNT_FOR_SPELL`. No corrections to the opcode table itself.
+- **New: the `STATE_*` storage mechanism**, undocumented before (community sources never had the exe). Every
+  plain on/off state (all but `SPELL_DEFENCE`, which takes extra `x z` operands) sets or clears one bit of a
+  single 32-bit flags word at `tribe_struct+0x59a` - bit index = the internal state number the wiki/Lua
+  `CP_AT_TYPE_*` numbering already uses (0 = `CONSTRUCT_BUILDING` ... 23 = `BUILD_OUTER_DEFENCES`). If
+  `open-populous`'s own tribe/AI data doesn't yet have an equivalent per-tribe 24-bit (round up to 32) states
+  field, this is the concrete layout to add one from.
+- **New: `SET_BUCKET_COUNT_FOR_SPELL` resolved.** This is the single highest-use DO command in the entire
+  corpus (1502 uses across 47 files - more than double any other command) but `ai-scripts.md` marks it totally
+  unknown. It's simple: `target_struct[spell_id*4 + 0x53f] = n` (a byte, 4-byte stride, per spell model).
+  Almost certainly what `SET_BUCKET_USAGE` (1172, not traced) gates - the per-spell share of the AI's mana
+  "bucket" spend. Worth a TODO.md entry once `open-populous`'s own mana-economy AI exists: every real script
+  calls this once per spell at setup, so it's load-bearing for matching the original's spell-casting mix, not a
+  minor/debug knob.
+- **New: several "0 uses in the shipped files" opcodes are real, not dead.** `ai-scripts.md` lists
+  `RESET_BASE_MARKER`, `SEND_GHOST_PEOPLE`, `GUARD_AT_MARKER`, `RESET_CONVERT_MARKER` and `SET_CONVERT_MARKER`
+  as 0/0 uses; all five have genuine non-stub handlers in the exe (confirmed NOT the shared "unknown opcode"
+  bailout at `0x48e763`), unlike the opcodes that really are absent (`STATE_SHAMAN_DEFEND`, the `SPARE*`/
+  `ATTACK_BLUE/RED/YELLOW/GREEN` block, which DO hit that bailout). These are genuine unused features worth
+  modelling if/when `open-populous` builds out the rest of PopScript, not opcodes to skip as dead.
+- **New: `ai-scripts.md`'s open item, "what `SET_ATTACK_VARIABLE` receives," has a lead but isn't resolved.**
+  `ATTACK` itself (`0x48cd07` -> `0x48fc50`) was traced in full down to the call into `0x4e5fd0`; the other 12
+  ATTACK parameters' exact mapping onto the task record wasn't decoded, so this is still open.
+- **Biggest finding: PopScript's `ATTACK` and the computer player's own autonomous AI are the SAME mechanism,
+  not two parallel systems.** `0x4e5fd0` (ATTACK's real worker, reached via `0x48fc50`) turned out to already
+  be catalogued, from an earlier unrelated session, as one of ~21 small "AI goal evaluator" functions
+  (`0x462790`'s row) that the native AI's own "decide on a new goal" tick (`0x4625E0`, fires ~1/64 turns per
+  tribe) calls to conditionally enqueue a task into one of the tribe's 10 round-robin AI task slots. Tracing
+  `0x4e5fd0` this session found it ends by enqueueing task type `0x14` (20) - which is EXACTLY task id 20 of
+  `maybe_ai_func_1`'s (`0x4623E0`) per-turn task dispatcher, whose handler `0x4CB400` was independently traced
+  in yet another earlier session as "a per-tribe-person sweep issuing ordinary attack orders." So: a script's
+  `DO ATTACK` doesn't bypass the native AI or duplicate its logic - it just manually fires one of the same
+  internal "should I attack" evaluator functions the AI's own goal-picking tick calls on its own, which
+  enqueues into the exact same task queue, executed by the exact same per-person sweep that would also run for
+  an autonomously-decided attack. **For `open-populous`**: if/when the native computer-player AI and PopScript
+  are both implemented, this says they should share one task-queue data structure and one "give this tribe an
+  attack order" function, with PopScript's `ATTACK` command and the AI's autonomous attack-goal check being two
+  different CALLERS of that one function - not two separate attack-order code paths that both need maintaining.
+  This matches `ai-scripts.md`'s own "What this means here" section, which already recommends keeping AI
+  behaviours as plain simulation data a script sets - this extends that to "and the native AI reads/writes the
+  same data/queue a script would."
+
+### 6a. Follow-up (2026-10-30, same day): EVERY's exact timing resolved; task-queue architecture mapped
+
+Direct answer to the user's architecture question ("the script gives direction, the engine has its own
+build/train/convert logic and decides combat") - **confirmed by the exe**: PopScript runs through two layers.
+`interpret_script_upper` (`0x48c730`, new row) is the statement-level interpreter (`IF`/`EVERY`/`SET`/etc.);
+it calls `interpret_script` (`0x48CC60`) only for `DO` commands, which in turn either write directly into the
+tribe's own flags/attributes/tables (`STATE_*` bits, `SET_BUCKET_COUNT_FOR_SPELL`, `SET_SPELL_ENTRY`, marker
+records - all queued from section 6 above) or - for `ATTACK` specifically - plug into the SAME native
+per-tribe task-queue the autonomous AI tick (`process_tribe_2`/`0x461662` -> `maybe_ai_func_1`/`0x4623E0`,
+10 round-robin task slots per tribe) uses for its own decisions. That queue, its ~24 task types, and the
+engine's own economy logic (build/house/train/convert, the `STATE_*` flags presumably gate) are what actually
+drives the AI turn to turn - the script mostly configures it rather than running it directly, exactly the split
+the user described.
+
+- **`EVERY n [m]`'s exact formula, settling an open item in `ai-scripts.md`/`open-populous` `TODO.md` ("the
+  EVERY off-by-one and whether there is a per-tribe phase")**: confirmed as `(turn + tribe_num + m) % n == 0`
+  (as a bitwise AND against the stored `n-1` mask, see `0x48c730`'s row for the exact mechanism), where
+  `tribe_num` is a real per-tribe-struct byte (`tribe_struct+0xc22`, `backup.xml`'s own name) - **the original
+  exe DOES add a per-tribe phase**, the same way `ai-scripts.md` only knew the Reincarnated Lua converter to
+  do. Safe to port this exact formula when implementing `EVERY` timing.
+- **Task-queue architecture, mapped but not fully decoded**: all 20 of the native AI's ~21 "goal evaluator"
+  functions (each a potential entry of a 12-slot-per-tribe prioritized dispatch at `tribe+0x36e`, called from
+  `0x4625E0`'s "decide a new goal" tick) were matched to the literal task-type id each one enqueues - table in
+  `0x462790`'s (`set_sub_struct`) `functions.tsv` row. Only 2 of ~24 task ids have a traced HANDLER (what
+  actually happens once dispatched): id 20 = the attack sweep (`0x4CB400`, shared with PopScript's own
+  `ATTACK`), id 9 = a lightweight reschedule/no-op-ish task (`0x4C5CF0`). The other ~13 confirmed-real ids
+  (0,1,4,6,7,8,11,14,24-28) are unidentified - this is where "convert wildmen first, then build houses, etc."
+  and any population-triggered behaviour would live, but none of it is traced yet.
+- **Checked specifically for the user's "tribe nearly wiped out -> send everyone to attack" claim - not
+  confirmed, no counter-evidence either.** None of the 20 evaluators were found pushing task id 20 (the known
+  attack task) except `ATTACK`'s own script-side evaluator (`0x4e5fd0`) - so if this behaviour exists, it's
+  either one of the ~13 untraced task ids (most likely one of the higher, less-common ones, 24-28, found only
+  this session and not yet in any doc), or it lives in code this session didn't reach at all (the per-evaluator
+  CONDITIONS, which appear to live in the 12-entry table's own callers/setup rather than inside the evaluator
+  functions themselves - only one evaluator, `0x4e6440`, was read in full, and it was unconditional). Also
+  checked `GIVE_UP_AND_SULK` (1221, the one scripted "give up" command) as the closest documented analogue:
+  **corrects `ai-scripts.md`'s "everyone guards the shaman" framing** - it actually sets a generic tribe
+  "force success" flag (`tribe_struct+0x941` bit `0x40`) ALSO used elsewhere to force preacher-conversion rolls
+  (`0x4D83B0`'s row) and other level-script-forced outcomes (`0x41CC20`) - broader than a self-contained
+  retreat routine, and still framed as giving up/defensive, not an all-out attack. **Net: the user's general
+  model (script sets goals, engine's own continuous tick runs the economy and decides moment-to-moment
+  behaviour, including combat) is confirmed by this session's findings; the specific "desperate last stand"
+  behaviour needs a dedicated future session tracing the untraced task ids (0x462568's dispatch table, one row
+  per id) or `0x41ca10` (`GIVE_UP_AND_SULK`'s own callee) to pin down.**
+
+### 6b. Follow-up (2026-10-30, same day): the AI's actual priority list found; last-resort mechanism traced
+
+Found the structure answering "what order does the AI try things in." The per-tribe AI init function
+(`0x461d70`, called from `clear_tribe` when a tribe is set computer-controlled - new row) copies a **fixed
+240-byte TEMPLATE from a global at `0x59d878`** into every computer tribe's own 12-entry goal-category table
+(`tribe+0x36e`, the table `0x4625E0`'s "decide a new goal" tick loops over). Dumped that template in full
+(`0x59d878`'s own `functions.tsv` row) - **every computer tribe runs through the exact same 12 categories in
+the exact same priority order**, trying each until one does something:
+
+- **Position 0 (tried first, every tick): "construct essential buildings"** (`0x4e5580`, category id 1) -
+  confirms `ai-scripts.md`'s `STATE_CONSTRUCT_BUILDING` really is the AI's top automatic priority, not just a
+  switch with no special precedence. Gated by per-tribe-num/difficulty threshold bytes, it checks several
+  building types (literal ids 4/13/15 plus a data-driven list) against how many it already has, and enqueues a
+  now-confirmed **generic, parameterised "build a building of model N" task (task type 0)** for whichever is
+  short. Nice `open-populous` implication: task type 0 isn't "build a hut" specifically, it's "build model N" -
+  one task type, many building models, matching a config-driven building-priority list rather than hardcoded
+  per-building logic.
+- **Position 11 (tried LAST, only if all 10 others declined): the AI's one last-resort category** (`0x4e58b0`,
+  category id 0xa) - gated by a single condition (`0x4f5f40`, own row): walk every person in the tribe
+  (`tribe+0x881`'s list) and check whether ANY of them has bit `0x40000` set in their own `+0x10` flags field.
+  If so, fires task type 5 - a task otherwise **unreachable from anywhere else in the entire AI** (checked
+  across all 20 other goal-evaluator functions this session catalogued).
+- **Task 5's handler** (`0x4c8070`, updated row - was a stub from an earlier session, fully traced now): sweeps
+  every flagged person, clears the flag, and forces each one into **person state 14** ("idle/fidget" per
+  `person_states.tsv`, though that row itself already flags ambiguity - `0x434610` separately ties state 0xE to
+  "just finished entering a building"). Then does tribe-wide follow-up: clears marker targets (`-1,-1,-1`, the
+  same convention `ATTACK`'s own unused markers use), something notification-shaped (`0x435730`, args resemble
+  the `0x44d7f0` category-based notification system), and writes a likely cooldown (`tribe+0x5b1 = 20`).
+- **Verdict on the user's "tribe nearly wiped out -> all units attack" hypothesis: settled, and it's not this.**
+  Found what actually sets the `+0x10` bit `0x40000` flag `0x4f5f40` scans for: it's the exact same **"just
+  converted" flag `0x4D83B0`'s own row already documents** on the preacher-conversion success path ("sets two
+  'just converted' flags on the new unit, `+0x10` bit `0x40000`, `+0x14` bit `0x1000000`") - confirmed by
+  matching disassembly byte for byte. So this whole last-resort category is the AI's **"integrate freshly
+  converted/replaced followers" cleanup sweep** (reset them to idle, state 14, clear stale markers, notify,
+  set a cooldown) - not a population-crisis attack trigger at all. It makes sense as the AI's lowest priority:
+  processing new recruits is housekeeping that should never preempt building/attacking/defending. Also found a
+  SECOND place that sets the same flag, a standalone "kill old unit, allocate replacement" helper (`0x4d7fd0`)
+  called from two not-yet-identified sites (`process_flatten_land`/`0x50cabe` - surprising name for this, and
+  `FUN_00512350`/`0x51256c`) - worth checking if either is a different mechanic that also creates "just
+  converted" units and would likewise feed this cleanup category.
+- **Checked the rest of the priority list and found the real answer: it's architectural, not a missing
+  function.** Read 7 more of the 12 priority categories this session (`0x59d878`'s row now has task-type
+  mappings for 8 of the 12 positions) - position 9 turned out to be "find a defensive tower that needs
+  (re)garrisoning, preferably with firewarriors" (`0x4e5bf0`/`0x4f5f70`, new rows), not combat-related either.
+  **Across all 12 top-level priority categories AND all ~21 goal-sub-evaluators checked this session, NONE of
+  them enqueue the ATTACK task (type 20) except `ATTACK`'s own PopScript opcode handler (`0x4e5fd0`).** This
+  means **the native computer-player AI never autonomously decides to attack - `DO ATTACK` from a tribe's own
+  script is the ONLY way an attack is ever queued.**
+- **Resolves the user's question, with a hypothesis in place of a direct trace**: since the engine itself has
+  no "attack when losing" code path at all, the "tribe nearly wiped out -> send everyone to attack" behaviour
+  the user described almost certainly lives in INDIVIDUAL LEVEL SCRIPTS, not the engine - e.g. an
+  `IF (INT_MY_NUM_PEOPLE < N) { DO ATTACK ... 999(to-the-death) ... }` inside an `EVERY` block, both valid
+  PopScript per `ai-scripts.md`'s own grammar. That would also explain the user's own observed "with a few
+  edge cases for vehicles" - level-script variation, not a single hardcoded engine rule, is exactly the kind of
+  thing that would differ script to script. **Not independently confirmed**: no `cpscrNNN.dat`/level data was
+  available in this session to find a literal example - a future session with the actual level files (or
+  `open-populous3`'s own `pop3-ai-script` crate run against one) could decompile a likely late-game/
+  losing-condition script and check directly. For `open-populous`: this means a native "desperation attack"
+  AI behaviour should NOT be hardcoded into the engine - if it's needed, it's script data, the same place every
+  other scripted `ATTACK` call already lives.
+- Smaller bonus find in `0x461d70`: pinned down where the raw `cpscrNNN.dat` bytecode actually lives once
+  loaded - a flat 4×12552-byte buffer at `0x95f7b2` (one slot per tribe_num), pointed to by a 4-entry table at
+  `0x9608b2`. Also found a tiny synthetic "empty script" (`{ } SCRIPT_END`, 6 bytes) written per tribe_num near
+  `0x95d7b4` - likely what a computer tribe with no real script assigned runs, one level more primitive than
+  the on-disk 34-word stub scripts `ai-scripts.md` already documents for multiplayer levels.
+- Two more per-tribe arrays zeroed at init but not yet identified: `tribe+0x476` (10 entries × 8 bytes) and
+  `tribe+0x4ce` (8 entries × 12 bytes) - good candidates for `SET_MARKER_ENTRY`'s and `SET_SPELL_ENTRY`'s own
+  storage respectively (slot counts/record sizes line up plausibly), not confirmed.
+
+### 6c. Follow-up (2026-10-30, same day): CONSTRUCT_BUILDING traced end to end
+
+Per the user's follow-up ("construct building should look for a spot, assign braves etc") - fully traced task
+type 0's handler (`0x4c6da0`, updated row - was a stub, now the full 10-state lifecycle read directly from its
+own dispatch table at `0x4c7348`). Confirms the user's intuition exactly, with concrete mechanism:
+
+1. **Pick siting parameters by building model** (state 0): facing (a difficulty-table byte or random 0-3,
+   matching `INT_ATTR_RANDOM_BUILD_SIDE`), search radius and retry budget - model 4 and models 13-14 get their
+   own special-cased radius/retries, everything else gets a default (radius 2000 cells, 40 retries).
+2. **Look for a spot** (states 0/2): calls a dedicated spot-finder (`0x4f7aa0`, not traced further - the next
+   natural target if `open-populous` wants the exact placement algorithm) in a retry loop until it reports
+   found or failed.
+3. **(model 4 only) resolve a shared anchor** (state 3): a one-time-per-tribe reference position cached from
+   whatever's already at the target cell.
+4. **Assign braves** (state 5): finds and claims available workers near the site (`0x4f5d20`+`0x4f8490`, not
+   traced further), forcing each one into person state 14 ("committed to this job" - a second, non-idle use of
+   that state beyond the "just converted" one found last session, worth a `person_states.tsv` update if a
+   future session nails down the distinction precisely).
+5. **Commit to the site** (state 7): re-verifies the target is still valid, then runs the exact same 4-call
+   "broadcast/refocus" sequence (notification, marker-clear, a `0x418ce0` call) task 5's handler also uses -
+   confirmed as a genuinely shared, reusable "I'm committing to this target" primitive across task types.
+6. **Ongoing staffing monitor** (state 8): the task's steady state for the rest of construction - keeps
+   checking build progress and worker headcount, topping up as needed. **Side finding**: this state also calls
+   `0x4f6320` - literally task type 1's OWN top-level evaluator function (`0x462790`'s "~21 evaluators" list) -
+   as a plain subroutine, and can independently spawn a brand-new task type 1 once an internal counter exceeds
+   200. **Concrete proof this AI is built from reused primitives cross-calling each other, not a clean
+   hierarchy** - worth keeping in mind for `open-populous`'s own AI architecture: don't assume each task type
+   is only ever triggered from one place.
+7. **Abandon/cleanup** (state 9): releases the task slot via the same generic pair every task handler uses.
+
+Remaining open threads for a future session: `0x4f7aa0` (the actual site-search algorithm - highest value),
+`0x4f5d20`/`0x4f8490` (worker selection criteria), and 7 more untraced task-type handlers (ids 3,4,6,7,8,9,11
+all still only "named," not traced) if the same depth is wanted for train/defend/etc.
+
+## 7. Angel of Death spell - full cast-to-expiry behaviour (2026-10-30, substantially rewritten 2026-11-04)
+
+This section WAS also written directly into `open-populous/docs/specs/pop3-rev-analysis.md` (the "Angel of Death
+mechanics" section) and `open-populous/TODO.md` in the session that first wrote it, since that repo happened to be
+attached then - but those edits are sitting uncommitted in that repo's own working tree (AGENTS.md: no commits in
+`open-populous`), so nothing durable exists there yet if that container is ever reset before a human commits them
+by hand. This section is the safety copy, written the way the user actually wants it read: as a plain description
+of the BEHAVIOUR a clean-room implementation needs to reproduce, not a dump of exe addresses. The exe references
+are kept to a short parenthetical per paragraph for anyone who wants to re-verify a claim -
+`functions.tsv`/`person_states.tsv`/`effect_states.csv`/`sound.tsv`/`trace-backlog.md` carry every address, offset
+and byte-level detail this write-up deliberately leaves out.
+
+**Update, 2026-11-04**: a follow-up investigation (four further sessions, prompted by targeted user questions and
+corrections) resolved almost every open question the original version of this section listed, and corrected two
+things it got outright wrong (a particle count, and the throw-direction/self-damage claims in an earlier internal
+draft that never made it into the text below). Everything below is the current, corrected picture.
+
+**What casting it actually looks like.** Nothing happens on screen the instant the spell is cast - two sounds
+play, nothing is drawn. A short time later, something falls from the sky toward the target point. That falling
+object has **no shape of its own** - it is invisible - but the instant it starts falling it releases a one-time
+burst of **42 small glowing spark particles** (not "about 36" - precisely 42, in 6 groups of 7), all spawned at
+once, each cosmetic (no damage of its own). These sparks ride along in a **fixed formation trailing the invisible
+object down** - they do not swirl or drift independently of it despite being called "orbiters" internally;
+picture a static shower of embers glued to the falling point, not a swarm with its own motion. The instant the
+falling object reaches the ground, two things happen together: the whole spark shower detaches and scatters,
+each spark independently popping outward and arcing down to the ground on its own before vanishing, AND the
+ground itself visibly reacts - a ring expands outward from the impact point, lifting the terrain as it passes and
+settling it back down behind it, over about three-quarters of a second, with an impact sound. This ground
+reaction is a real, physical height change to the landscape, not a decal or a particle effect laid over flat
+ground - **it is mechanically the same idea as a drop hitting the surface of water, just implemented as an actual
+terrain ripple and shown on dry land.** Only after that ripple finishes does the real creature appear, and its
+own appearance comes with a second, separate burst: a small shower of debris (as if something nearby shattered)
+and a genuine damaging blast at the landing point, identical in strength and push to the ordinary Blast spell. So
+the full sequence a player sees is: two sounds, a shower of falling sparks trailing an invisible object, sparks
+scattering outward at the same moment the ground ripples outward with an impact sound, then the creature appears
+already flying, accompanied by its own debris-and-blast flourish. (exe refs: `effect_aod` 0x5121C0/0x512240,
+meteor 0x50A3E2/0x514F60, orbiter sparks 0x514D00, ground ripple 0x514970/0x5149F0, `create_aod` 0x4DD700 -
+`functions.tsv`, `effect_states.csv` rows 56/57/59.)
+
+**What kind of thing it is.** The Angel of Death is a new kind of person-like unit, distinct from the seven
+ordinary ones (shaman, brave, warrior, preacher, spy, firewarrior, wildman). It belongs to the tribe that cast
+it, but the player never controls it directly: nothing in the exe lets it be clicked, boxed, or given an order,
+and it never enters a building. It is airborne for its entire existence - there is no code path anywhere that
+lets it touch down, so "never lands" is a flat guarantee, not just a design intention. From the moment it
+appears, it runs on its own built-in behaviour, independent of the normal player-order system entirely. On
+certain spawns it does one extra thing before settling into its normal hunting loop: a one-time scripted approach
+flight toward roughly where the local human player is looking/positioned, climbing to a fixed cruising height,
+before it ever starts actually hunting - a deliberate "make an entrance toward the player" flourish, not part of
+the ordinary hunt cycle. (exe ref: `0x4DB980`'s outer case 9 - `person_states.tsv` row 28.)
+
+**How it hunts.** Every time it needs a new target, it first checks for a nearby ENEMY Angel of Death anywhere on
+the map - if one exists, that becomes the target, overriding anything else it might otherwise go after. Only if
+no rival angel is around does it fall back to looking for an ordinary enemy, and when it does, there is no
+protection for anyone: it can target a shaman exactly like any other follower, something no other attacker in the
+game can do (shamans are normally a protected target type). The one thing it explicitly leaves alone is a person
+who is mid-way through being converted by a preacher. **Confirmed this round: its target is always a PERSON, full
+stop** - the search that finds a victim never even looks at buildings or vehicles as candidates; see "Can it
+attack a building or a vehicle" below for the one real exception to "just a person."
+
+**Fighting an ordinary target - now confirmed to be a real 3D swoop, not a flat glide-in.** Once it locks onto a
+victim, it closes in and keeps noticeably more distance (roughly twice as far) while approaching if that victim
+happens to be standing inside a watchtower specifically than if they're out in open ground - the angel visibly
+reacts to someone sheltering in a tower, even though (see below) it can never damage the tower itself. The
+approach height also actively changes to match: the angel genuinely climbs or dives toward the victim's real
+height as it closes in, calculated fresh for a coordinated arrival (so it reaches the right altitude at
+roughly the same moment it reaches the right horizontal position, easing in rather than snapping), and it will
+come down to within about 100 world units of the ground to grab someone standing there - this is a real,
+code-confirmed dive, not an approximation. Once close enough and correctly oriented, it moves in to grab the
+target. Once grabbed, the victim is completely immobilised - they do not act on their own at all, they are simply
+carried wherever the angel flies. The carry itself lasts a fixed stretch of time (about two and a half seconds),
+during which the angel visibly climbs and weaves rather than flying in a straight line. Near the end of that
+carry, the angel throws the victim forward, in the direction the ANGEL itself is currently facing (not the
+victim's own facing, as an earlier internal draft of this write-up incorrectly said), and the victim then falls
+and dies exactly the way anyone falling from a height dies in this game - **there is no special killing blow
+belonging to the angel itself, and no self-damage cost charged to the angel for the kill either (also corrected
+from an earlier draft); the fall is what kills, through the same mechanism Whirlwind's own lifted victims die
+from.** No sprite exists for "being held in the angel's mouth or claws" - the victim most likely just keeps
+whatever pose they already had while being dragged along, rather than switching to a dedicated carried pose.
+(exe refs: person state 28/0x4DB980 - case-5 hunt/engage and the engagement-gate helper `0x4DADA0` - the
+carry/release step `0x4E0A30`, the held-victim state 40/0x4E0760 + 0x4E05E0 - `person_states.tsv` rows 28 and 40.)
+
+**Can it attack a building, or grab someone riding a vehicle? Mostly no, with one real exception.** It cannot
+target, damage, or destroy a building as an object anywhere in its code - the only thing a building affects is
+the STANDOFF DISTANCE while approaching a person who happens to be sheltering inside a watchtower specifically
+(see above); no other building type gets any special handling, and there is no building-occupant-extraction
+mechanic distinct from the ordinary person-grab. It also cannot directly evict someone riding in a boat or
+balloon - its targeting never even considers vehicles as objects. However: if a vehicle is destroyed by ANY
+means (not angel-specific - this is generic engine behaviour for every unit's destruction), its passengers are
+automatically ejected as part of that teardown, which could easily look like "the angel made people jump out of
+a boat" if the angel (or anything else) sinks/destroys the vehicle itself, even though the panic/fear effect
+below plays no part in that - a boarded passenger simply isn't released by being frightened. (exe refs: the
+candidate-search scan `0x4DB980` outer case 4, the engagement-gate helper `0x4DADA0`, the tower-door check
+`0x40A3F0`, boarding `0x4657D0`, disembarking `0x4659D0` (one of whose callers lives inside the generic unit
+deletion routine) - `person_states.tsv` row 28, `functions.tsv`.)
+
+**Fighting another Angel of Death.** This is NOT a choreographed duel - there's no grappling, no distinct
+attack animation, no circling. It's a straightforward, repeated exchange where each angel's current health is
+compared, the healthier one deals damage to the weaker one (scaled so the stronger side snowballs toward
+winning), and the loser gets shoved backward hard, staggering for a while before it can re-engage. Visually this
+should read as the two creatures repeatedly colliding and bouncing off each other violently, with the losing one
+getting knocked further and further away each time, rather than two creatures trading scripted blows. (exe ref:
+`0x4E0830` - `functions.tsv`.)
+
+**Affecting bystanders.** Completely independent of whichever target it's actively hunting, the angel also
+frightens anyone else nearby just by being close to them: every tick, anyone within a modest radius who is
+eligible (ordinary followers, not shamans and not another angel) gets forced into a panicked run, the same panic
+state Insect Plague's own sting causes. So even people it is never going to grab can be seen fleeing simply
+because the angel flew near them. This panic effect does NOT, by itself, pull anyone out of a vehicle they're
+riding in (see "Can it attack a building or a vehicle" above). (exe ref: `0x4DB5E0` - `functions.tsv`.)
+
+**Visual appearance in flight.** The flying body itself swaps between three distinct poses - a cruising pose, a
+diving pose, and a third, separate "launching/climbing" pose used only during a brief climb-out (e.g. the
+one-time player-approach entrance described above). The cruise-to-dive transition is a genuine short animation
+blend, not an instant toggle: it steps through the two extremes over up to five ticks, passing through three
+visibly distinct in-between poses along the way, so the switch should read as a quick morph rather than a snap-cut
+in any reimplementation. **The simulation also computes real pitch (nose up when flying slowly, levelling off as
+it speeds up, with a sharper scripted dip during the one-time entrance) and real banking (leaning into a turn,
+proportional to how sharply it's turning) every tick** - both are switched off while it's actively carrying a
+victim or sprinting after a release. **Update, 2026-11-04: confirmed the renderer genuinely applies both.** The
+companion is drawn as a real 3D mesh (its model id indexes a per-model point/face table, not a 2D sprite frame),
+and the function that builds its on-screen orientation every time it's drawn composes a real rotation from the
+pitch value AND a separate real rotation from the bank value onto its base heading, via the engine's own generic
+3x3-rotation-matrix machinery (the same kind of matrix-compose step buildings and other true 3D objects use) -
+skipped only for buildings, which take a simpler yaw-only path instead (matching the sinking-building's own
+rock animation elsewhere in this doc, which also only ever touches yaw). So this was never a dead computation:
+**the original game really does tilt and bank the angel's flying body**, resolving the open question below and
+confirming a reimplementation matching this formula will match the original's actual on-screen behaviour, not
+just its unused intent. (exe refs: `0x4DE440`, `0x40CC30`, `0x4DDB30`, the object-to-mesh draw prep at
+`0x4708D0` - all `functions.tsv`.)
+
+**What ends its life - fully resolved, two different endings.** The spell has both of its documented caps - a
+2500-turn duration limit and a 40-kill limit - checked literally in code, every tick, and either one hitting
+forces the SAME outcome: the angel retires. There are two different ways that retirement actually plays out,
+and which one happens depends on how the angel got there:
+- **Running out of time or kills (the common case): a graceful ending.** A short holding period (about a
+  second and a half), then it quietly vanishes with a sound effect and a small, soft death-puff visual - no
+  violence, no damage to anything nearby.
+- **Being killed by combat damage (almost always from fighting another angel, since nothing else can meaningfully
+  hurt it): a violent ending.** The instant its health would otherwise drop critically low, it immediately
+  shatters its own visible flying body into flying debris and detonates a real, damaging blast (identical in
+  strength to the ordinary Blast spell) at its position, then vanishes at once with no holding period and no
+  separate death-puff - the shatter-and-blast IS its death effect in this case.
+So: a natural expiry should look calm and quiet; a combat death should look like a small explosion. (exe refs:
+`0x4DB980`'s shared per-tick tail, `+0x97`/`+0xB2` fields, outer cases 6/7 - `person_states.tsv` row 28,
+`functions.tsv`.)
+
+**What it's immune to.** It shrugs off most things a player might try against it. A firewarrior's ranged shot
+still hurts it, but only for a small fraction of the damage it would do to an ordinary follower - noticeably
+weaker, not harmless. Whirlwind cannot lift it the way it lifts everyone else. Other spells' exemption rules for
+it were not individually re-verified this session, but existing documentation already lists it alongside shamans
+as excluded from Lightning's kill, Insect Plague's sting, Hypnotism's capture and Magical Shield's own
+protection-granting list - i.e. the pattern across the game is consistently "shamans and angels are both
+untouchable by ordinary spell effects," with the firewarrior's partial damage being the one confirmed exception.
+
+**What was looked for but genuinely not found, even after the follow-up sessions.** No dedicated fire-breath
+attack exists anywhere in its behaviour - the "breathes fire" impression most likely comes from the one-off blast
+that happens when it first appears, not an ongoing attack. A handful of narrower loose ends remain, none of them
+load-bearing for how the spell plays: the exact mesh/pose used by the brief "launching" climb-out beyond knowing
+it's a genuinely distinct third pose; and a couple of still-unopened minor flight sub-states that appear to be
+further scripted-approach or patrol variants, not part of the ordinary hunt loop. (Whether the computed
+pitch/banking values reach the renderer - genuinely open as of the original version of this section - is now
+resolved: see "Visual appearance in flight" above.)
+
+**What this means for implementing it.** A new, player-uncontrollable flying unit kind that is spawned by a
+multi-stage cast effect (an invisible falling object trailing a fixed 42-spark formation, a real terrain-ripple
+impact with the sparks scattering at the same instant, then the creature itself with its own small blast), runs
+its own built-in AI loop instead of going through the normal order system, can never land or be selected, swoops
+down in genuine 3D to grab a victim (closer to the ground for someone caught in the open, further back but still
+reactive for someone sheltering in a tower), carries a single victim at a time before releasing it to die by
+ordinary fall physics, fights a rival angel through a pure health-comparison-and-knockback exchange rather than a
+scripted fight, never touches buildings or vehicles directly, and ends its own life in one of two ways depending
+on cause (a quiet fade-out on natural expiry, a violent self-detonation if beaten in combat) - and should be
+exempted from the same "shaman-and-angel-proof" spell-damage list every other immune-type exemption in the game
+already uses, with one partial exception for firewarrior fire. Visually, it's worth giving it real pitch and bank
+while flying (formula above) - now confirmed to match the original engine's own actual on-screen behaviour, not
+just its computed-but-unused intent - which directly answers the one visual complaint that prompted this whole
+follow-up investigation.
+
+### 6d. Follow-up (2026-10-30, same day): task type 1 (resource-gathering, likely FETCH_WOOD) traced
+
+Continuing "keep digging each task" - traced task type 1's handler (`0x4c7a60`, updated row) in full via its
+own 10-state dispatch table. This is the task `CONSTRUCT_BUILDING`'s own monitor loop spawns as a side effect
+(see 6c) once its internal "need" counter passes 200 - matching `CONTEXT.md`'s documented "fetch wood -> build
+up" pipeline closely enough that FETCH_WOOD is the leading candidate, though not textually confirmed (no direct
+reference to wood/lumber data found, just the triggering context and shape).
+
+- Searches for up to 2 workers (hard cap, `+0xb < 2`) to send to a target: a fresh idle candidate via one
+  finder (`0x4f7dc0`), or - if none available - BORROWS an occupant from a nearby building whose own
+  stock/pieces count (`+0x9a`) exceeds 2, walking up to 20 of its worker-list entries (`+0x6a`). Either way,
+  the chosen unit is forced into person state 14, the SAME transition `CONSTRUCT_BUILDING`'s own worker-assign
+  step uses - third confirmed context for that state (just-converted, construction-assigned, resource-task-
+  assigned), reinforcing that it's a generic "committed to a job, no longer idle" marker rather than literally
+  meaning idle.
+- `0x4f7dc0`'s argument shape (`tribe, 2, 2, -1, 1, model, 0x20`) matches `CONSTRUCT_BUILDING`'s own
+  `0x4f8490`'s leading arguments (`tribe, 2, 2, -1, 1, ...`) closely enough that both are very likely thin
+  wrappers around one shared "find N eligible workers near X" primitive - a good `open-populous` implication:
+  implement this as one parameterised worker-finder, not per-task duplicate logic.
+- Finishing (states 8/9, near-duplicate code) recomputes the exact snapped target position and broadcasts TWO
+  notifications (categories 3 and 9) plus the same "commit/refocus" trio seen in two other tasks now
+  (`0x4f6440`/`0x4359b0(-1,-1,-1)`/`0x418ce0(tribe,0xe)`) - this 3-call tail is now confirmed used by at least 3
+  different task types (5, 0, 1), clearly a generic "I'm done with/moving on from this target" primitive worth
+  implementing once and reusing, not per-task.
+
+### 6e. Follow-up (2026-10-30, same day): task 9 is a probabilistic cross-task dispatcher, not a no-op
+
+Earlier sessions guessed task 9 (`0x4c5cf0`) was "a lightweight reschedule... not real work" since it calls
+almost nothing but shared AI primitives. Traced it fully this session and that guess was wrong: **task 9 is a
+"something changed near our base, decide how to react" dispatcher** that can, as pure side effects:
+
+- Enqueue task 8 (the reactive counter-attack task, `0x4c5f70`'s row - confirmed last session as triggered by
+  an "avenge me" per-unit flag) when its own local trigger field is set.
+- Separately, roll a die and enqueue EITHER task 11 or task 15 (both untraced) depending on a `tribe_num`/
+  difficulty-indexed byte and the roll's outcome.
+
+Its own trigger (`0x4e5b60`'s evaluator, own row, also updated) reads from the exact same per-tribe "anchor
+point" fields (`tribe+0x5b4`/`+0x36c`) `CONSTRUCT_BUILDING` populates once it's picked a base-adjacent site -
+another concrete cross-system link, not a coincidence of shared offsets. **For `open-populous`**: don't model
+task 9 as inert bookkeeping; it's a real decision point feeding at least 3 other behaviours. Tasks 11 and 15
+are now the natural next targets if continuing this - unlike most other untraced tasks, these two are reached
+by name from a session that specifically traced their trigger, not just found in the raw dispatch table.
+
+### 6f. Follow-up (2026-10-30, same day): tasks 11 and 15 traced - "wander/patrol near our anchor"
+
+Per the user's "keep going into 11/15" - both fully traced via their own dispatch tables (`0x4c8c50`/`0x4c8fe0`,
+updated rows). They're close siblings, confirming and extending an earlier session's partial guess ("the
+height+LOS pairing suggests a pick/validate-a-destination-point goal"):
+
+- Both derive a search radius from the SAME per-tribe "anchor" byte (`tribe+0x36c`) `CONSTRUCT_BUILDING`/task 9
+  also use, versus a `tribe_num`/difficulty-indexed table entry, then roll up to 24 random nearby offsets,
+  validating each via `calc_point_height` (`0x44e940`, already a confirmed name from an earlier session) and a
+  line-of-sight check (`0x518200`) until a usable cell is found.
+- **Task 11** ("send a unit to wander there"): takes a unit directly via its own `param_a` (or, when spawned
+  with `param_a=0` as task 9 does, presumably picks implicitly - the exact fallback wasn't nailed down), sends
+  it to the chosen point, optionally also finds and sends a second "escort" unit nearby.
+- **Task 15** ("post a spare defender there"): the key difference from task 11 - gated by an explicit quota
+  check, `((tribe+0xa33)+(tribe+0xa2d))/2 - 0x4f3ff0(tribe)` (two unidentified per-tribe counts, probably
+  desired vs. trained defenders, minus however many are already posted) - only sends someone if the result is
+  positive. Reads as a genuine "defend base" style behaviour, distinct from task 11's more generic "wander."
+- Both are now the FIFTH confirmed distinct context for person state 14 as a generic "committed to a job, no
+  longer idle" marker (after just-converted, construction-worker, resource-gathering-worker, and now these) -
+  strong enough pattern that `open-populous` can treat it as the engine's universal "pulled out of default
+  behaviour and given something to do" transition, not something needing a dozen special cases.
+- Neither maps cleanly onto a named `ai-scripts.md` `DO` command - both are good candidates for the internal
+  states that doc lists as having "no token" (`GUARD_AT_MARKER`, `BOAT_PATROL`, `DEFEND_SHAMEN`,
+  `SEND_ALL_TO_MARKER`), not confirmed which.
+- 4 new functions.tsv rows for the shared callees (`0x49c890` offset-to-position, `0x518200` LOS check,
+  `0x4f3ef0` cell-blocked check, `0x4f3ff0` committed-defender count) - all still only named, not traced; of
+  these `0x49c890` is the highest remaining value (it's the one piece of "how does a random point actually get
+  picked" not yet understood).
+
+### 6g. Follow-up (2026-10-30, same day): sweeping the remaining task types, starting with TRAIN_PEOPLE
+
+Per the user's request to keep digging each task type and commit per task. **Task 26 (`0x4cf4c0`) is
+TRAIN_PEOPLE**, correcting an earlier session's "48 bytes, no calls, coded no-op" read - that 48 bytes was only
+the entry dispatcher; the real 7-entry switch table points to state bodies laid out separately (a Ghidra
+function-boundary gotcha already seen for several other tasks, worth remembering before writing off any small
+task handler as a no-op without checking its own switch table for out-of-bounds targets).
+
+Confirms `ai-scripts.md`'s `INT_ATTR_PREF_*_PEOPLE` attributes directly: computes 5 per-type training quotas as
+literal percentages (`byte * budget / 100`) of a training-capacity budget, trims them fairly if capacity falls
+short, then assigns braves to the right training building (building-type constants `2,3,6,4,5` for the 5 unit
+types, `docs/unit_types` would pin down which is which) via the same worker-finder (`0x4f8490`) `CONSTRUCT_BUILDING`
+uses, plus a separate path specifically for training the shaman. Loops until the whole quota is filled across
+possibly several ticks. 4 new functions.tsv rows for its callees (target-resolve, capacity-read, two validity
+checks), all still named not traced.
+
+### 6h. The full AI task sweep and two key helpers (2026-10-30, continuing session)
+
+Per the user's request to dig into each remaining task and commit per task, then the standalone helpers. All
+24 non-no-op AI task types (`maybe_ai_func_1`'s dispatch, `0x4623E0`) are now traced to at least a substantial
+level - summary table (own `functions.tsv` row has the full state-machine detail for each):
+
+| Task | Role (confidence) |
+|---|---|
+| 0 | `CONSTRUCT_BUILDING` - full lifecycle (confirmed) |
+| 1 | Resource-gathering, likely `FETCH_WOOD` (confirmed shape, name inferred) |
+| 2 | **Fully resolved (2026-11-04): the shaman's own autonomous "seek wildmen, cast Convert" behaviour, not ghost-escort; see §6o** |
+| 3 | Synchronization primitive - releases state-14-parked workers once a target building is ready |
+| 4 | `DEFEND_SHAMEN` gathering feeding a `STATE_SEND_GHOSTS` phase (confirmed shape) |
+| 5 | Integrates freshly-converted followers (confirmed, corrects a "desperation" false lead) |
+| 6 | Assembles a themed group (spy/firewarrior/shaman/angel) around a specialist unit (shape confirmed, label open) |
+| 7 | Type-aware garrison staffing with active eviction - **CONFIRMED (2026-11-04) as `PUT_PERSON_IN_DT`'s own native engine, not just a candidate; see §6n** |
+| 8 | Reactive counter-attack, triggered by an "avenge me" per-unit flag |
+| 9 | Probabilistic dispatcher - spawns task 8, or randomly task 11 or 15 (confirmed, corrects "no-op" misread) |
+| 11 | "Wander" - sends a unit (+ optional escort) to a random point near the tribe's anchor |
+| 13 | Enemy-spotted alert sequence (candidate: spy/intrusion detection) - no combat order issued |
+| 14 | The shaman's automatic spell-cast execution (candidate: native `SET_SPELL_ENTRY`) |
+| 15 | "Post a defender" - same destination search as 11, gated by a spare-defender quota |
+| 16 | Fills a targeted building's garrison to capacity (candidate: `POPULATE_DRUM_TOWER`) |
+| 17 | Recovers a unit/vehicle that can't path home (candidate: `FETCH_LOST_PEOPLE`/`FETCH_LOST_VEHICLE`) |
+| 18 | Resolves a vehicle, searches for a home-anchored spot (candidate: `BOAT_PATROL`/`VEHICLE_PATROL`) |
+| 19 | **Fully resolved (2026-11-04, corrected same day): vehicle mission readiness/loading (boat or balloon) - maintain enough ready vehicles, find a staging/launch spot, load troops aboard; see §6p** |
+| 20 | `ATTACK` - script-exclusive, confirmed no native autonomous trigger |
+| 24 | Native execution of `SET_MARKER_ENTRY`/`MARKER_ENTRIES` patrol groups - **fully resolved (2026-11-04): recruits by proximity, then NEVER issues any movement order; see §6m** |
+| 25 | Unconditional mass rally to a random nearby point (candidate: `STATE_DEFEND`) |
+| 26 | `TRAIN_PEOPLE` (confirmed, corrects a "coded no-op" misread from a tiny-looking entry dispatcher) |
+| 27 | **Fully resolved (2026-11-04): mount a firewarrior-crewed vehicle mission - confirm enough vehicles, disembark arrived ones, recruit firewarriors for the rest; see §6q** |
+| 28 | A training-quota sibling of task 26 (confirmed shape, exact distinction from 26 open) |
+
+**Cross-cutting findings that matter more than any single task**:
+- **Person state 14 is the engine's universal "pulled from default behaviour, committed to a job" marker** -
+  confirmed at least 15 separate times across unrelated tasks (conversion, construction, resource gathering,
+  wandering, defending, training, garrisoning, patrol groups...). `open-populous` should model this as one
+  generic transition, not per-feature special-casing.
+- **A small set of primitives get reused constantly**: a "find N eligible workers" family (`0x4f8490`/`0x4f7dc0`
+  and siblings, all sharing a `team,team,-1,1,...` argument shape), a 3-4-call "commit/refocus" tail
+  (`0x4f6440`+`0x4359b0(-1,-1,-1)`+`0x418ce0(tribe,0xe)`, sometimes plus a `0x435730` notification) now seen in
+  at least 8 different tasks, and two generic "wait N ticks" helpers (`0x4f5c80`/`0x4f5d10`) that appear to own
+  their own substate-advance internally.
+- **Two Ghidra function-boundary traps** cost real time this session and are worth remembering for any future
+  dig: (1) several "48-byte, no calls" task handlers (26, 28) were actually just their own entry dispatcher,
+  with the real body laid out as separate unlinked chunks after the jump table - always check a small handler's
+  own switch table for out-of-bounds targets before calling it a no-op; (2) task bodies interleave multiple
+  logically-distinct phases (tasks 2, 19, 27) that don't cleanly map to one `ai-scripts.md` behaviour each -
+  some of these handlers may legitimately implement more than one named AI behaviour.
+- **Resolved `0x49c890`** (own row): the exe's generic "convert a 1D magnitude into a 2D point" primitive, built
+  on a growing-square-ring (spiral) layout - every "pick a random/sequential nearby point" search in the AI
+  (tasks 2/11/15/18/19/25) goes through this one function.
+- **Resolved `0x4f7aa0`**, `CONSTRUCT_BUILDING`'s own site-search: deterministic terrain + footprint checks via
+  the spiral generator, with an extra water-adjacency-shaped check specifically for building types 13-14 -
+  confirms those two types (previously guessed as "stricter siting needs") are very likely the boat/airship
+  huts. Not a flood-fill or real pathfinding search - a bounded number of spiral guesses per tick.
+
+**For `open-populous`**: the task-queue/evaluator architecture (`0x462790`'s row) plus this now-fairly-complete
+task catalog is probably enough to design the AI subsystem's data model directly, even before every single
+callee (still ~40 `named`-but-not-`traced` helper rows) is individually read. The remaining highest-value
+targets, if continuing: `0x4f8490`/`0x4f7dc0` (the shared worker-finder's exact selection criteria), `0x4ea920`
+(the move/build order primitive several tasks call) - tasks 2, 19 and 27 are all now fully resolved, see §6o,
+§6p and §6q.
+
+### 6i. Follow-up (2026-11-04): `GIVE_UP_AND_SULK` debunked - not a retreat/guard order
+
+Chased this session's own first Native AI backlog item: what `GIVE_UP_AND_SULK`'s ON case actually does to a
+tribe's units, since `ai-scripts.md` only had the community wiki's unconfirmed "everyone guards the shaman"
+description. Traced its own callee (`0x41CA10`) end to end - it takes the WHOLE TRIBE, not a single target,
+and **there is no order reassignment, movement command, or formation anywhere in it.** Instead it's a one-shot
+cleanup/punishment sweep:
+- Forcibly pulls every non-shaman follower off any vehicle they're currently riding.
+- Cripples the tribe's own Angels of Death - rerolls their life down to a random tiny value (32-95, out of a base
+  of 10,000), left to finish themselves off in combat rather than removed outright.
+- Re-times any unit this tribe currently holds hypnotised - rerolls their revert-to-original-owner countdown to a
+  new random (and typically much shorter) value.
+- Sweeps and deletes the tribe's own ghost units, the same generic "ghosts get deleted" rule used everywhere else.
+- Reveals/reverts any of the tribe's own currently-disguised spies.
+- Force-tears-down the tribe's own in-progress "soul convert 2" (a second-phase preacher-conversion coordinator)
+  instances.
+
+This sits ALONGSIDE the already-documented generic "force success" flag this same command also sets (which
+affects preacher-conversion rolls and some level-script-forced outcomes elsewhere - that part of `ai-scripts.md`
+was already correct). **Net for `open-populous`**: implementing `GIVE_UP_AND_SULK` should NOT look like "send
+everyone to defend the shaman" - it's this specific bundle of cleanup actions plus the force-success flag. The
+wiki's "everyone guards the shaman" claim does not hold up anywhere in this command's actual code.
+
+### 6j. Follow-up (2026-11-04): `SET_ATTACK_VARIABLE` reports `ATTACK`'s own accept/reject status, not the battle's outcome
+
+`SET_ATTACK_VARIABLE $v` is a pure "register" opcode: it stores `$v`'s own variable-slot id into a per-tribe
+staging field that has exactly one writer in the whole exe and is NEVER reset - so once a script calls it, every
+later `ATTACK` call in that same script keeps reporting into that same variable, until a later
+`SET_ATTACK_VARIABLE` call changes it. Each `ATTACK` call writes one of four literal codes into that variable via
+the engine's generic script-variable store:
+- **0** - the attack task was successfully queued.
+- **1** - this tribe is already at its own per-`ATTACK` concurrency cap (multiple attacks CAN be active at once,
+  up to a per-tribe limit - it's a cap, not a strict single-instance lock).
+- **2** - no free AI task slot (each tribe has 10, shared across every AI task type).
+- **3** - no valid target was found matching the given `target_type` (marker/building/person).
+Found a later session, specific to `ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON` attacks (see the addendum at the end of
+this section for the full mechanism):
+- **6** - not enough ready vehicles of the needed model exist to carry the force; the attack never departs.
+- **51** - the force arrived but nothing was left capable of attacking; a genuine cancellation, no attack fires.
+- **52** - the attack WAS issued successfully, but the force's final regroup nudge hit its own time/cycle cap -
+  a partial-success/timeout marker, not a cancellation (easy to misread as one - double-checked directly).
+- **5** - a generic fallback, written only if none of the above (or the original 0-3) already reported something
+  this run.
+
+So `ai-scripts.md`'s own "(?)"-marked guess ("a variable the AI may update with the attack's outcome") was right
+in spirit but imprecise: **it's the immediate accept-or-reject status of the `ATTACK` call itself, reported the
+same tick it's issued - never the eventual battle's result** (kills, damage dealt, win/lose). A script checking
+this variable right after `DO ATTACK` can tell whether the attack was actually launched, not how it went.
+
+Side finding from the same trace, also worth a citation: `ATTACK`'s 13th/last parameter, `m3`, is read past (the
+script's own program counter is advanced over it) but its value is never actually resolved or used anywhere in
+the chain - confirms `ai-scripts.md`'s own "(?)"-flagged suspicion that `m3` has no visible effect; it's not just
+unused in practice, the original interpreter itself discards it outright.
+
+**Addendum (2026-11-04), a user hypothesis checked directly and confirmed**: does an `ATTACK_BY_BOAT`/
+`ATTACK_BY_BALLOON` attack only proceed if the tribe already plans/has built up vehicles for it, with the same
+guard applying to actually building the boat/balloon hut in the first place? Half confirmed, half not. `ATTACK`'s
+own transport sub-routine (a separate state machine it calls into, distinct from `ATTACK`'s own main gather/
+regroup/attack phases) checks the tribe's CURRENT count of ready vehicles of the needed model against how many
+the force requires - the exact same check tasks 19 and 27 (§6p, §6q) use in their own entry gates - and simply
+**fails the attack (code 6 above) if short**, rather than waiting for or triggering more vehicles to be built.
+Tasks 19/27 are independent, continuously-running maintenance that keep the fleet topped up ahead of time, not
+triggered on demand by a pending attack. The SECOND half of the hypothesis - that building the hut itself is
+similarly gated on attack intent - does NOT hold: the AI's own top-priority "construct essential buildings" check
+(§6b, `0x4e5580`) unconditionally tries to maintain a minimum count of boat huts and air/balloon huts, exactly
+like it does for towers - baseline infrastructure, built regardless of whether any attack is ever planned.
+
+### 6k. Follow-up (2026-11-04): worker selection is proximity-based, not id order - likely needs a code fix, not just a doc fix
+
+Traced the two shared "find eligible workers" functions (`CONSTRUCT_BUILDING`'s/`TRAIN_PEOPLE`'s/`ATTACK`'s own
+worker-assignment calls all go through these) to settle this session's own worker-selection backlog item. Both
+functions support TWO selection modes over the same eligibility filter:
+- **List order** - just take the first eligible candidate(s) walking the tribe's own person list front to back
+  (effectively unit-allocation/id order).
+- **Proximity** - rank every eligible candidate by actual distance (wraparound-aware, since the map is a torus)
+  to the target position, and take the closest one(s). For a single-candidate search this has a "good enough"
+  shortcut (anything within 18 cells on both axes is accepted immediately); for a multi-candidate search it's a
+  genuine top-K nearest-neighbour selection via a proper insertion sort, not a single pass.
+
+**Every real call site checked this session - including `CONSTRUCT_BUILDING`'s own worker assignment, confirmed
+by disassembling the call directly - uses the PROXIMITY mode.** The list-order mode exists in the code but, as
+far as surveyed, nothing actually calls it that way. **If `open-populous`'s own worker-selection currently
+guesses "idle braves in id order"** (this file's own earlier note from a past session - worth re-checking against
+the CURRENT crate before assuming it's still true), **that's the wrong one of the two real code paths**: the
+correct rule is "the closest eligible worker(s) to the work site." This is likely a small but real behavioural
+difference (which brave responds to a build order, not just which one is logged) - probably wants an actual code
+change in `game_core`, not just a spec-doc correction.
+
+(Separately, and NOT something that needs any follow-up: the building-site-SEARCH half of this same backlog item,
+`0x4F7AA0`, was already fully traced by an earlier session as a deterministic spiral search with terrain/footprint/
+water checks - see "Resolved `0x4f7aa0`" in §6h above. That half of the item was stale, not actually open.)
+
+### 6l. Follow-up (2026-11-04): `ATTACK`'s full gather-then-regroup-then-attack state machine, confirming the muster sequence
+
+Traced `ATTACK`'s own task handler end to end as a 24-phase per-tick state machine (a past session had only read
+its final per-person order-issuing phase). Confirms, with the actual mechanics, the muster sequence
+`ai-scripts.md`'s own "Sequence" bullet already describes narratively ("the force gathers... leaves, regroups at
+`m1`... then attacks"):
+
+1. **Gather phase.** Cycles through the AI's unit-type preferences one category per tick, each a quota computed as
+   `(preference percentage) x (total attack-force budget) / 100` - the exact same percentage-of-budget mechanism
+   already confirmed for `TRAIN_PEOPLE`'s own training quotas. For each category, recruits the closest eligible
+   units of that type (see §6k) toward the quota, committing each one to the engine's universal "pulled from
+   default behaviour, committed to a job" marker (person state 14). The shaman gets her own direct slot rather
+   than going through the quota search. Once every category has been tried once, any remaining shortfall against
+   the total budget is filled by a generic "any type, closest first" top-up pass. **Advances to the next phase the
+   moment the recruited force is merely non-empty - NOT once the full ideal quota is met.** If truly nobody at all
+   could be recruited, the whole attack is abandoned here.
+2. **Regroup-at-`m1` phase.** A genuine repeating poll: the force is set moving as a group, then the task
+   repeatedly checks whether it has actually converged, re-nudging any straggler still sitting in the "committed"
+   marker state (person state 14) until the whole group is together. This is the concrete mechanism behind "it
+   leaves, regroups at `m1` because units walk at different speeds."
+3. **Attack phase.** Only once regrouped does the per-person sweep fire real attack orders at the resolved
+   target. The shaman's own role here is to cast one of `ATTACK`'s own `spell1`/`spell2`/`spell3` parameters,
+   reusing the exact same mana-check/cast pipeline her autonomous auto-cast behaviour already uses elsewhere -
+   not a building-entry order.
+
+**For `open-populous`**: if `ATTACK`'s own implementation is currently simplified to "move toward the target and
+fight" with no staging, this state machine is worth citing/implementing precisely, including the "non-empty, not
+full quota" advance condition - a smaller/weaker force attacking sooner rather than a maximal one attacking later
+is a real, observable behavioural difference from the original.
+
+**Dead end this session, RESOLVED a later session (see §6n)**: `PUT_PERSON_IN_DT` - whatever actually orders the
+shaman (or anyone) into a building to occupy/defend it from the inside - was NOT found here. The shaman's own
+branch inside `ATTACK`'s per-person sweep, the natural place to expect it, turned out to be her spell-casting
+role instead (point 3 above) - a dead end, because `PUT_PERSON_IN_DT` turns out not to be reachable from `ATTACK`
+at all; it has its own dedicated opcode and task-enqueue path, found and fully traced in §6n below.
+
+### 6m. Follow-up (2026-11-04): the native "guard/patrol group" never actually walks or circles anywhere
+
+Prompted by checking whether `open-populous`'s own stand-in for `GUARD_AT_MARKER`/`GUARD_BETWEEN_MARKERS` (it
+currently reuses its player-facing 8-slot patrol-point mechanism, `docs/specs/units.md` "Patrol orders") might
+in fact be the SAME underlying native mechanism rather than an invented approximation. Traced task 24's
+(`0x4cedd0`) previously-unread "between m1/m2" gather sub-dispatch (`0x4cf2c4`) and all three finalize variants
+to completion, plus every function they call.
+
+**Answer: no, and more than that - the native mechanism doesn't walk/circle troops at all, in either mode.**
+Exhaustively checked every call task 24 makes, on both the "circle m1" and "between m1/m2" gather paths and all
+three finalize variants: nowhere does it call `group_alloc`/`order_set`/`group_assign`
+(`0x436c20`/`0x438730`/`0x436d00`, the generic order-giving machinery) or the player's own patrol-point assigner
+(`0x4ba9b0`). It recruits eligible troops by proximity to the marker (the same shared worker-finder
+`CONSTRUCT_BUILDING`/`TRAIN_PEOPLE` use) and commits each one into person state 14 ("committed to a job") - and
+that state's own per-turn handler is a content-free idle/fidget cycle (a cosmetic sub-state alternation on a
+random timer, no movement, no destination field read anywhere in it). One narrow exception: the single-marker
+("circle m1") finalize path releases ONLY preacher-type recruits back to their own default behaviour; braves/
+warriors/firewarriors recruited by either mode are simply left fidgeting in state 14 forever, wherever the
+recruitment search happened to find them.
+
+**For `open-populous`**: this is a correction, not just a gap-fill. The current stand-in (reusing the player's
+own back-and-forth patrol-point system) implements real walking/circuit behaviour the original engine never
+has for this command - the authentic behaviour is closer to "troops near the marker(s) get pulled into a
+held/idle holding pattern and a UI notification fires," with no ongoing guard-post or patrol motion at all.
+Whether to keep the current (more capable-looking) patrol-point stand-in anyway as a deliberate gameplay
+improvement, or match the original's static/idle behaviour exactly, is a judgment call for whoever implements
+this - but the spec should stop describing the original's own behaviour as "unknown," and should say plainly
+that it's a recruit-and-park mechanism, not a patrol. Full exe detail: `docs/functions.tsv` row `0x4cedd0`.
+
+### 6n. Follow-up (2026-11-04): `PUT_PERSON_IN_DT` found - its own dedicated opcode, not an `ATTACK` side-effect
+
+A prior session's dead end (above, in §6l's area) looked for `PUT_PERSON_IN_DT` inside `ATTACK`'s per-person
+sweep, since that's where community-sourced docs put the shaman's own drum-tower-occupancy behaviour. That was
+the wrong lead: `PUT_PERSON_IN_DT model x z` is its own `interpret_script` opcode (id 1097), with its own short
+call chain straight into one of the SAME "AI goal evaluator" functions `ATTACK`'s own native trigger belongs to
+- it was never part of `ATTACK` at all.
+
+**The mechanism, in full**: the opcode resolves its 3 operands (`model`, `x`, `z`) then calls a small evaluator
+function that does four things, bailing out silently (no script-visible error or return code) the moment any one
+of them fails:
+1. Claims one of the tribe's 10 AI task slots - fails if all are busy.
+2. Searches a small area around `(x, z)` for this tribe's OWN nearby drum tower (class 2/type 4 "tower",
+   specifically in an active/completed state) - fails if there isn't one nearby. **This is the key behavioural
+   detail**: the script doesn't name a building directly, it names a position, and the engine finds whichever of
+   the tribe's own towers happens to be closest to that position.
+3. Checks whether the tower is already garrisoned by someone of the requested `model` type, or by a shaman -
+   if so, does nothing (won't double-assign, won't ever evict a shaman).
+4. Otherwise, enqueues the SAME native task (task 7, already fully traced in §6h above as "type-aware garrison
+   staffing with active eviction") that handles the actual work: evict any current occupant whose type isn't
+   `model` and isn't a shaman, then find and walk the NEAREST eligible follower of `model`'s own type into the
+   tower.
+
+**What this means for `open-populous`**: `PUT_PERSON_IN_DT` is not "teleport this specific follower into that
+building" - it's "make sure the nearest tower to this spot ends up staffed by someone of this type," asynchronous
+and best-effort, silently a no-op if there's no free AI task slot, no tower nearby, or the tower's already
+correctly staffed. A follower doesn't even have to exist yet at command time - task 7's own already-documented
+worker-finder does the recruiting. If `open-populous` ever implements this command, it should resolve the
+nearest tower to the given position (not require an exact building reference) and drive it through the same
+evict-then-recruit two-step task 7 already needs for its own generic garrison-filling behaviour, rather than a
+one-shot teleport. Full exe detail: `docs/functions.tsv` rows `0x48d22b`/`0x4925e0`/`0x4e67b0`/`0x4f33d0`, and
+`0x4c8910` (task 7, now confirmed rather than "candidate").
+
+### 6o. Follow-up (2026-11-04): task 2 is the shaman's own autonomous "hunt wildmen, cast Convert" behaviour
+
+A prior session's partial read of task 2 (`0x4c7370`) guessed "shaman positioning + a reused ghost-escort step."
+Fully tracing its 9-state dispatch corrects that: the "escort" part is a one-shot cleanup, and the task's real,
+long-lived purpose is something open-populous likely has no equivalent of at all - a fully autonomous, unscripted
+"the shaman goes looking for a few stray wildmen and converts them" behaviour.
+
+**States 0-7** are straightforward setup: pick a base-adjacent target position (several fallback sources, a
+computed one as a last resort), run a couple of gate checks, claim the shaman (commit her to the generic
+"committed to a job" person state), wait, and broadcast a notification once she's on her way.
+
+**State 8 is the interesting part, and the task's real steady state** (everything above just gets here):
+- Every tick, it counts nearby wildmen (class 1/type 1 people) in a radius-3 square around the current target.
+- It does a cheap, incremental hill-climb: samples 4 neighbouring points about half a cell away in each
+  direction, and if any of them has MORE wildmen nearby than the current target, the target drifts there. Over
+  many ticks this walks the target toward the nearest small cluster of wildmen, one tiny step per tick, not a
+  one-shot "find the best spot" search.
+- Once a per-tribe "how busy is my AI" accumulator crosses a threshold (roughly 600 cumulative "number of busy
+  task slots" ticks - in practice a cooldown proportional to how much else the tribe's AI is doing, not a fixed
+  turn count), the task stops drifting and does one of two things: if something is currently "attached" to the
+  shaman (a preacher sermonizing at her, a disguised infiltrator targeting her, or similar - a generic back-
+  reference, not specifically a ghost escort), it releases that unit back to its own normal behaviour; either
+  way, the task then ends.
+- Below that threshold, if the best nearby spot still has a SMALL number of wildmen (3 or fewer) rather than a
+  large cluster, and the shaman isn't already busy with something else, she casts **Convert** there (spell id 17
+  - confirmed via `open-populous3`'s own spell-id table) using the identical readiness/mana/cast machinery the
+  scripted auto-cast system (`SET_SPELL_ENTRY`) and `ATTACK`'s own shaman-casts-her-operand-spells behaviour both
+  already use, then the task ends.
+
+**Net, in plain terms**: a computer-controlled tribe's shaman will, on her own, periodically wander toward and
+mop up small, scattered pockets of nearby wildmen with Convert - entirely independent of any script command.
+Large wildman clusters are specifically NOT targeted by this behaviour (reads like deliberate "don't waste the
+cooldown on a crowd, handle those a different way" tuning, though the exact reason isn't confirmed). **For
+`open-populous`**: if the native computer AI doesn't currently do anything like this, it's a real gap, not a
+correction to an existing guess - a computer tribe that just leaves nearby wildmen alone forever (versus
+occasionally converting one or two) is an observable behavioural difference from the original. Full exe detail:
+`docs/functions.tsv` row `0x4c7370` (fully rewritten), `0x4f79d0` (the wildman census helper, corrected from an
+earlier "height function" guess).
+
+### 6p. Follow-up (2026-11-04): task 19 is vehicle mission readiness/loading, not population expansion
+
+A user's game-knowledge hints drove this whole follow-up, in two rounds. The first hint (huts need to be near
+existing structures, and a full site needs a new tower to keep expanding) pointed at a population/building
+reading of task 19's "type 3/4" branch, which an initial re-trace seemed to confirm. But a second hint - that
+house expansion has nothing to do with vehicles, and that this looked more like an attack-by-vehicle workflow
+("gather enough units, put them in a vehicle, start a coordinated attack... boat or balloon... sometimes a mix of
+trained units, sometimes just a spy mission") - didn't fit what had just been written up, and was worth checking
+directly against the exe rather than taking either guess on faith. It was right: the building-expansion reading
+was wrong, caught by re-tracing the task's own count function (`0x4f77e0`) directly - it filters the GLOBAL
+object list by CLASS 4 (vehicle), not class 2 (building). The "type 3/4" byte values that looked like "hut
+big"/"tower" are actually "air 1"/"air 2" (balloon) on a VEHICLE record, not a building one - same numbers,
+wrong record kind, an easy trap `docs/unit_types` exists precisely to catch.
+
+**With that fixed, task 19 reads as**: maintain enough ready, crewed vehicles of each kind (boats and balloons
+counted separately) for the current difficulty level. When a vehicle of a short-supplied kind has room to spare:
+for a **balloon**, find a nearby cell free of any other vehicle to stage it, confirm it's still sitting somewhere
+valid, and claim it for the tribe; for a **boat**, find the tribe's own boat hut and work out its water-exit
+point from the direction it's facing. Either way, once the vehicle is confirmed still needed and ready, **load
+its crew/passenger slots** - a small array sized by a per-vehicle-type capacity table - by committing each
+occupant into the same generic "committed to a job" person state every other task's worker-assignment uses, here
+meaning "boarding." This matches the hinted workflow closely: gather eligible troops (elsewhere, before this task
+runs), confirm a vehicle is ready, load it, and - for a boat - know where to launch from. A single-occupant load
+would read as exactly the "just a spy mission" case; a fuller load as the "mix of trained units" assault case.
+
+**What this task does NOT do, confirmed by reading all 13 states**: it never issues an `ATTACK`/task-20 order
+itself. It manages vehicle readiness and boarding only - the actual departure/attack presumably comes from a
+script's own `ATTACK ... ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON` call (`ai-scripts.md`) consuming an already-loaded
+vehicle, which this session didn't trace from that side.
+
+**For `open-populous`**: if the current AI has nothing modelling "keep enough boats/balloons ready and load
+troops aboard them for a vehicle-borne assault or infiltration," that's the real gap here - not a hut/population
+one. Full exe detail: `docs/functions.tsv` row `0x4caac0` (rewritten a second time, correcting the first
+rewrite's own building-expansion misreading).
+
+### 6q. Follow-up (2026-11-04): task 27 is a firewarrior-crewed vehicle mission coordinator
+
+Another user hypothesis, checked directly against the exe before writing anything down: "board units into a
+vehicle, move/use the vehicle, disembark" as the shape of task 27 (the largest native AI task handler, 2848
+bytes, previously only partially read as a vague "class-4 garrison/occupancy" scan). Confirmed in substance, with
+two sharpened details.
+
+**The confirmed shape**: the task first checks whether the tribe can even afford the trip - a requested headcount
+divided by one vehicle's own passenger capacity gives "how many vehicles of this model are needed," compared
+against how many the tribe already has. If affordable, it runs two sweeps over the tribe's own vehicles of that
+model: one validates and "selects" already-loaded vehicles whose entire passenger list still checks out; the
+other looks for a vehicle that has safely arrived/parked and, if found, **disembarks its passengers one at a
+time** at a computed exit point near it (the same confirmed "get this person off the vehicle" primitive
+`GIVE_UP_AND_SULK` also uses, `disembark_vehicle`). Once vehicles are confirmed available, the task **recruits
+troops to crew them** via the same proximity-based worker-finder every other gathering task uses - but this one
+asks for troop type 6 specifically: **firewarriors**, not a generic mix. The task then polls for readiness,
+re-confirms pilots are properly assigned, broadcasts a notification, and cleans up.
+
+**One part of the hypothesis not confirmed**: a vehicle that ISN'T sitting in a valid resting spot but is already
+decently loaded gets marked as "selected" anyway, but nothing in this task ever orders it to move anywhere closer
+to shore or to a better spot - it's simply left as-is. If vehicles do get redirected toward a valid parking spot
+in the original game, it isn't this task doing it.
+
+**For `open-populous`**: this is the firewarrior-transport counterpart to §6p's own task-19 finding (which
+covers general boat/balloon readiness without a specific troop type) - together they describe "maintain a vehicle
+fleet, load specific or general troops aboard it, disembark on arrival." Neither task issues the actual
+departure/attack order itself - but §6r below traces that hand-off to `ATTACK`'s own vehicle-dispatch logic,
+closing the loop. Full exe detail: `docs/functions.tsv` row `0x4cf970` (fully rewritten).
+
+### 6r. Follow-up (2026-11-04): the vehicle-attack loop, closed - `ATTACK` crews, departs, and fights via vehicle
+
+§6j's addendum found that `ATTACK` checks current vehicle stock before a boat/balloon assault and simply fails
+(a new result code) if short, rather than waiting on tasks 19/27 to build more. This follow-up went further into
+that same checking routine (`ATTACK`'s own vehicle-transport sub-machine, a whole separate state machine it
+calls into) to find out what happens once there ARE enough vehicles - and it turns out to run a complete,
+self-contained "crew, depart, arrive, fight" sequence, mirroring `ATTACK`'s own land-based gather-regroup-attack
+shape almost exactly.
+
+**Crewing**: once stock is confirmed, the sub-machine looks at the SPECIFIC vehicles it's going to use for this
+attack. A partly-loaded vehicle gets any invalid occupant disembarked to make room; a completely empty one gets
+the nearest available brave found and ordered aboard (reusing an existing attack-order kind, which - when its
+target is a vehicle rather than a person or building - reads the vehicle's own crew-attachment field instead,
+suggesting the engine reuses one "order kind" number for two different jobs depending on what it's pointed at).
+
+**Departure and arrival**: once crewed, the vehicle(s) are set moving as a group via the exact same "move this
+gathered force" primitive `ATTACK`'s own land-based muster phase uses for its own regroup-at-`m1` step - genuinely
+the same underlying mechanism, not a vehicle-specific copy. After an (unread, but structurally obvious from the
+state layout) arrival-poll loop, the final state issues the attack orders - through the SAME per-person
+order-issuing sweep `ATTACK`'s own land-based attack phase uses. **A vehicle-borne attack and a land-based one
+end up firing their actual combat orders through one identical shared function** - the vehicle phase is purely
+about getting the force to the fight, not a separate way of fighting. **If nothing is left capable of attacking
+once arrived, that's a genuine cancellation - no attack happens.** Otherwise the attack DOES fire, and only
+afterward does the task do one last "nudge any stragglers" pass gated by a time/cycle cap - reporting a distinct
+"attacked, but the regroup wasn't fully clean" code regardless of how that nudge goes, then ending either way.
+Double-checking this distinction (a cancel-looking code turned out NOT to mean cancel) is itself worth noting for
+whoever models this: the two failure-shaped codes mean genuinely different things, one a real abort and one a
+timeout after the fact.
+
+**For `open-populous`**: the full native vehicle-attack lifecycle is now mapped end to end - independent fleet
+maintenance (tasks 19/27, §6p/§6q) keeps vehicles stocked and generally crewed; `ATTACK` itself re-checks stock,
+crews the specific vehicles for this attack, moves them as a group, and attacks on arrival using the identical
+mechanism a land attack would. If `open-populous`'s own `ATTACK_BY_BOAT`/`ATTACK_BY_BALLOON` implementation (if
+any exists yet) doesn't check current vehicle availability and fail gracefully when short, or doesn't route the
+vehicle-borne force through the same attack-order mechanism as a land force, those are the two concrete gaps this
+session found. Full exe detail: `docs/functions.tsv` row `0x4cceb0` (substantially extended).
+
+## 8. Preacher-conversion ("Sermon") target eligibility - `may_preach` confirmed correct (2026-11-06)
+
+A long-open contradiction in this repo's own docs is now resolved, and it bears directly on `open-populous`'s
+`may_preach`/`sermon.rs` logic - good news, not a bug report: **that logic already matches the real exe**, and an
+earlier `pop3-rev` session's own byte-level re-derivation (which looked like it contradicted `may_preach`) was
+simply wrong.
+
+**Background**: person state 23 ("the conversion roll") is entered only one way in the whole executable - a
+single literal `mov byte [candidate+0x2C], 0x17` instruction inside `preacher_strike_scan` (exe address
+`0x43ABF0`), confirmed this session by an exhaustive search of every write to a unit's state field across the
+entire disassembly (277 generic "set state" call sites checked; only one of them stores the literal immediate
+`0x17`, and it's this one). That function gates which nearby unit can become the roll's candidate through a
+per-type eligibility table at exe address `0x5A7090` (50 bytes per type, byte 0 bit `0x20`). A prior `pop3-rev`
+session read that table's raw bytes and reported the bit set ONLY for type 4 (preacher) and type 6 (firewarrior) -
+which would have meant the roll can only ever target an enemy preacher or firewarrior, directly contradicting
+`may_preach`'s "ordinary followers only, never preachers/shamans" model, and also contradicting a live memory
+capture from an even earlier session (`diag6.txt`) that had recorded ordinary brave/warrior (type 2/3) units being
+killed-and-replaced under a different tribe at the same position - exactly what a successful conversion looks
+like, but on types the table claimed were ineligible.
+
+**What this session found**: that earlier byte read was simply incorrect. Re-reading the exact same table three
+independent ways (a raw file read computed from the confirmed `.data` section VMA-to-file-offset mapping,
+`objdump -s -j .data`, and `od -tx1`, all three agreeing, and the identical method independently reproducing a
+different, already-confirmed table's values byte-for-byte as a sanity check) gives the opposite result: bit `0x20`
+of `0x5A7090` is **SET for brave (type 2), warrior (3), spy (5) and firewarrior (6)**, and **CLEAR for wildman
+(1), preacher (4), shaman (7) and angel (8)**. Also confirmed directly from the disassembly that the type byte
+tested is read from the scan's own candidate (the nearby unit being considered as a target), never from the
+striker - so this is unambiguously a target restriction, not a "who may strike" restriction.
+
+**The real rule, re-derived from the exe**: `preacher_strike_scan`'s target-eligibility gate is "ordinary
+attackable followers - brave, warrior, spy, firewarrior - never wildman, preacher, shaman or angel." This is
+exactly `may_preach`'s own "ordinary followers, never preachers/shamans" shape (modulo firewarrior/spy also being
+eligible per the exe - see the gap noted below), and it fully explains the `diag6.txt` live capture that had
+looked unexplained: those brave/warrior conversions are legitimate instances of this exact mechanism, not evidence
+of a separate, undocumented pathway. No second "convert an ordinary follower" mechanism exists or is needed - this
+one already does it. **No action needed against `may_preach`'s core eligibility logic; it was already right.**
+
+**One real gap worth checking**: the corrected table also makes **spy** (type 5) an eligible target/candidate for
+this roll, alongside brave/warrior/firewarrior. If `may_preach` (or whatever type list `sermon.rs` uses) excludes
+spy, that's a small, concrete divergence from the exe worth either fixing or deliberately noting as a known
+simplification - worth a quick check against `open-populous`'s own type-list for this check next time that repo
+is attached.
+
+Full exe detail and the raw byte values: `pop3-rev/docs/functions.tsv` rows `0x43ABF0` and `0x4D83B0` (and the
+sibling note on `0x4D6F90`, a related per-type table one byte over at `0x5A7091` whose own previously-documented
+byte read turned out to be wrong too and is now flagged as open rather than re-claimed), and
+`pop3-rev/docs/person_states.tsv` row `23` - all updated 2026-11-06.
+
+## 9. Sermon residue: range/capacity, the conversion visual, single preacher pose (2026-11-06)
+
+Four specific open questions about the preacher-conversion mechanic were chased this session, all from static
+disassembly (no live memory access used). One resolves to "no action needed" (a claimed "halving flag" does not
+exist); the other three give concrete numbers/behaviour worth checking against `sermon.rs` and its effect
+counterpart, if one exists or is planned.
+
+**(1) Range and capacity.** Two separate code paths exist, with different capacities:
+
+- The **player-issued Preach order** (kind 33, handler `0x43C7A0`) is architecturally single-target: it resolves
+  exactly one listener into a scalar field (`+0x89`, seeded once from `+0x72`), with no array/list/count anywhere
+  in its ~600-instruction body. **At most 1 listener per active Preach order, full stop** - this is a hard
+  structural fact, not a tuning constant.
+- The **auto-triggered conversion strike** (`preacher_strike_scan`, driven by order kinds 17/31/32 - not preacher-
+  exclusive, see §8) scans a square block of 256-world-unit map cells centred on the striker: `radius_byte` cells
+  per side, where `radius_byte` is the striker's own byte field, set to **3** at order start and bumped to **5** if
+  the striker happens to be standing in any building's doorway at that moment. So the scan covers roughly a 3x3 or
+  5x5 grid of 256-unit cells - not a circular radius. It strikes only the FIRST eligible candidate found per scan
+  call. **No cap was found** preventing a second, different candidate from being struck by the same still-active
+  striker on a later successful roll (nothing resets/blocks the scan based on an existing in-progress conversion) -
+  whether this produces 2+ simultaneous "listeners" under one striker in actual play is NOT confirmed statically;
+  a live check would need to watch one striker's own id appear as the back-reference on 2+ simultaneously-live
+  conversion-roll candidates.
+
+**(2) The conversion visual.** There is no beam/soul effect that visibly travels from the preacher to the convert.
+What exists instead: a dedicated class-7 effect (type 0x3A, "conversion flash") is spawned, but ONLY on a
+SUCCESSFUL conversion roll (never on a mere "being preached to" tick) - at the OLD (dying) unit's position. Every
+tick for 8 ticks (~0.66s) it then copies the BRAND-NEW replacement unit's current position onto itself (and
+re-snaps its height to terrain), before deleting itself. Net visible effect: a short flash appears where the old
+unit died, then clings to/trails the newly-spawned convert as it starts walking away, for under a second. If
+`sermon.rs`/a VFX layer wants to model this, "spawn a brief flash at the kill point, then follow the new unit each
+frame for ~8 ticks" is the accurate shape - not a point-to-point travelling animation between caster and target.
+Separately (not the same mechanism): the MANUAL Preach order (kind 33) attaches a 3D prop/mesh overlay to the
+listener (not the preacher) via a different function while being preached to - ids in the `objs0_struct`
+building/scenery mesh table, name/model not identified this session, likely a `sermon.rs`-irrelevant visual detail
+unless an exact look is wanted.
+
+**(3) Single pose vs. a sequence, for the preacher.** Traced the preacher's own per-substate code in the Preach
+order handler end to end: it never selects among multiple poses/animations for ITSELF via any table, anywhere.
+Every per-type/per-substate pose or prop table lookup in that function is applied to the TARGET/listener, never to
+the preacher. The preacher's own body only ever toggles a pair of low-level flag bits (walking vs.
+"stopped, facing, gesturing") and never varies them again for the rest of the stationary preaching phase. This is
+solid static evidence AGAINST the preacher cycling through a sequence of distinct gesture poses while preaching,
+and supports treating it as a single fixed pose (matching whatever `Pose::Preach`/anim-22 assumption `open-populous`
+already uses) - **but this isn't 100% final**: the exact VSTART animation id that underlying flag-bit state maps to
+is chosen by a separate, generic render-side animation-selection layer (shared across person types/states) that
+was not traced this session: it's possible (though not evidenced) that layer free-runs through a short loop of
+frames for that one flag state on its own. If the current single-pose assumption already matches observed
+gameplay, no action needed; this note just upgrades it from "a guess" to "supported by the order-handler's own
+code, with one named remaining gap."
+
+**(4) The "halving flag."** Looked for a conditional halving gating the conversion roll/check (in the Preach
+handler, the strike scan, the roll handler, and the order approach handler) and found none. The actual success
+check is a flat roll (engine LCG, remainder against a fixed divisor of 5 - i.e. a flat 1-in-5 chance once a
+per-candidate resist counter expires) read from a single global constant that is never modified by any flag
+anywhere in the binary (confirmed: that address has exactly one reference in the whole executable). Two genuine
+`/2` operations exist nearby but neither is flag-gated and neither matches "the check being halved": an
+unconditional symmetric-jitter centering term on a failed-roll resist-counter rearm, and a flag-gated DOUBLING
+(not halving) of a newly-converted unit's own walk speed as a cosmetic post-success detail. **Nothing to port here**
+- if a specific different mechanic was meant by "halving flag," it isn't reachable from this order/roll pipeline as
+traced this session.
+
+Full exe detail and addresses: `pop3-rev/docs/functions.tsv` rows `0x43C7A0` (the main writeup), `0x43ABF0`,
+`0x4D83B0`, `0x4F14B0`, `0x5138B0`, `0x404420`/`0x40A980`, and `pop3-rev/docs/effect_states.csv` state 45
+
+## 10. Wildman attack orders: `attack::may_attack`'s `[ours]` guess settled - NO, an explicit order does not go through either (2026-11-06)
+
+**Background**: `open-populous`'s `attack.rs` was relaxed so `may_attack` no longer treats wildmen as entirely
+unattackable, while its own auto-proximity-scan exclusion (`spotting::first_seen`) still excludes them from
+AUTO-targeting - that auto-scan exclusion is independently confirmed `[exe]` correct (see below). The separate
+`[ours]`, NOT independently traced, guess was that an EXPLICIT PLAYER ATTACK ORDER on a wildman should still
+succeed (the auto-scan excludes them, but a direct manual order doesn't) - reasoning that the old blanket
+"nobody can ever attack a wildman" rule was simply too strict. **Traced against the real exe this session: this
+guess is wrong.** A manual order does not go through either - and the reason is structurally important: the exe
+does not implement this as a wildman/type-specific check at all, anywhere.
+
+**What actually excludes wildmen, exe-side**: wildmen are always spawned with **tribe byte 0xFF ("no tribe")**
+- confirmed directly: `effect_place_wild_man` (exe `0x514330`) calls `alloc_unit(class=1, type=1, tribe=0xFF,
+pos)`, the ONLY class-1/type-1 `alloc_unit` call site found anywhere in the exe - and keep that tribe until a
+successful Convert (at which point they stop being wildmen at all, becoming a brave on a real tribe). Every
+melee/attack-target eligibility check in the exe rejects a candidate outright if **either** the attacker's or
+the candidate's tribe byte is 0xFF, or if they share a tribe - before even consulting the per-tribe diplomacy
+bitmask. This is a blanket "you cannot fight a tribeless (or same-tribe) unit via the ordinary attack machinery"
+rule, of which "you cannot fight a wildman" is simply one consequence - there is no `person_type == wildman`
+comparison anywhere in this code path. (This tribe-based rule is a plausible, closer analogue for `may_attack`
+than a hardcoded wildman exception - see "for open-populous" below.)
+
+**Why this applies identically to an explicit player order, not just the auto-scan**: the exact same tribe
+check (byte-for-byte identical logic, same offsets) exists in BOTH of the two places that matter:
+- The auto-attack candidate SCAN itself (exe `0x51EAB0`, reached via `0x4D4690`'s per-type continuation ->
+  `0x51E5E0` for any non-preacher/firewarrior/shaman attacker type, including wildmen themselves) - this is the
+  scan `open-populous`'s own `spotting::first_seen` models.
+- The SHARED per-turn target re-validation (exe `0x51C4C0`, the "generic attack-target eligibility" reached via
+  `0x51C3C0` from `attack_order_handler`/`0x51A2A0`) - and this function runs every turn for an active attack
+  order regardless of how that order originated: **order kind 19** (the "generic/external" attack kind - the
+  one a player's own explicit attack command would use), **order kind 21** (self-issued only by the auto-scan),
+  **order kind 11** ("join a melee ring" - confirmed via `0x4BA9B0`'s own tracing, the patrol-point mechanism,
+  that a unit-click issues kind 11 and its sub-state 0 unconditionally calls `attack_order_handler`), and
+  **order kind 28** (the reactive counter-attack order, via `0x51FCE0` -> `0x51A2A0`) all funnel into this same
+  handler and therefore this same gate.
+- Separately, the eight generic "give this unit an order" helper functions (exe `0x43B180`-`0x43BB54`, one per
+  order kind) that actually WRITE an attack order's target id were checked directly: none of them perform any
+  target-eligibility check of their own - they blindly install the order (kind + target), and ALL validation
+  happens downstream, in the shared handler above. So there is no code path where issuing the order itself is
+  gated differently depending on who/what issued it.
+
+**Net conclusion**: whether a wildman ends up as an attack order's target via the auto-scan or via a literal
+player click, the SAME shared per-turn check runs from the very first tick that order is processed and rejects
+it (tribe 0xFF). The order is written successfully (nothing stops a player from clicking "attack" on a wildman),
+but it can never produce an actual attack - the unit's own attack-order handler would reject the target
+immediately and the order would just fail/retry forever, exactly like `0x4BA9B0`'s own already-documented kind-11
+"exiting having done nothing on failure, retried every tick" behaviour. **For `open-populous`**: `attack.rs`'s
+relaxation of `may_attack` to allow explicit wildman targeting does not match the exe and should be reverted (or
+re-framed) - but consider reframing the rule itself as tribe-based ("reject if attacker or candidate has no
+tribe, or they share a tribe") rather than reintroducing a wildman-specific special case, since that is the
+actual, more general rule the exe implements and it has the same practical effect for wildmen (tribe-less)
+without being a species-specific carve-out. The one part of the original relaxation that doesn't need reverting:
+`may_attack` allowing OTHER tribe-less-adjacent cases (if any exist) should be reconsidered under this same
+tribe-based framing rather than per-species.
+
+**Caveat / what wasn't found**: the literal UI code that turns a player's right-click-to-attack into an order
+(as opposed to the ~9 already-catalogued callers of the kind-19 "give order" helper, all of which are
+spell-effect/AI code, not UI) was not located this session either, same gap a prior session already noted on
+`0x43B540`'s own row - this doesn't weaken the conclusion above since the shared gate is reached identically
+however the order is issued, but it remains an open lead if a future session wants the exact click handler
+address. One confirmed real player-input path was traced into the same shared gate: the patrol-point mechanism
+(`0x4BA9B0`, Ctrl+Alt+click, confirmed wired to `process_tribe_cmd`) issues kind 11 for a unit-click target, which
+reaches `attack_order_handler` exactly as described above.
+
+Full exe detail and addresses: `pop3-rev/docs/functions.tsv` rows `0x51C4C0`, `0x51EAB0`, `0x51C3C0`, `0x51A2A0`,
+`0x43B540` (and the sibling `0x43B180`-`0x43BB54` family), `0x4BA9B0`, `0x51FCE0`, and `0x514330`
+(`effect_place_wild_man`) - all updated/cross-referenced 2026-11-06.
+("conversion flash") - all updated 2026-11-06.
+
+## 11. Patrol attack-type points: confirmed real, and building targets are not excluded anywhere (2026-11-06)
+
+**Background**: `pop3-rev/docs/functions.tsv`'s `0x4BA9B0` row (the already-traced "patrol points, up to 8"
+mechanism, Ctrl+Alt+click) flagged two open questions for a future session: whether the exe really has a
+deliberate "attack this specific unit" patrol point TYPE at all (as opposed to patrol being purely reactive/
+non-stored engagement along plain waypoints), and separately, whether such an attack-type point could ever hold
+a BUILDING as its target rather than only a unit. Both chased this session via full disassembly of `0x4BA9B0`'s
+own two call sites (the only two in the whole exe) plus its downstream consumer.
+
+**(1) A dedicated attack-type patrol point is real - a persisted discriminant chosen at set-time, not a
+reactive scan.** `0x4BA9B0` is called from exactly two places, and they are structurally separate, each
+HARDCODING its own `is_unit_target` flag - this is not one call site choosing a mode at runtime:
+
+- The ordinary **ground/move-click path** - `0x4B9190`'s own tail call at `0x4B9394`, inside that function's
+  own class-0-4 click-type switch - always passes `is_unit_target=0` (a literal `push 0`). This branch builds
+  the stored order as kind 6 ("go near X"), with its target bytes computed from a freshly-allocated, invisible
+  class-9 marker object's OWN position fields.
+- The **attack-type path** is a previously-unidentified, separate `process_tribe_cmd` case: raw command id
+  **tribe_cmd 0x62** (Ghidra `caseD_62` of `switchD_0043e922`, body `0x440822-0x44085F`, containing the
+  already-known call at `0x440857`). This case always passes `is_unit_target=1` (`push 1`), and passes a target
+  id read directly out of the queued command record - never derived from any marker object's position. This
+  branch builds the stored order as kind 0xB (11, the "join/hold a melee ring" order, reused here), with the
+  caller's raw id copied VERBATIM into the order's target field and two placeholder position bytes hardcoded to
+  a literal 6/6 (position is irrelevant to this branch; only the stored id matters).
+
+So the kind byte actually written into the shared order record (6 vs 0xB) - and, for the attack branch, the
+target id alongside it - is chosen and persisted at the moment the patrol point is SET, not synthesized later by
+some reactive per-tick proximity check. When a unit's round-robin secondary-slot cursor (already documented,
+`order_advance`) later reaches that slot, `order_execute` dispatches kind 0xB to its handler (`0x519F10`), whose
+sub-state 0 unconditionally calls `attack_order_handler` (`0x51A2A0`) against the STORED id. This is a genuinely
+targeted, remembered engagement - not "whichever enemy happens to be nearby when the unit arrives."
+
+**(2) Nothing excludes a BUILDING as that stored target - confirmed at both the gate and the consumer.**
+
+- **The pre-issue gate.** Before `tribe_cmd 0x62` calls `0x4BA9B0`, it runs a validity check, `0x4B98F0`
+  (newly traced this session), against whatever the command's id currently resolves to. That function walks the
+  resolved cell's occupant chain and rejects only two specific classes: class 5 (scenery) objects whose type
+  isn't `0x11` (an undocumented scenery sub-type - a gap in `docs/unit_types`, not resolved this session), and
+  class 0xA (internal/controller) objects of type `0x10` ("guard post display") unless a side flag is set.
+  **Every other class - explicitly including class 1 (person), class 2 (building), class 3 (creature) and
+  class 4 (vehicle) - falls through the default branch and is accepted unconditionally.** There is no
+  person-only or class-2-exclusion logic anywhere in this gate.
+- **The consumer.** `attack_order_handler` (`0x51A2A0`) - the exact handler kind 0xB's wrapper (`0x519F10`)
+  calls - already has its own confirmed, pre-existing class dispatch (`cmp byte[target+0x2A],0x2` at `0x51B0E7`):
+  when the resolved target's class is 2 (building), it branches into the building door/hack/shake wear-down
+  sequence instead of the person-vs-person pre-fight/melee path. This is the SAME dispatch an ordinary kind-19
+  "attack (generic)" order uses to attack a building normally - one handler, one class branch, reused as-is.
+
+**Net**: mechanically, a building id passed through this path would be processed exactly like an ordinary
+building attack order - the data format (a raw id, generically resolved) and every piece of code that touches it
+between "patrol point set" and "attack resolved" are target-class-agnostic. **What this does NOT confirm**:
+whether the shipped game's own UI ever lets a player's click actually resolve to a building's id for this
+specific command (`tribe_cmd 0x62`) in the first place - the UI-side code that decides to queue that command
+(as opposed to the ordinary move-patrol click handled by `0x4B9190`) was not located this session, so it's
+possible the UI only ever offers this command when a PERSON was clicked, making the building-target capability
+real but practically unreachable in normal play. Also not traced: whether kind 0xB's own "ring companion"
+sub-states (`0x519F10`'s sub-states 1-3, built for a person-vs-person melee ring - orbiting a companion marker
+object, playing melee-adjacent animations) behave sensibly once sub-state 0's `attack_order_handler` call
+resolves to a building branch instead of a person - this could mean a building-targeted patrol point works fine
+(repeatedly re-invoking the attack each time the slot comes up), or it could mean the unit does something
+cosmetically odd (e.g. drifting toward a "ring" position near a building that doesn't make sense) after the
+first hit - genuinely unresolved from static analysis alone.
+
+**For `open-populous`'s `patrol.rs`/`units.md` "Patrol orders"**: model an attack-type patrol point as a real,
+persisted per-slot kind with its own stored target id (not a synthesized/reactive engagement check along plain
+waypoints) - that much is settled. Whether to also support a building as that id's referent is a judgment call:
+the exe's own code path would not reject one, but whether the original game's UI could ever actually produce one
+is unconfirmed, so this is better treated as "the engine primitive is generic, extend to buildings only if it's
+useful/desired" rather than "the original definitely lets players do this."
+
+Full exe detail and addresses: `pop3-rev/docs/functions.tsv` rows `0x4BA9B0`, `0x4B98F0` (new), `0x4B9190`,
+`0x51A2A0`, `0x519F10`, and the `process_tribe_cmd` case at `0x440822-0x44085F` (`tribe_cmd 0x62`,
+`switchD_0043e922::caseD_62`) - all updated/cross-referenced 2026-11-06.
+
+## 12. Generic building occupant array (`+0x86`): "6 vs ~20" discrepancy resolved - ONE 6-slot array, shared by every building type (2026-11-06)
+
+A flagged discrepancy between two `functions.tsv` rows is now settled with code-grounded confidence: there is
+**exactly one** occupant array on a building, it is **physically 6 word-slots (12 bytes, `+0x86`-`+0x91`)**, and
+it is the same array for every building class/type - vehicle-hut crew, training-building garrison, and
+tower/watchtower garrison all read the identical field. The earlier "~20" figure (from an older
+`training_building_turn` write-up) was an ungrounded guess, not a second real field, and is now corrected.
+
+**How this was settled**: `evict_building_occupant` (`0x407490`) - the function that actually removes an
+occupant from a building, called from every "kick someone out" path in the exe - contains two independent
+linear scans of the `+0x86` array (find-by-cell-index, and find-first-occupied), and BOTH bound their loop with
+a literal immediate `cmp ecx,0x6` in the disassembly, not a table/type lookup. That is ground truth for the
+array's physical size: 6 slots, full stop, for every building instance regardless of type. This is independently
+corroborated by Ghidra's own generic `unit_struct` STRUCTURE export in `backup/backup.xml` (the shared,
+fixed-size, 0xB3-byte struct every game object is allocated from, confirmed via `alloc_unit`/`0x4ED8A0` pulling
+from one small set of free lists keyed only by class, never by a per-type/per-class size): it independently names
+that exact same byte range `+0x86`-`+0x91` as two back-to-back 3-word vectors (`loc_3`, `loc_4`) - a *different*,
+non-building meaning for that region, but the same 12-byte/6-word total size, which is exactly the kind of
+"same offset, different meaning per class" reuse `pop3-rev`'s own `AGENTS.md` already flags as a known pattern
+in this exe (not a coincidence worth re-litigating, just a second confirmation of the size).
+
+**Where "~20" actually came from, and what the real per-type number is**: `training_building_turn`
+(`0x405B80`) walks the same `+0x86` array but stops early, at a per-building-type "slots" value read from a
+building-type table (base `0x5A7228`, stride `0x4C` = `sizeof(unit_type_building)`, confirmed via that
+STRUCTURE's own Ghidra export) at column `+0x20`, indexed by **the training building's own type byte**
+(disassembly `0x405D12`-`0x405D1F`: `type*0x4C + 0x5A7248`). Reading that `+0x20` field directly out of the
+shipped exe's `.data` section for every real building type (class 2, types 1-19, `docs/unit_types`) gives:
+
+| Building type | `+0x20` "slots" value |
+|---|---|
+| Hut small / medium / big (1/2/3) | 3 / 4 / 5 |
+| Watchtower (4) | 1 |
+| Temple, spy hut, warrior hut, fire (firewarrior) hut (5/6/7/8) | 5 / 5 / 5 / 5 |
+| Reconversion (9) | 1 |
+| Wall (10) | 0 |
+| Gate (11) | 4 |
+| "ignore" type (12) | 3 |
+| Boat hut 1 / 2 (13/14) | 4 / 4 |
+| Airship hut 1 / 2 (15/16) | 6 / 6 |
+| Guard post (17) | 0 |
+| Library/vault (18) | 0 |
+| Prison (19) | 1 |
+
+Every one of these is `<= 6` - this per-type field is an **operational cap on how many of the SAME 6 physical
+slots that building type treats as active**, never a declared size for a separate, bigger array. The "~20"
+figure in the older row was never actually read off this table; it was a rough guess made before anyone looked
+up a concrete value, and is now superseded.
+
+**A second, unrelated wrinkle worth knowing about** (not part of the original discrepancy, found while tracing
+it): four OTHER functions that also walk the `+0x86` array - `tower_detection_radius` (`0x40B450`), the
+"tower spots an enemy" alert scan (`0x40BD20`), AI task 7's type-filtered garrison eviction (`0x4C8910`), and
+`PUT_PERSON_IN_DT`'s engine (`0x4E67B0`) - bound their own walk with a literal byte at address `0x5A7378`,
+previously documented (wrongly) as "a global cap constant". It is not global at all: `0x5A7378` is byte-for-byte
+`unit_type_building[4]+0x20` - i.e. the WATCHTOWER's own slots value from the exact same table above (value 1
+in the shipped exe) - hardcoded by the compiler because all four of these call sites are tower-specific (three
+explicitly require/resolve a watchtower before running; the fourth, `0x40BD20`, gates on `building+0x2B==4`).
+No actual bug: it just means these four functions always behave as if "slots=1" regardless of which building
+they're nominally passed, which happens to be correct because they're only ever used on towers in practice.
+
+**For `open-populous`'s `vehicles.md` (crew capacity) and `huts-and-training.md` (training occupancy/garrison
+capacity)**: if either doc currently assumes a flat capacity for "how many people/crew a building can hold in
+its occupant slots", the per-type table above is the exe-confirmed source of truth - note in particular that
+boat huts cap at 4 and airship huts at 6 (both within the hard 6-slot ceiling), villager huts scale 3/4/5 with
+hut size (plausibly the housing capacity, though that identity - this exact field driving `+0xA6`'s own
+"people inside" max - was not independently proven this session, only this field's role as a scan-loop bound in
+the two contexts above), and nothing in this exe ever needs more than 6 occupant slots on one building.
+
+Full exe detail and the raw per-type table read: `pop3-rev/docs/functions.tsv` rows `0x407490`, `0x405B80`,
+`0x40B450`, `0x4C8910`, `0x4E67B0` (`unit_type_building`/`unit_struct` STRUCTURE cross-checked against
+`backup/backup.xml`) - all updated 2026-11-06.
+
+## 13. Vehicle hut wood-delivery RATE: resolved, there is no per-turn flat increment - it's crew round trips (2026-11-06)
+
+Resolves the open question `open-populous3`'s own `docs/specs/pop3-rev-analysis.md` "Vehicle huts: how the hut
+itself produces a vehicle" section flagged and left explicitly unanswered: "what actually increments `+0xA4` per
+turn was not located this session." Picked up as `pop3-rev` task backlog item #10 (a sibling session's task #9
+had just settled the related `+0x86` crew-array question). The per-vehicle wood COST (600 for either boat-hut
+type, 1000 for either balloon/airship-hut type) was already right; this session traced the RATE question fully,
+independently, straight from the disassembly (not by trusting the earlier write-up) and cross-confirmed the same
+600/1000 figures via a SECOND, different table.
+
+**Short answer: there is no flat "N wood per turn" constant anywhere in the exe.** `+0xA4` (the hut's own
+wood-delivery accumulator, separate from the hut's OWN construction-material stock) is incremented ONLY by a
+generic resource-transfer primitive, `0x4A7860` (`transfer_wood`), called once per completed "deliver" event by
+a crew member who has physically walked to the hut's door with wood already in hand. There is no continuous
+per-tick drip and no multiplier that scales a single increment by crew count - each crew member's delivery is
+its own independent event, landing whenever that specific worker finishes its own round trip.
+
+**The full mechanism, traced end to end**:
+1. **Recruitment throttle, `0x406600` (the vehicle hut's own per-turn operational handler, building types
+   13-16 only)**: every turn, prunes the hut's 6-slot crew array (same array `+0x86` task #9 already fixed at a
+   physical size of 6, operationally capped to 4 for either boat-hut type / 6 for either airship-hut type) into
+   idle vs. busy counts. If MORE than half the resolved crew is currently idle, it sends out exactly ONE
+   additional idle crew member this turn (sets that one person's own work sub-state, `+0xA8=31`, plus a
+   "committed" flag) - not the whole idle pool at once. This is the real throughput bottleneck: a boat hut with
+   4 crew slots never has more than ~2-3 workers round-tripping simultaneously, ramping up by one recruit per
+   turn rather than instantly.
+2. **The round trip, `0x495520` (order kind 6's handler) + its own work sub-states**: a recruited brave walks to
+   a wood source (sub-state 3, `0x495D70`, the SAME chopping state used for ordinary construction/tree-felling),
+   picks up wood into its own carry up to a flat per-type max of **100** (every working person type - brave,
+   warrior, preacher, spy, firewarrior, shaman - reads the identical value from a per-type table whose field
+   Ghidra's own struct export independently names `wood`; wildmen/the Angel read 0, they can't carry), governed
+   by an internal chop-cooldown timer; then walks to the hut's door and, on arrival, sub-state 7 (`0x496750`)
+   dumps its ENTIRE current carry (up to that same 100) into the hut in one lump via `transfer_wood`.
+3. **`transfer_wood` (`0x4A7860`) clamps the lump to whatever room remains** before the hut's own threshold -
+   so the LAST delivery of a build cycle can be smaller than 100, never an overshoot. For a vehicle hut
+   specifically (gated on a building-type flag, `unit_type_building[type]+0x48` bit `0x40`, true only for
+   types 13-16), the "room" is computed against a per-VEHICLE-TYPE table at **`0x5A7940` (base), stride 23
+   bytes/entry, field at `+0xB`** - read raw from the shipped exe: **600 for vehicle type 1 and 2 (boat hut 1/2)
+   and 1000 for vehicle type 3 and 4 (balloon/airship hut 1/2)** - an independent SECOND confirmation of the
+   600/1000 figures, via a completely different table than the one that gave the hut's own 1100 wood
+   BUILDING-material cost (`0x5A7242`, `0x4BA2C0`'s own table - that one is a different number entirely, the
+   cost of constructing the hut itself, not of producing a vehicle inside it).
+4. **`0x406600` reads `+0xA4` back** every turn: while `+0xA4` is still below the 600/1000 threshold above, it
+   does nothing further; once it reaches or exceeds it, `+0xA4` resets to 0 and the hut actually spawns the
+   vehicle (class 4, boat or balloon per the hut's own 1:1 type mapping, already documented).
+
+**What this means for `vehicles.md`'s "Vehicle huts" section**: drop the `LAUNCH_WORK`/"each crew member inside
+adds a turn of work" guess entirely - there is no separate work-timer layer on top of wood delivery in the
+original. The faithful model is: each ACTIVELY-ASSIGNED crew member (capped at 4 boat / 6 balloon, ramped up one
+recruit per turn while over half the current crew is idle) independently cycles chop (up to 100 wood, gated by a
+chop-cooldown and travel time to the nearest available wood source) -> walk to hut -> dump full carry (clamped
+to remaining room) -> repeat, with no cap on how many such cycles happen per vehicle beyond reaching the flat
+600/1000-wood goal. This makes the real-world "turns per vehicle" figure depend on wood-source distance/
+availability near a given hut, which has no single static number - if `open-populous` needs a concrete
+turns-per-vehicle estimate for balancing, it will need to either reproduce this travel-time dependency or pick a
+deliberate, labelled approximation; it should not invent a new fixed "work" constant to replace it, since the
+original has none.
+
+Full exe detail (table addresses, the person work-state dispatch table with every sub-state's address, and the
+distinction between the two different "building-type+vehicle-type" wood tables): `pop3-rev/docs/functions.tsv`
+rows `0x406600`, `0x4A7860` (`transfer_wood`), `0x495520` (corrected from an earlier "generic go-near-X utility"
+guess), `0x495D70`, `0x496750`, plus sibling stub rows `0x4958F0`/`0x496220`/`0x497030`/`0x497690`/`0x497A30` -
+all added/updated 2026-11-06.
+
+## 14. Ground-fire duration resolved - `ground_fire::TICKS` and `tree::BURN_TICKS` were both guesses, one is now concrete (2026-11-06)
+
+Resolves the open item `TODO.md` itself flagged: "the original's own ground-fire object (scenery class 5 type
+0xA, not an effect) gets its burn countdown from `0x4A8C60` with param 22, the exact resulting turn count not yet
+decoded; trace that function and the original's scenery state 5." Both are now fully traced
+(`pop3-rev/docs/functions.tsv` rows `0x4A8C60`, `0x4A6B20`, `0x4A7170`, `0x4A7BD0`, `0x4A6E20`, `0x4A8950`,
+`0x4A7B60`, `0x4A9030` (partial), `0x4A5EF0`, `0x4A6480`; new catalog `pop3-rev/docs/scenery_states.csv`, states
+1-13, focused on 3/5/6/11/12).
+
+**1. `ground_fire::TICKS` (currently `9`, explicitly commented as a guess in `ground_fire.rs`): replace with the
+real, caster-specific values - 22 for Firestorm, 24 for Lightning, not one shared constant.** The exe's own
+`0x4A8C60(fire_obj, param)` sets `+0x7c` (the burn-length countdown, decremented by exactly 1 per GAME TURN,
+confirmed by reading its own per-turn handler) directly to `param` turns for any duration <28 or >=38 (the
+relevant band for both real callers). Read straight from the immediate operands at each call site, at this
+engine's independently-established 12 turns/sec (`pop3-rev/docs/functions.tsv` `0x41C140`'s own row): **Firestorm's
+fireball-impact ground fire (`0x511800`) is 22 turns ≈ 1.83s; Lightning's own strike-point ground fire (`0x511AE0`,
+at `0x511BFB`) is 24 turns ≈ 2.0s** - 2 turns longer than Firestorm's. Both are vastly shorter than `9`'s own
+intent ("brief, like the blast's own explosion burst") suggested as a plausible range, but also neither is `9`
+itself - `open-populous`'s current single shared constant should become two (or a per-`Owner`/caster parameter),
+one per spell.
+
+**2. `tree::BURN_TICKS` (currently `127`, also an explicit guess) - NOT independently confirmed by this trace;
+flag as still-open rather than replacing it with a wrong number.** The exe's own "a tree/plant catches fire"
+mechanism (scenery state 5, `0x4A7BD0`) reuses the SAME `+0x7c` countdown field, but **every known ignition
+trigger in the exe passes `ticks=0` to the shared ignite helper (`0x4A7B60`)** - meaning none of them explicitly
+arms the tree's own burn length; it inherits whatever `+0x7c` already held before catching fire (an ordinary
+tree's own resting value for that field was not pinned down this session - its own `init_unit_type_5` case
+routes to a generic, non-type-specific init hook). This is a genuine gap this trace could not close statically;
+`127` should stay flagged as a guess, not be "confirmed" off the back of this session, and a future session
+would need to find what (if anything) seeds a tree's `+0x7c` at placement/growth time to close it properly.
+
+**3. A newly-discovered mechanic `open-populous`'s current architecture doesn't model at all: an ignited tree
+spawns its OWN companion free-standing fire-patch effect.** On the very first tick after catching fire, the
+burning scenery object (state 5) spawns a second, independent class-5 type-0xA "fire" object at its own exact
+position and arms IT with a fixed **76-turn (≈6.33s) duration** - the actual flame/smoke visual the tree shows,
+decoupled from the tree's own (unresolved-length) burn-down. If `open-populous` wants the original's exact visual
+behaviour for a burning tree, it's "the tree itself chars down over an unknown duration AND a separate 76-turn
+ground-fire-style flame/smoke effect plays at its base," not a single unified "tree on fire" visual.
+
+**4. What ends a ground-fire patch, confirmed end to end**: once `+0x7c` reaches 0 (state 3, `0x4A7170`), a
+finish helper (`0x4A6E20`) hands it into state 12 (`0x4A8950`), which makes ONE final type-scaled building-damage
+pass on whatever building occupies its cell (via the already-documented `0x4A9030`->`0x409200` pipeline, amount =
+`per-building-type wear-threshold/4`, attacker = none/`0xFFFFFFFF`), runs a brief multi-tick "settling ash" sink
+animation, then is deleted. A tree-ignited fire that is NOT the "flag=1" ignition variant (every spell/area-fire
+trigger found this session) is instead simply deleted outright once its own countdown ends - no burnt-stump
+remap was observed on any currently-known trigger path, despite the code having one (table `0x5A79C1`) for a
+trigger this session could not identify (`0x439BF9`).
+
+**5. Per-tick behaviour while burning** (if `open-populous` wants to model more than just the duration): ambient
+crackling sound every turn; a drifting smoke puff (class 7 type 3 - matches `effect_states.csv`'s already-named
+"smoke" state) spawned almost every turn; one extra "final ember" effect 4 turns before extinguishing; a
+visual-intensity value that shrinks from a per-instance baseline toward a floor over the fire's lifetime (not
+currently modelled client-side as far as this session checked, `ground_fire.rs`/`ground_fire::GroundFireView`).
+
+Not yet re-confirmed against `open-populous3`'s current source by a session with it attached for write access -
+this entry is queue-only per this file's own stated purpose; a session that attaches `open-populous3` should
+update `crates/game-core/src/firestorm.rs`/`lightning.rs`/`ground_fire.rs`/`tree.rs` and `TODO.md`'s own line (the
+"Burning trees... and the ground fire... have guessed lengths" bullet, `TODO.md` "Earthquake and Firestorm")
+accordingly, then trim this section.
+
+## 15. Ordinary-construction worker throttling and wood-delivery mechanism (2026-11-06)
+
+Traced `0x4B8BB0`, described going in as "a 16-tick 'plan' controller handling multi-worker throttling for
+ordinary building construction" (task #12/`docs/trace-backlog.md`). It is the per-turn handler for a class-9
+"wood-stock companion" object (the SAME struct `0x4BA2C0` - the already-documented construction/wear 0-4 visual
+stage machine - reads/writes its own `+0x96` stock field on), reached via the generic class-9 dispatch whenever
+that companion's own sub-kind is 2 (a distinct sub-kind 1, `0x4B8470`, exists and was not traced).
+
+**1. Worker concurrency, the main question - resolved with a concrete formula.** Each tick, once past a one-time
+warm-up countdown (see point 3), the controller buckets its own assigned workers (array `+0x6A`, count `+0x9A`)
+by their current order-kind via a helper (`0x4BA260`), separating out the genuinely-idle subset, and computes a
+budget: `max(1, floor(assigned_count / 2)) - (how many are already out fetching wood)`, clamped to how much wood
+is still needed before the site's own full-cost threshold. It then recruits up to that many MORE idle assigned
+workers into the wood-fetch order. **So at most half of a plan's currently-assigned braves (rounded down, minimum
+one) are ever simultaneously sent to fetch wood** - the rest stay in reserve (role not identified; plausibly
+reserved for other sub-tasks, not confirmed). A per-type table (`0x5A723E+0x16`) is read into a local here but
+never used again - it is NOT the enforcement point for "each kind has only a maximum" (`buildings.md`'s own
+existing text); that cap, if real, must be enforced elsewhere (the Assign-brave command, not traced this session).
+No evidence was found of workers being required to coordinate flattening/hammering through this same concurrency
+budget - only the wood-fetch recruitment was traced.
+
+**2. The ~16-tick rhythm, re-examined - likely conflates two different things, both real.** `0x4B8BB0` itself has
+a 16-bit countdown (`+0x94`) that decrements once per tick (floor at 1 via one code path, reaching true 0 via a
+second path gated on "at least one worker assigned") and, on its ONE-TIME 1->0 transition, pokes a nearby
+decorative effect object's own duration field to exactly 16 - not a recurring 16-tick cycle in this function
+(this field's own initial value was not independently located this session, though a literal 16 appears in
+exactly this spot). Separately, and likely the REAL source of a "16" figure in construction/growth pacing: a
+sibling function, `0x4050C0` (a pre-existing catalog row already said "hut growth, every 16 turns"), handles a
+villager hut's size-upgrade and was traced further this session - it's called UNCONDITIONALLY every turn from the
+generic building dispatcher, with its own probabilistic growth-accumulator (not an explicit turn-count modulo)
+most likely producing that observed ~16-turn average cadence. **Recommendation: treat "every ~16 turns" as a hut
+GROWTH-CHECK cadence (matches the game's other known 16-turn cadence, mana accrual per CONTEXT.md), not as a
+literal fixed period of `0x4B8BB0`'s own wood-fetch throttle**, which is better modelled as "evaluated every turn,
+gated once by a short one-time startup delay."
+
+**3. Free first wood piece at creation.** Whenever `0x4050C0` creates a new building instance (confirmed for a
+hut's own size-up), it immediately seeds that instance's wood-stock companion with `+100` wood (one "wood piece",
+the universal 100-unit constant) via `0x4BA2C0`, right after zeroing its stock - matching `buildings.md`'s own
+"the first piece of wood is brought to the site... as in the game" line, except the exe grants it by fiat at
+creation rather than requiring a brave to fetch it. Not confirmed whether plain initial building PLACEMENT
+(not a hut upgrade) reaches this same function or a sibling for its own first piece.
+
+**4. Wood delivery: reuses the primitive, NOT the vehicle-hut state machine - and the final hop is unresolved.**
+`process_cmd`'s order-kind dispatch table sends ordinary-construction wood-fetch to its OWN handler, `0x4340A0`
+(order-kind 7) - a separate implementation from order-kind 6's `0x495520` (which vehicle-hut crew and other
+generic "work" orders use). The two share the SAME low-level pickup primitive (`0x4A7860`/`transfer_wood`) and
+the SAME per-person-type max-carry constant (100, table `0x5A7074`) for the "pick wood off a tree/pile into my
+own carry" step - so "shares a primitive" is correct, "shares the orchestrating code" is not. Critically,
+**`0x4340A0`'s own state machine never calls `transfer_wood` a second time to deposit the carried wood into the
+site's stock** - every one of the 6 total call sites of `0x4A7860` and all 7 of `0x4BA2C0` in the whole exe were
+enumerated this session, and none matches "person carry -> construction-site companion stock" (unlike the
+vehicle-hut path, `0x496750`, which does call `transfer_wood` a second time with the hut itself as receiver).
+Instead, on reaching the building, the brave calls a separate helper (`0x4D58C0`) that DROPS its entire current
+carry on the ground as an ordinary wood-pile object - matching `buildings.md`'s own "drops the piece on the
+ground next to the door" line closely. **What happens to that dropped pile - i.e. how it actually becomes
+construction progress - was NOT resolved this session.** Two live possibilities, neither confirmed: (a) the same
+order-kind-7 state machine treats a fresh pile as just another "resource" target on a later pass (wood piles are
+already special-cased in its own chopping state), closing the loop through code already read without a separate
+deliver call; or (b) some other, unfound mechanism consumes dropped piles near a site directly. **This is this
+session's one genuinely open thread** - the natural next step is a live memory check (watch a construction
+site's own wood-stock field and a nearby brave's carried-wood field across several real deliveries) rather than
+further static search, since every call site of the two obvious candidate primitives has already been checked
+statically.
+
+Full exe detail (every address, table, and the per-type raw values read directly from the exe): `pop3-rev/docs/functions.tsv`
+rows `0x4b8bb0` (rewritten), `0x4ba260`, `0x4ba1b0`, `0x40afd0`, `0x4340a0`, `0x4d58c0`, `0x4050c0` (extended),
+`0x403280` (new, partial), `0x405269`/`0x408ab0` (new, stub/lead rows), plus the task-#12 addenda on `0x4ba2c0`'s
+and `0x495520`'s own existing rows (correcting the latter's earlier "presumably reaches the same states" guess
+for ordinary construction).
+
+## 16. Camera zoom-preset index advancement resolved (2026-11-06)
+
+`docs/camera.md`'s long-running investigation had decoded the camera-preset table (`vconfig_dat_mem`/`0x88F0C0`,
+`backup.xml`'s own name - this is the "VCONFIG0.DAT" data source `open-populous3`'s own `TODO.md` note on
+`zoom_to_pitch` points at) but left one open question: what actually advances the "current preset" index during a
+real zoom or flyby. Resolved this session, entirely statically (`dis.txt` disassembly + `backup.xml`'s own struct/
+symbol names, no live memory capture needed - matching that TODO.md note's own stated expectation).
+
+**The table is 2D, and the old "one index" framing was wrong.** It's `vconfig_struct[10][5]` (94-byte structs,
+`backup.xml`'s own `SIZE="0x5e"`), addressed as `(row*5 + column) * 94`. Two separate globals index it:
+`vconfig_index` (0-9, the ROW) and `vconfig_index_start` (0-4, the COLUMN) - `backup.xml`'s own symbol names for
+both, plus a third function it names `get_vconfig_index`, made this fast to confirm once cross-checked.
+
+**The ROW (`vconfig_index`) is a screen-resolution matcher, not a zoom level at all.** Every frame (plus twice at
+startup and once after any sprite/resolution reload), the engine calls `get_vconfig_index(current_window_width,
+current_window_height)`, which picks whichever of the table's 10 rows has the closest-matching own tagged
+resolution (each row literally stores a reference width/height, `backup.xml` names those fields `width`/`height`
+on the struct). So this index just continuously tracks "which built-in resolution profile fits the current
+window" - constant in practice unless the window is resized, and untouched by any zoom or flyby code.
+
+**The COLUMN (`vconfig_index_start`) is the real zoom-preset control, and it's a direct SET, not a stepper.**
+Exactly 4 raw UI commands (process_cmd ids `0x26`/`0x27`/`0x28`/`0x29`) each set this field to one literal value
+(0/1/2/3 respectively) via a shared helper, which also kicks off a smooth multi-frame blend of the on-screen
+camera parameters toward the new preset (already-confirmed linear ease over a handful of frames). **There is no
+relative +/- "zoom preset" command anywhere in this exe build** - a 5th code path that would let something set
+this index with wraparound (a generic "advance with wraparound" primitive) exists but is called from nowhere
+(every call site to its shared dispatcher was enumerated; none reaches it) - dead code in this build.
+
+**The AI-script flyby's own live zoom channel (already fully traced in `camera.md`, driven by a per-tribe Q14
+accumulator) touches NEITHER index.** It reads the ROW index (whatever the current resolution match is) to pick
+two FIXED columns within that row - column 0 and column 2 (zooming out) or 3 (zooming in) - and blends between
+them continuously. It completely ignores whatever `vconfig_index_start` a player's own zoom-preset command might
+currently have set. So manual zoom-preset selection and the flyby's own zoom animation are non-interacting: they
+read/write genuinely separate slots of the same shared table, never the same one.
+
+**For `open-populous`**: if `flyby.rs`'s `zoom_to_pitch`/`KNOTS` piecewise fit is ever revisited, the flyby's
+`ZOOM` channel only ever needs 3 of the 5 columns per resolution row (0, 2, 3) - a small, fully enumerable set
+(10 rows x 3 relevant columns = 30 `vconfig_struct` records, not all 50) whose own pitch/K-adjacent fields could
+be read directly once the struct's exact field layout for those values is pinned down, rather than extrapolated
+past zoom 80 as the current `TODO.md` note does. If `open-populous` ever wants a "jump to a numbered camera zoom
+preset" player command (as opposed to a continuous dolly), this is the real mechanism to match: a direct set to
+one of (in this build) 4 reachable preset slots, each with its own smooth multi-frame ease-in, not an incremental
+stepper. See `pop3-rev`'s `docs/camera.md` "Camera zoom presets resolved" for every exact address, and
+`docs/commands.tsv`'s new `ui_cmd 0x26`-`0x29` rows and `docs/functions.tsv`'s `0x4171f0`/`0x417270`/`0x4174b0`/
+`0x417338`/`0x417510`/`0x41c700`/`0x479f00` rows for the full code-level trace.
+
+## 17. Screen-origin `origin_x`/`origin_y` asymmetry resolved: a real, deliberate UI-panel inset (2026-11-06)
+
+`open-populous3`'s own `TODO.md`/`pop3-rev-analysis.md` "Landscape projection" flags an open item left over from
+the per-axis screen-scale trace: `origin_x`/`origin_y` (the screen-center terms added after the perspective
+divide) were found as `render_block[+0x2a or +0x2c] + screen_width_or_height/2`, live-confirmed exact for Y but
+off by a constant ~50px for X, "for a reason not yet found." Resolved this session, entirely by static disassembly
+tracing (no live memory needed) - **the cause is a genuine, intentional design decision, not a bug, not a wrong
+axis label, and not a stale/imprecise live measurement.**
+
+**The formula itself has no asymmetry** - traced to `coord_pnts_global_convert`/`0x46DE00` (Ghidra's own name,
+confirming the identity `pop3-rev-analysis.md` already uses for this address):
+`origin_x = render_block[+0x2a] + render_block[+0x26]/2`, `origin_y = render_block[+0x2c] + render_block[+0x28]/2`
+- structurally identical for both axes, exactly matching the shape the TODO.md note already guessed.
+
+**The asymmetry is in what feeds the two "half-dimension" terms**, `render_block[+0x26]` (X) and `[+0x28]` (Y),
+traced to a second function (`0x417270`): `[+0x26] = SCREEN_WIDTH - panel_px - margin`, `[+0x28] = SCREEN_HEIGHT
+- margin`. The `margin` term is identical on both sides and cancels out of the X-vs-Y difference entirely;
+`panel_px` - the live pixel width of the game's own UI side panel (returned by a third function, `0x44BB80`, which
+returns `0` outright when a confirmed "UI panel hidden" flag is set, else a resolution-scaled pixel width from a
+runtime-loaded table) - is **subtracted on the X side only**. So `origin_x` centers on a viewport that's narrower
+than the full screen by the panel's own width (because the panel occupies screen space on one side, horizontally),
+while `origin_y` centers on the FULL screen height, because the panel doesn't reduce vertical space at all. That's
+the entire, exact, code-grounded explanation for "X has a roughly-constant extra offset, Y doesn't" - it isn't an
+FOV/aspect-ratio correction (those would scale with aspect ratio or move both axes) and isn't a general
+screen-centering fudge; it's literally **UI-sidebar-width compensation**, baked into one data path and nowhere
+else.
+
+**For `open-populous`**: confirms this was never a bug to "fix" and never something `flyby.rs`/`zoom_to_pitch`
+needs to replicate unless/until `open-populous`'s own renderer draws a non-full-width 3D viewport (e.g. alongside
+its own HUD/sidebar) - at that point the correct behaviour to match is exactly this: center the view horizontally
+within the space actually available for 3D rendering (full width minus whatever UI panel occupies one side),
+not within the full window width, while still centering vertically on the full window height. Until then, nothing
+in `open-populous`'s own code needs a change for this. **One side-effect correction** also came out of this same
+trace: `docs/camera.md`'s own "Camera zoom presets resolved" section (§16 above) had `0x89C6CF`/`0x89C6D1`
+backwards (said `0x89C6D1`=width, `0x89C6CF`=height) - it's the other way around, confirmed two independent ways
+this session. Doesn't change §16's own conclusions (nothing there depended on which raw address was which), but
+flagging in case anything downstream quoted those two addresses by name rather than by role.
+
+See `pop3-rev`'s `docs/camera.md` "Screen origin (origin_x/origin_y) asymmetry SOLVED" for the full derivation,
+every exact address/offset, and what a live memory read would still need (just `0x59CD7C`, the panel-width
+function's own cached return value) to pin the exact "~50px" figure precisely rather than just its mechanism. See
+`docs/functions.tsv`'s `0x416f50`/`0x417270`/`0x417510`/`0x41ebf0`/`0x44bb80`/`0x46de00` rows for the full
+code-level trace.
