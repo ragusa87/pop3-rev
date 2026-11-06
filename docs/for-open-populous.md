@@ -1410,3 +1410,74 @@ useful/desired" rather than "the original definitely lets players do this."
 Full exe detail and addresses: `pop3-rev/docs/functions.tsv` rows `0x4BA9B0`, `0x4B98F0` (new), `0x4B9190`,
 `0x51A2A0`, `0x519F10`, and the `process_tribe_cmd` case at `0x440822-0x44085F` (`tribe_cmd 0x62`,
 `switchD_0043e922::caseD_62`) - all updated/cross-referenced 2026-11-06.
+
+## 12. Generic building occupant array (`+0x86`): "6 vs ~20" discrepancy resolved - ONE 6-slot array, shared by every building type (2026-11-06)
+
+A flagged discrepancy between two `functions.tsv` rows is now settled with code-grounded confidence: there is
+**exactly one** occupant array on a building, it is **physically 6 word-slots (12 bytes, `+0x86`-`+0x91`)**, and
+it is the same array for every building class/type - vehicle-hut crew, training-building garrison, and
+tower/watchtower garrison all read the identical field. The earlier "~20" figure (from an older
+`training_building_turn` write-up) was an ungrounded guess, not a second real field, and is now corrected.
+
+**How this was settled**: `evict_building_occupant` (`0x407490`) - the function that actually removes an
+occupant from a building, called from every "kick someone out" path in the exe - contains two independent
+linear scans of the `+0x86` array (find-by-cell-index, and find-first-occupied), and BOTH bound their loop with
+a literal immediate `cmp ecx,0x6` in the disassembly, not a table/type lookup. That is ground truth for the
+array's physical size: 6 slots, full stop, for every building instance regardless of type. This is independently
+corroborated by Ghidra's own generic `unit_struct` STRUCTURE export in `backup/backup.xml` (the shared,
+fixed-size, 0xB3-byte struct every game object is allocated from, confirmed via `alloc_unit`/`0x4ED8A0` pulling
+from one small set of free lists keyed only by class, never by a per-type/per-class size): it independently names
+that exact same byte range `+0x86`-`+0x91` as two back-to-back 3-word vectors (`loc_3`, `loc_4`) - a *different*,
+non-building meaning for that region, but the same 12-byte/6-word total size, which is exactly the kind of
+"same offset, different meaning per class" reuse `pop3-rev`'s own `AGENTS.md` already flags as a known pattern
+in this exe (not a coincidence worth re-litigating, just a second confirmation of the size).
+
+**Where "~20" actually came from, and what the real per-type number is**: `training_building_turn`
+(`0x405B80`) walks the same `+0x86` array but stops early, at a per-building-type "slots" value read from a
+building-type table (base `0x5A7228`, stride `0x4C` = `sizeof(unit_type_building)`, confirmed via that
+STRUCTURE's own Ghidra export) at column `+0x20`, indexed by **the training building's own type byte**
+(disassembly `0x405D12`-`0x405D1F`: `type*0x4C + 0x5A7248`). Reading that `+0x20` field directly out of the
+shipped exe's `.data` section for every real building type (class 2, types 1-19, `docs/unit_types`) gives:
+
+| Building type | `+0x20` "slots" value |
+|---|---|
+| Hut small / medium / big (1/2/3) | 3 / 4 / 5 |
+| Watchtower (4) | 1 |
+| Temple, spy hut, warrior hut, fire (firewarrior) hut (5/6/7/8) | 5 / 5 / 5 / 5 |
+| Reconversion (9) | 1 |
+| Wall (10) | 0 |
+| Gate (11) | 4 |
+| "ignore" type (12) | 3 |
+| Boat hut 1 / 2 (13/14) | 4 / 4 |
+| Airship hut 1 / 2 (15/16) | 6 / 6 |
+| Guard post (17) | 0 |
+| Library/vault (18) | 0 |
+| Prison (19) | 1 |
+
+Every one of these is `<= 6` - this per-type field is an **operational cap on how many of the SAME 6 physical
+slots that building type treats as active**, never a declared size for a separate, bigger array. The "~20"
+figure in the older row was never actually read off this table; it was a rough guess made before anyone looked
+up a concrete value, and is now superseded.
+
+**A second, unrelated wrinkle worth knowing about** (not part of the original discrepancy, found while tracing
+it): four OTHER functions that also walk the `+0x86` array - `tower_detection_radius` (`0x40B450`), the
+"tower spots an enemy" alert scan (`0x40BD20`), AI task 7's type-filtered garrison eviction (`0x4C8910`), and
+`PUT_PERSON_IN_DT`'s engine (`0x4E67B0`) - bound their own walk with a literal byte at address `0x5A7378`,
+previously documented (wrongly) as "a global cap constant". It is not global at all: `0x5A7378` is byte-for-byte
+`unit_type_building[4]+0x20` - i.e. the WATCHTOWER's own slots value from the exact same table above (value 1
+in the shipped exe) - hardcoded by the compiler because all four of these call sites are tower-specific (three
+explicitly require/resolve a watchtower before running; the fourth, `0x40BD20`, gates on `building+0x2B==4`).
+No actual bug: it just means these four functions always behave as if "slots=1" regardless of which building
+they're nominally passed, which happens to be correct because they're only ever used on towers in practice.
+
+**For `open-populous`'s `vehicles.md` (crew capacity) and `huts-and-training.md` (training occupancy/garrison
+capacity)**: if either doc currently assumes a flat capacity for "how many people/crew a building can hold in
+its occupant slots", the per-type table above is the exe-confirmed source of truth - note in particular that
+boat huts cap at 4 and airship huts at 6 (both within the hard 6-slot ceiling), villager huts scale 3/4/5 with
+hut size (plausibly the housing capacity, though that identity - this exact field driving `+0xA6`'s own
+"people inside" max - was not independently proven this session, only this field's role as a scan-loop bound in
+the two contexts above), and nothing in this exe ever needs more than 6 occupant slots on one building.
+
+Full exe detail and the raw per-type table read: `pop3-rev/docs/functions.tsv` rows `0x407490`, `0x405B80`,
+`0x40B450`, `0x4C8910`, `0x4E67B0` (`unit_type_building`/`unit_struct` STRUCTURE cross-checked against
+`backup/backup.xml`) - all updated 2026-11-06.
