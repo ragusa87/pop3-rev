@@ -37,6 +37,21 @@ were lost when that container reset. This is exactly the failure mode this file 
 so re-check the live `open-populous3` state before assuming anything below is already done, even
 if an earlier log entry here says it was "written directly" into that repo.
 
+- **§16 (2026-11-06, new) "camera zoom-preset index advancement resolved" -> `open-populous3`'s `TODO.md`
+  `zoom_to_pitch`/`flyby.rs` note (the one citing `pop3-rev docs/camera.md` item 11/"VCONFIG0.DAT") + possibly
+  `docs/specs/pop3-rev-analysis.md` "Camera flyby state (tribe_struct)".** Resolves backlog task #13 entirely
+  statically, no live capture (matching that TODO.md note's own stated expectation). Two globals previously
+  conflated as one ("the current preset index") are actually independent: the RESOLUTION-ROW index is reset every
+  frame from the live window size (not player/zoom-driven at all); the real player-facing zoom-preset control is a
+  SEPARATE field, set directly (never incrementally) by exactly 4 raw UI commands - no relative +/- zoom-preset
+  stepper exists anywhere in this build. The AI-script flyby's own zoom channel touches neither field; it only
+  reads the resolution-row index to pick two fixed table slots to blend between. **Concrete, immediately useful
+  implication for `zoom_to_pitch`**: the flyby's `ZOOM` channel (script values -100..100) only ever reaches 3 of
+  the table's 5 sub-presets per resolution row (slots 0/2/3) - a small, fully enumerable set (10 rows x 3 slots =
+  30 relevant `vconfig_struct` records) - so the pitch-at-zoom-80-100 extrapolation this TODO.md note currently
+  relies on `KNOTS` for could instead be read off directly from those records (a static data dump, once
+  `vconfig_dat_mem`'s exact field layout for pitch/K is nailed down) rather than extrapolated. See §16 below for
+  the full mechanism and exact addresses/UI-command ids.
 - **§15 (2026-11-06, new) "ordinary-construction worker throttling and wood-delivery mechanism traced" -> `open-populous3`'s
   `docs/specs/buildings.md` "Construction"/"Building it" section + `TODO.md`.** Resolves backlog item #12
   (`docs/trace-backlog.md` had no entry yet for this - picked up via a direct task assignment). Key corrections to
@@ -1718,3 +1733,49 @@ rows `0x4b8bb0` (rewritten), `0x4ba260`, `0x4ba1b0`, `0x40afd0`, `0x4340a0`, `0x
 `0x403280` (new, partial), `0x405269`/`0x408ab0` (new, stub/lead rows), plus the task-#12 addenda on `0x4ba2c0`'s
 and `0x495520`'s own existing rows (correcting the latter's earlier "presumably reaches the same states" guess
 for ordinary construction).
+
+## 16. Camera zoom-preset index advancement resolved (2026-11-06)
+
+`docs/camera.md`'s long-running investigation had decoded the camera-preset table (`vconfig_dat_mem`/`0x88F0C0`,
+`backup.xml`'s own name - this is the "VCONFIG0.DAT" data source `open-populous3`'s own `TODO.md` note on
+`zoom_to_pitch` points at) but left one open question: what actually advances the "current preset" index during a
+real zoom or flyby. Resolved this session, entirely statically (`dis.txt` disassembly + `backup.xml`'s own struct/
+symbol names, no live memory capture needed - matching that TODO.md note's own stated expectation).
+
+**The table is 2D, and the old "one index" framing was wrong.** It's `vconfig_struct[10][5]` (94-byte structs,
+`backup.xml`'s own `SIZE="0x5e"`), addressed as `(row*5 + column) * 94`. Two separate globals index it:
+`vconfig_index` (0-9, the ROW) and `vconfig_index_start` (0-4, the COLUMN) - `backup.xml`'s own symbol names for
+both, plus a third function it names `get_vconfig_index`, made this fast to confirm once cross-checked.
+
+**The ROW (`vconfig_index`) is a screen-resolution matcher, not a zoom level at all.** Every frame (plus twice at
+startup and once after any sprite/resolution reload), the engine calls `get_vconfig_index(current_window_width,
+current_window_height)`, which picks whichever of the table's 10 rows has the closest-matching own tagged
+resolution (each row literally stores a reference width/height, `backup.xml` names those fields `width`/`height`
+on the struct). So this index just continuously tracks "which built-in resolution profile fits the current
+window" - constant in practice unless the window is resized, and untouched by any zoom or flyby code.
+
+**The COLUMN (`vconfig_index_start`) is the real zoom-preset control, and it's a direct SET, not a stepper.**
+Exactly 4 raw UI commands (process_cmd ids `0x26`/`0x27`/`0x28`/`0x29`) each set this field to one literal value
+(0/1/2/3 respectively) via a shared helper, which also kicks off a smooth multi-frame blend of the on-screen
+camera parameters toward the new preset (already-confirmed linear ease over a handful of frames). **There is no
+relative +/- "zoom preset" command anywhere in this exe build** - a 5th code path that would let something set
+this index with wraparound (a generic "advance with wraparound" primitive) exists but is called from nowhere
+(every call site to its shared dispatcher was enumerated; none reaches it) - dead code in this build.
+
+**The AI-script flyby's own live zoom channel (already fully traced in `camera.md`, driven by a per-tribe Q14
+accumulator) touches NEITHER index.** It reads the ROW index (whatever the current resolution match is) to pick
+two FIXED columns within that row - column 0 and column 2 (zooming out) or 3 (zooming in) - and blends between
+them continuously. It completely ignores whatever `vconfig_index_start` a player's own zoom-preset command might
+currently have set. So manual zoom-preset selection and the flyby's own zoom animation are non-interacting: they
+read/write genuinely separate slots of the same shared table, never the same one.
+
+**For `open-populous`**: if `flyby.rs`'s `zoom_to_pitch`/`KNOTS` piecewise fit is ever revisited, the flyby's
+`ZOOM` channel only ever needs 3 of the 5 columns per resolution row (0, 2, 3) - a small, fully enumerable set
+(10 rows x 3 relevant columns = 30 `vconfig_struct` records, not all 50) whose own pitch/K-adjacent fields could
+be read directly once the struct's exact field layout for those values is pinned down, rather than extrapolated
+past zoom 80 as the current `TODO.md` note does. If `open-populous` ever wants a "jump to a numbered camera zoom
+preset" player command (as opposed to a continuous dolly), this is the real mechanism to match: a direct set to
+one of (in this build) 4 reachable preset slots, each with its own smooth multi-frame ease-in, not an incremental
+stepper. See `pop3-rev`'s `docs/camera.md` "Camera zoom presets resolved" for every exact address, and
+`docs/commands.tsv`'s new `ui_cmd 0x26`-`0x29` rows and `docs/functions.tsv`'s `0x4171f0`/`0x417270`/`0x4174b0`/
+`0x417338`/`0x417510`/`0x41c700`/`0x479f00` rows for the full code-level trace.

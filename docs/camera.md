@@ -559,6 +559,92 @@ call `0x4e6a70` - it's a different operation (see below).
   release the drag" momentum system. Worth a dedicated session if that's ever user-visible enough
   to matter for `flyby.rs`/manual-pan parity; not pursued further here.
 
+## Camera zoom presets resolved: what advances `vconfig_index`/`vconfig_index_start` (open-populous TODO.md's "VCONFIG0.DAT" question, CLOSED)
+`open-populous3`'s own `TODO.md` (`zoom_to_pitch`/`flyby.rs` notes) flags this investigation's earlier discovery of
+the real preset data source (`vconfig_dat_mem`, `backup.xml`'s own name for the table at `0x88F0C0` this file
+already uses as "the table at 0x88F0C0" throughout - see "The real AI-script zoom chain" above) as needing one more
+thing before the 80-100 zoom numbers can be read off directly: "what advances the 'current preset' index during a
+real zoom/flyby." Fully resolved this session, **entirely by static tracing** (`dis.txt` + `backup.xml`'s own
+`vconfig_struct`/`vconfig_index`/`vconfig_index_start`/`get_vconfig_index` names, cross-checked against each other)
+- no live capture needed, confirming the TODO.md note's own expectation.
+
+**The table and its indexing, confirmed exactly via `backup.xml`'s own struct/symbol names:**
+`vconfig_dat_mem` (`0x88F0C0`) is `vconfig_struct[50]` (struct size `0x5e`=94 bytes, confirmed matching every
+`rep movs ecx=0x17` + trailing word copy this investigation has already traced through it). It is addressed as a
+**2D array, not a flat list**: `byte_offset = (vconfig_index*5 + vconfig_index_start) * 94`, where `vconfig_index`
+(`0x89C6EE`, 0-9 - "ROW") and `vconfig_index_start` (`0x89C6EC`, 0-4 - "COLUMN/sub-level") are TWO SEPARATE globals
+this file previously treated as one ("indexed by 0x89C6EE/0x89C6EF" in the old `0x417510`/`0x41C700` notes above -
+`0x89C6EF` was never actually a second index, just the next byte of `0x89C6EE`'s own 2-byte-aligned read). This
+exact formula is used consistently by `update_vfconfig`/`0x417338` (the function that actually snaps the live
+render block, `0x88F004`, to the current combined preset) and by `0x417510`'s own multi-frame blend target lookup.
+
+**`vconfig_index` (the ROW, "which built-in resolution profile") is NOT a zoom dimension at all - it tracks the
+live window/screen resolution, continuously, and nothing a player does to "zoom" touches it.** `get_vconfig_index`
+(`0x4171F0`, Ghidra's own name) takes `(width, height)` and returns whichever of the table's 10 rows has the
+closest-matching own tag (`vconfig_struct+0x30`/`+0x32`, `backup.xml`'s own member names are literally `width`/
+`height` - independent confirmation): an exact match short-circuits immediately, otherwise it minimises a
+squared-difference-style metric across all 10 rows. Its 4 callers all pass the CURRENT viewport pixel size
+(`0x89C6D1`=width, `0x89C6CF`=height - confirmed screen-resolution fields, compared against literal VGA/SVGA
+constants like 640x480/800x600 dozens of times elsewhere in `dis.txt`): `init_all` (once with the hardcoded
+640x480 startup default, once with the live resolution), **`draw_main`, every single frame**, and
+`reload_hspr_sprites` (after a sprite-bank/resolution-change reload). So `vconfig_index` just continuously re-snaps
+to "whichever built-in profile best matches the window's current pixel size" - normally constant during a play
+session (the window doesn't resize), never advanced by zoom input or by the flyby.
+
+**`vconfig_index_start` (the COLUMN, 0-4) IS the real, player-facing "camera zoom preset" control - set directly,
+never incrementally, by exactly 4 raw UI commands.** `process_cmd`'s own switch (`switchD_004abc0e`, `backup.xml`'s
+own `caseD_26`/`caseD_27`/`caseD_28`/`caseD_29` all sharing one target, `0x4abcc0`) computes
+`bl = ui_cmd_id - 0x26` (giving literal 0/1/2/3) and calls the shared `0x479F00` dispatcher (`functions.tsv`'s own
+row, previously catalogued only as a "banner/message hub" - this session traced its until-now-unread category 0xC)
+with `(0xC, bl, 0)`. Category 0xC's handler (`0x47a40f`) saves the OLD value to `0x89C6EB`, writes the new value
+into `vconfig_index_start` (clamped/wrapped to 0-4), computes a frame-rate-scaled transition length
+(`0x4174B0`, 8-32 frames) into the blend-step counter `0x89CE34`, and snapshots the CURRENT live render block into
+a "from" buffer (`0x88F062`) - exactly the setup `0x417510`'s own per-frame multi-frame ease (already traced above,
+"Camera-PRESET multi-frame blend") then consumes every frame via `cur += (target-cur)/(steps_left-1)` until it
+reaches the new preset. **This is a direct "jump to preset N" command, not a relative +/- step** - there is no
+code path anywhere that increments/decrements `vconfig_index_start` by one; each of the 4 raw ids IS one specific
+target value. Exhaustively grepped every "call 0x479f00" site in `dis.txt` (~100 call sites) confirms these 4 are
+the ONLY callers of category 0xC anywhere in the exe. The physical keybind/menu button for `ui_cmd 0x26-0x29`
+wasn't identified this session (not found under this name in `open-populous3`'s own `docs/specs/shortcuts.md`;
+that doc's own "+/- zoom" entries correspond to the CONFIRMED-DEAD debug pan/zoom key handlers this file's own
+"Ruled out" list already flags, a different, unrelated global, `0x89C6C3`/`0x417270`, not `vconfig_index_start` -
+see `functions.tsv`'s `0x417270` row, added this session, for that disambiguation).
+
+**The flyby's own live zoom channel (`tribe_struct+0x34`, "The real AI-script zoom chain" above) never writes
+EITHER index - it only reads `vconfig_index` (the row) to pick two FIXED neighbours within that row to blend
+between, ignoring whatever `vconfig_index_start` currently is.** Re-reading `0x41C700`/`preset_blend_by_fraction`'s
+index arithmetic in full this session (an earlier pass through this investigation missed one extra `*5` term)
+shows presetA is ALWAYS `vconfig_dat_mem[vconfig_index].sub[0]` and presetB is ALWAYS
+`vconfig_dat_mem[vconfig_index].sub[2 or 3]` (2 for zoom-out/positive `signed_delta`, 3 for zoom-in) - a hardcoded
+sub0-to-sub(2|3) blend within whichever row the live screen resolution currently matches, completely independent
+of the live `vconfig_index_start` value a player's own zoom-preset command might have set. So during a flyby, the
+ZOOM channel and a player's own manual zoom-preset keys (if pressed at the same time) don't interact or conflict -
+they drive genuinely separate preset slots of the same table. `functions.tsv`'s `0x41C700` row has the full
+corrected index derivation.
+
+**A 5th code path, confirmed DEAD, would have let something set `vconfig_index` (the row) directly with wraparound
+- never reachable from anywhere.** `0x479F00` category 0xE (`0x47a4e4`) does `vconfig_index = bl`, wrapped mod-10
+(`<0 -> 9`, `>9 -> 0`) - looks exactly like a generic "advance the zoom row with wraparound" primitive, but
+exhaustively grepping every "call 0x479f00" site in `dis.txt` found NONE passing `arg1=0xE` (14) - this branch is
+unreachable code in this build. Worth knowing if a different game version/patch ever turns out to wire a caller to
+it, but in this build `vconfig_index` is never advanced by anything resembling a zoom command, direct or
+incremental - only by the per-frame resolution re-match described above.
+
+**Net answer to "what advances the current preset index during a real zoom or flyby,"** fully resolved, no live
+memory needed: **nothing "advances" either index by a delta; both are always SET outright.** `vconfig_index` (the
+resolution row) is continuously reset every frame from the live window size, never touched by zoom/flyby logic at
+all. `vconfig_index_start` (the actual zoom-preset dimension a player can change) is set directly to one of 4
+literal values (0-3) by 4 dedicated raw UI commands (`ui_cmd 0x26-0x29`, `docs/commands.tsv`'s own new rows), each
+triggering a smooth multi-frame ease to the new preset; there is no continuous/relative zoom-stepper command for
+it anywhere in this build. The AI-script flyby's own zoom channel is a third, independent mechanism again (already
+fully traced above) that blends within fixed sub-slots 0/2/3 of the row, untouched by and not touching either
+index. **Practical implication for `open-populous`'s `flyby.rs`/`zoom_to_pitch`**: the "80-100 zoom" extrapolation
+TODO.md flags doesn't need `vconfig_index_start` tracing after all - the flyby's own `ZOOM` channel (script values
+-100..100) only ever reaches sub-presets 0/2/3 of whatever row the current resolution matches, a closed, already-
+enumerable set (10 rows * 3 relevant sub-slots = 30 `vconfig_struct` records total) rather than all 50 - reading
+those presets' own `K`/`D`-adjacent fields directly (once `vconfig_dat_mem`'s on-disk/in-memory layout is dumped,
+a static read, no live capture) would settle the pitch-at-extreme-zoom question exactly instead of extrapolating.
+
 ## Open questions / next steps
 1. ~~Pin `FLYBY_START`'s turn exactly~~ **SOLVED** this session: **turn 72**, read straight from the compiled
    script's own `Every{period:8} / IF INT_GAME_TURN>70 / IF $57==0` gate via the `ai_script_info` example
@@ -592,6 +678,14 @@ call `0x4e6a70` - it's a different operation (see below).
    the two-phase branch's blend (past where it splits the duration into a "kill existing rate" piece and a
    remainder) wasn't fully re-derived - a further session could finish that if the precise acceleration curve
    ever matters for `flyby.rs` (it's plausibly within smoothstep/easing error tolerance already).
+8. ~~What advances the "current preset" index (`vconfig_index`/`vconfig_index_start`) during a real zoom or
+   flyby~~ **SOLVED**, a later session, entirely statically (no live capture, confirming `open-populous`
+   `TODO.md`'s own expectation): neither index is ever incremented - `vconfig_index` (the resolution-ROW) is
+   reset every frame from the live window size via `get_vconfig_index`/`0x4171F0`, untouched by any zoom/flyby
+   logic; `vconfig_index_start` (the real zoom-preset dimension) is SET directly (never stepped) to one of 4
+   literal values by 4 dedicated raw UI commands (`ui_cmd 0x26-0x29`, `docs/commands.tsv`); the flyby's own zoom
+   channel (`0x41C700`) reads `vconfig_index` only, to blend within two fixed sub-slots of that row, and touches
+   neither index. See "Camera zoom presets resolved" above for the full derivation.
 
 ## Raw capture logs
 Not committed, scratch only: `cam.txt` (POPTB.EXE, mistranslated address lesson - m1..m8 read stuck
