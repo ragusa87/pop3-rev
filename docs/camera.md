@@ -584,7 +584,12 @@ live window/screen resolution, continuously, and nothing a player does to "zoom"
 closest-matching own tag (`vconfig_struct+0x30`/`+0x32`, `backup.xml`'s own member names are literally `width`/
 `height` - independent confirmation): an exact match short-circuits immediately, otherwise it minimises a
 squared-difference-style metric across all 10 rows. Its 4 callers all pass the CURRENT viewport pixel size
-(`0x89C6D1`=width, `0x89C6CF`=height - confirmed screen-resolution fields, compared against literal VGA/SVGA
+(**correction, a later session**: `0x89C6CF`=width, `0x89C6D1`=height - this session had it backwards; re-confirmed
+two independent ways: `cmp WORD PTR 0x89c6cf,0x280` paired with `cmp WORD PTR 0x89c6d1,0x1e0` right next to it at
+`0x410e84`/`0x410e8f` - a joint "is the mode exactly 640x480" check, `0x280`=640 against `0x89c6cf` and `0x1e0`=480
+against `0x89c6d1` - and `get_vconfig_index`'s own call site at `0x42abc9` pushes `0x89c6cf` as arg1/`width` (checked
+against the table's own `+0x30`/"width" field) and `0x89c6d1` as arg2/`height` (`+0x32`/"height"). Matters for the
+screen-origin trace below, which depends on getting this pairing right. Compared against literal VGA/SVGA
 constants like 640x480/800x600 dozens of times elsewhere in `dis.txt`): `init_all` (once with the hardcoded
 640x480 startup default, once with the live resolution), **`draw_main`, every single frame**, and
 `reload_hspr_sprites` (after a sprite-bank/resolution-change reload). So `vconfig_index` just continuously re-snaps
@@ -645,6 +650,89 @@ enumerable set (10 rows * 3 relevant sub-slots = 30 `vconfig_struct` records tot
 those presets' own `K`/`D`-adjacent fields directly (once `vconfig_dat_mem`'s on-disk/in-memory layout is dumped,
 a static read, no live capture) would settle the pitch-at-extreme-zoom question exactly instead of extrapolating.
 
+## Screen origin (`origin_x`/`origin_y`) asymmetry SOLVED: the ~50px X offset is a real, deliberate UI-panel inset, not a bug or a bad measurement
+`open-populous3`'s own `TODO.md`/`pop3-rev-analysis.md` "Landscape projection" flags an open item from the per-axis
+screen-scale trace: `origin_x`/`origin_y` (screen center, added after the `focal_px·x'/z'` perspective divide) were
+found as `render_block[+0x2a or +0x2c] + screen_width_or_height/2`, live-confirmed exact for Y but off by a
+constant ~50px for X "for a reason not yet found." Fully resolved this session, **entirely by static tracing**
+(`dis.txt` only, no live memory needed) - and the root cause is a genuine, intentional asymmetry in the code, not a
+mismeasurement or a mislabeled axis.
+
+**The exact formula**, read straight out of `coord_pnts_global_convert`/`0x46DE00` (Ghidra's own name,
+`backup.xml`'s `SYMBOL` entry - confirms the identity `pop3-rev-analysis.md`/`TODO.md` already used for this
+address; `functions.tsv`'s own row for it had the formula but not the name, now fixed) and its near-duplicate
+`0x46DC40`:
+
+```text
+origin_x = render_block[+0x2a] + render_block[+0x26] / 2
+origin_y = render_block[+0x2c] + render_block[+0x28] / 2
+```
+
+confirming the TODO.md note's own guessed shape exactly (word-sized fields throughout, standard arithmetic shift
+for the `/2`). The asymmetry isn't in this formula - both axes are structurally identical here. It's in what feeds
+`render_block[+0x26]` vs `[+0x28]` (the "half-dimension" terms): traced to `FUN_00417270`/`0x417270` (own
+`functions.tsv` row, previously catalogued this session's history as "a map/minimap scroll-row-and-column
+viewport" - that read was a plausible guess from the write targets alone, now corrected with the actual data-flow
+traced):
+
+```text
+reserved_px = 0x44BB80()                         # 0 if the UI side panel is hidden, else a pixel width (below)
+margin = si                                      # the fn's own byte argument, always called with si = global 0x89C6C3
+
+render_block[+0x22] = reserved_px + margin*8     # clip-rect LEFT  (copied onward to 0x87CA8C, "Landscape projection")
+render_block[+0x24] = margin*8                   # clip-rect TOP   (copied onward to 0x87CA8E)
+render_block[+0x26] = SCREEN_WIDTH  - reserved_px - margin*16   # <- origin_x's own half-dimension term
+render_block[+0x28] = SCREEN_HEIGHT               - margin*16   # <- origin_y's own half-dimension term
+```
+
+(`SCREEN_WIDTH`/`SCREEN_HEIGHT` here are `0x89C6CF`/`0x89C6D1` respectively - see the correction just above this
+section; getting this pairing right was what made the formula fall into place, after an earlier pass through this
+same instruction sequence briefly read it backwards.) **`render_block[+0x26]` (the X half-dimension) has
+`reserved_px` subtracted; `render_block[+0x28]` (the Y half-dimension) does NOT** - the entire asymmetry comes from
+this one term being X-only. Since `origin_x` ends up `(SCREEN_WIDTH - reserved_px - margin*16)/2` instead of the
+naive `SCREEN_WIDTH/2`, it reads low by `reserved_px/2` (the `margin` term affects both axes equally via the
+`*16`/`*2`, so it cancels out of the X-vs-Y *difference* - it's not the source of the asymmetry, `reserved_px` is).
+
+**`reserved_px` is the game's UI side panel's own pixel width - confirmed by the flag that gates it.**
+`0x44BB80` (own new `functions.tsv` row) returns `0` outright if global `0x89C661` bit `0x4` is set, else either a
+flat fallback of `128` (if a per-resolution lookup table at `0x684220` has no matching row) or
+`table_entry * SCREEN_WIDTH / 65536` (a resolution-proportional fraction, Q16, from whichever row a key at
+`0x68C6C5` selects) - i.e. a pixel width that scales with the window, exactly how a HUD panel's width would be
+expressed. `0x89C661` bit `0x4` is independently confirmed to mean "the UI panel is hidden": every caller of
+`0x417270` sets/clears/toggles this exact bit immediately before calling it (`0x42B4CA`, `0x458105`/`0x4580FE`,
+`0x47A3A2`/`0x47A392`/`0x47A39B` - the last three live inside `0x479F00`'s own dispatcher, gated on a 3-way
+positive/negative/zero argument that reads exactly like a show/hide/toggle UI command), and `0x44BB80` is the ONLY
+reader of that bit anywhere that also touches a per-resolution pixel-width table. So: **with the panel visible
+(the normal play state, and presumably the state during whatever live measurement produced the original "~50px"
+figure), `origin_x` is centered on a viewport that's narrower than the full screen by the panel's own width,
+because the panel occupies screen space on one side only (horizontally) - nothing analogous ever reduces
+`SCREEN_HEIGHT` for `origin_y`, because the panel doesn't eat into vertical space.** This is the concrete,
+code-grounded answer to all three of the task's candidate explanations: it's not a FOV/aspect correction and not a
+general screen-centering offset (those would move both axes, or scale with aspect ratio, not drop a fixed amount
+from X alone) - it is, literally, **UI-sidebar-width compensation**, baked into the one place (`[+0x26]`) that
+feeds the horizontal half-dimension and nowhere else.
+
+**What a live check would need to pin the exact "~50px" figure, if ever wanted precisely** (not required for the
+mechanism above, which is fully static): `0x44BB80` caches its own return value at `0x59CD7C` every call - a
+single live read of that global gives `reserved_px` directly, no need to re-derive the table lookup. Divide by 2
+(for the "/2" in the origin formula) and that should equal the originally-measured X-vs-naive-half-width gap
+exactly, for whatever resolution/panel-visibility state that measurement was taken at. The `margin` term (global
+`0x89C6C3`, 0-32 range, set by other `0x479F00` UI commands, unrelated to the already-ruled-out dead debug
+pan/zoom keys despite superficially similar code shape - `functions.tsv`'s `0x417270` row has the disambiguation)
+affects both `[+0x26]` and `[+0x28]` identically and so doesn't change the X-vs-Y gap, but would need to be read
+too if reproducing the absolute `origin_x`/`origin_y` values rather than just their difference.
+
+**Not pursued further this session, smaller remaining threads**: `render_block[+0x2a]`/`[+0x2c]` (the additive
+terms ahead of the halved dimensions, both default to a small constant - `0`/`0x10` respectively, from the
+render-block-defaults function `0x416F50`, own row expanded this session with the full default dump) are
+themselves eased every frame toward a camera-preset's own `+0x2a`/`+0x2c` fields by the same multi-frame blend
+function already traced for `K`/`D`/etc (`0x417510`, "Camera-PRESET multi-frame blend" above) - so in principle a
+*second*, independent source of X-vs-Y difference could live inside the `vconfig_struct` preset table's own data
+(if a preset's `+0x2a` and `+0x2c` aren't both zero). Not read this session (would need the live/on-disk
+`vconfig_dat_mem` dump already flagged as a useful follow-up above); the panel-width mechanism above is already a
+complete, sufficient, confirmed explanation for an asymmetry that's X-specific and roughly constant, so this is a
+secondary lead, not a gap in the main finding.
+
 ## Open questions / next steps
 1. ~~Pin `FLYBY_START`'s turn exactly~~ **SOLVED** this session: **turn 72**, read straight from the compiled
    script's own `Every{period:8} / IF INT_GAME_TURN>70 / IF $57==0` gate via the `ai_script_info` example
@@ -686,6 +774,12 @@ a static read, no live capture) would settle the pitch-at-extreme-zoom question 
    literal values by 4 dedicated raw UI commands (`ui_cmd 0x26-0x29`, `docs/commands.tsv`); the flyby's own zoom
    channel (`0x41C700`) reads `vconfig_index` only, to blend within two fixed sub-slots of that row, and touches
    neither index. See "Camera zoom presets resolved" above for the full derivation.
+9. ~~Why does `origin_x` carry a constant ~50px offset `origin_y` doesn't~~ **SOLVED**, a later session, entirely
+   statically: `origin_x`'s own half-dimension term (`render_block+0x26`) has the UI side panel's live pixel width
+   subtracted before halving; `origin_y`'s (`render_block+0x28`) does not, because the panel only occupies
+   horizontal screen space. A real, deliberate asymmetry, not a bug or a bad measurement. See "Screen origin
+   (origin_x/origin_y) asymmetry SOLVED" above for the full derivation and what a live check would still need to
+   pin the exact pixel figure.
 
 ## Raw capture logs
 Not committed, scratch only: `cam.txt` (POPTB.EXE, mistranslated address lesson - m1..m8 read stuck

@@ -37,6 +37,17 @@ were lost when that container reset. This is exactly the failure mode this file 
 so re-check the live `open-populous3` state before assuming anything below is already done, even
 if an earlier log entry here says it was "written directly" into that repo.
 
+- **§17 (2026-11-06, new) "screen-origin X/Y asymmetry resolved" -> `open-populous3`'s `TODO.md` "Landscape
+  projection"/`zoom_to_pitch` note (the one flagging `origin_x`'s unexplained ~50px offset vs `origin_y`) +
+  possibly `docs/specs/pop3-rev-analysis.md` "Landscape projection".** Resolves backlog task #14 entirely
+  statically, no live capture needed. The asymmetry is REAL and INTENTIONAL, not a bug or a bad live measurement:
+  `origin_x`'s own half-screen-width term has the UI side panel's live pixel width subtracted before halving;
+  `origin_y`'s half-screen-height term does not, because the panel only occupies horizontal screen space. Also
+  corrects a width/height field-pairing mix-up this same investigation introduced earlier in this session (see
+  §16 above, `docs/camera.md`'s "Camera zoom presets resolved") - `0x89C6CF` is WIDTH and `0x89C6D1` is HEIGHT, not
+  the reverse; doesn't change §16's own conclusions (neither field's role in that write-up depended on which was
+  which) but is worth knowing if anything built on that section's exact field names. See §17 below for the full
+  mechanism and exact addresses.
 - **§16 (2026-11-06, new) "camera zoom-preset index advancement resolved" -> `open-populous3`'s `TODO.md`
   `zoom_to_pitch`/`flyby.rs` note (the one citing `pop3-rev docs/camera.md` item 11/"VCONFIG0.DAT") + possibly
   `docs/specs/pop3-rev-analysis.md` "Camera flyby state (tribe_struct)".** Resolves backlog task #13 entirely
@@ -1779,3 +1790,47 @@ one of (in this build) 4 reachable preset slots, each with its own smooth multi-
 stepper. See `pop3-rev`'s `docs/camera.md` "Camera zoom presets resolved" for every exact address, and
 `docs/commands.tsv`'s new `ui_cmd 0x26`-`0x29` rows and `docs/functions.tsv`'s `0x4171f0`/`0x417270`/`0x4174b0`/
 `0x417338`/`0x417510`/`0x41c700`/`0x479f00` rows for the full code-level trace.
+
+## 17. Screen-origin `origin_x`/`origin_y` asymmetry resolved: a real, deliberate UI-panel inset (2026-11-06)
+
+`open-populous3`'s own `TODO.md`/`pop3-rev-analysis.md` "Landscape projection" flags an open item left over from
+the per-axis screen-scale trace: `origin_x`/`origin_y` (the screen-center terms added after the perspective
+divide) were found as `render_block[+0x2a or +0x2c] + screen_width_or_height/2`, live-confirmed exact for Y but
+off by a constant ~50px for X, "for a reason not yet found." Resolved this session, entirely by static disassembly
+tracing (no live memory needed) - **the cause is a genuine, intentional design decision, not a bug, not a wrong
+axis label, and not a stale/imprecise live measurement.**
+
+**The formula itself has no asymmetry** - traced to `coord_pnts_global_convert`/`0x46DE00` (Ghidra's own name,
+confirming the identity `pop3-rev-analysis.md` already uses for this address):
+`origin_x = render_block[+0x2a] + render_block[+0x26]/2`, `origin_y = render_block[+0x2c] + render_block[+0x28]/2`
+- structurally identical for both axes, exactly matching the shape the TODO.md note already guessed.
+
+**The asymmetry is in what feeds the two "half-dimension" terms**, `render_block[+0x26]` (X) and `[+0x28]` (Y),
+traced to a second function (`0x417270`): `[+0x26] = SCREEN_WIDTH - panel_px - margin`, `[+0x28] = SCREEN_HEIGHT
+- margin`. The `margin` term is identical on both sides and cancels out of the X-vs-Y difference entirely;
+`panel_px` - the live pixel width of the game's own UI side panel (returned by a third function, `0x44BB80`, which
+returns `0` outright when a confirmed "UI panel hidden" flag is set, else a resolution-scaled pixel width from a
+runtime-loaded table) - is **subtracted on the X side only**. So `origin_x` centers on a viewport that's narrower
+than the full screen by the panel's own width (because the panel occupies screen space on one side, horizontally),
+while `origin_y` centers on the FULL screen height, because the panel doesn't reduce vertical space at all. That's
+the entire, exact, code-grounded explanation for "X has a roughly-constant extra offset, Y doesn't" - it isn't an
+FOV/aspect-ratio correction (those would scale with aspect ratio or move both axes) and isn't a general
+screen-centering fudge; it's literally **UI-sidebar-width compensation**, baked into one data path and nowhere
+else.
+
+**For `open-populous`**: confirms this was never a bug to "fix" and never something `flyby.rs`/`zoom_to_pitch`
+needs to replicate unless/until `open-populous`'s own renderer draws a non-full-width 3D viewport (e.g. alongside
+its own HUD/sidebar) - at that point the correct behaviour to match is exactly this: center the view horizontally
+within the space actually available for 3D rendering (full width minus whatever UI panel occupies one side),
+not within the full window width, while still centering vertically on the full window height. Until then, nothing
+in `open-populous`'s own code needs a change for this. **One side-effect correction** also came out of this same
+trace: `docs/camera.md`'s own "Camera zoom presets resolved" section (§16 above) had `0x89C6CF`/`0x89C6D1`
+backwards (said `0x89C6D1`=width, `0x89C6CF`=height) - it's the other way around, confirmed two independent ways
+this session. Doesn't change §16's own conclusions (nothing there depended on which raw address was which), but
+flagging in case anything downstream quoted those two addresses by name rather than by role.
+
+See `pop3-rev`'s `docs/camera.md` "Screen origin (origin_x/origin_y) asymmetry SOLVED" for the full derivation,
+every exact address/offset, and what a live memory read would still need (just `0x59CD7C`, the panel-width
+function's own cached return value) to pin the exact "~50px" figure precisely rather than just its mechanism. See
+`docs/functions.tsv`'s `0x416f50`/`0x417270`/`0x417510`/`0x41ebf0`/`0x44bb80`/`0x46de00` rows for the full
+code-level trace.
