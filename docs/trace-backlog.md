@@ -458,3 +458,34 @@ one with a different approach, or a later pop3-rev session may already have trac
   `0x40BAC0`/`building_is_alerted` has 2 call sites (`0x471129`, `0x472494`) that look like render-reveal checks
   for normally-hidden enemy objects - a plausible lead for the notification/reveal half of the alarm, left open
   for a future session (own `functions.tsv` row has the detail).
+- **FOUND, later session (2026-11-07): a THIRD, genuinely autonomous combat mechanism, separate from both of the
+  above - the player's own "self-defense" report (a firewarrior garrisoned in a building throws fire at a nearby
+  enemy without leaving; a garrisoned warrior walks out to fight one on its own, neither via the B hotkey or the
+  building-attack alarm).** Traced the issuer of order kind `0x15`/21 ("attack, self-issued auto-scan" in the
+  `order_execute`/`0x432D18` catalog, previously unlocated): `0x4D4690` (own `functions.tsv` row, already known
+  to run for every owned person every eligible tick from earlier Preacher-conversion tracing) dispatches by
+  person type - preacher/shaman to `preacher_auto_scan`/`0x51E7B0`, firewarrior (gated by a trivial check,
+  `0x51FCD0`) to its own dedicated scan `0x51E9A0` (new row), everything else to the generic melee scan
+  `0x51E5E0`/`0x51EAB0` - with a GHOST-status override (`self+0x11` bit `0x8`) to a parallel scanner `0x51E6F0`
+  (new row) regardless of type. **Confirmed by reading `0x51E9A0`'s own code**: the firewarrior's scan reads its
+  OWN CURRENT cell (`+0x3D`/`+0x3F`) as the scan centre - it does not walk anywhere first, consistent with its
+  ranged nature (`firewarrior_fire`/`0x51FBF0`) - and **nothing anywhere in this whole dispatch chain
+  (`0x4D4690`, `0x51E5E0`, `0x51E7B0`, `0x51E9A0`) checks whether the unit is currently a building occupant**
+  (the `+0x86` array) before running. Also confirmed the call site feeding `0x4D4690` (inside the generic
+  per-person per-turn tick, `~0x4D3B3F`) only excludes units with no tribe (`+0x2F==0xFF`, i.e. wildmen/neutral) -
+  no occupancy/garrison exclusion there either. **Net reading (not live-verified this session): this is one
+  single autonomous "if I can see an enemy from where I am, attack it" mechanism that produces two different
+  VISIBLE outcomes purely because of each type's own engagement range** - a ranged firewarrior can satisfy its
+  self-issued attack order from wherever it currently stands (even a building's doorway cell, so it fires
+  without leaving), while a melee type (warrior, generic scan) needs `attack_order_handler`'s own
+  approach/arrival sub-states to physically close distance first, which - if it started inside a building -
+  means walking out through the door before it can land a hit. Two outcomes, one mechanism, no building-specific
+  code anywhere in the chain. **Open leads for a future session**: `0x51F470`/`0x51EE10` (the actual
+  candidate-finder helpers for the firewarrior/ghost scans, named but not read), `0x520480` (a shared post-order
+  tail both `0x51E6F0` and `0x51E9A0` call - confirmed NOT a building-exit/eviction call, but its real purpose,
+  something involving a same-cell "ghost double" of the acting unit, is unresolved), the new order kind `0x22`
+  (34, self-issued only by `0x51E9A0` on one specific found-type, not yet traced through `order_execute`'s own
+  dispatch), and `0x51FCD0`'s own gate condition (`unit+0xB2==1` on a firewarrior - meaning not confirmed). No
+  live memory check was run this session to confirm a garrisoned firewarrior's position fields really do read as
+  "at the doorway" while inside (reasonable from `go_into_building`'s already-documented mechanics, but untested
+  here) - worth a live check if this needs stronger confirmation before going into a reimplementation spec.
