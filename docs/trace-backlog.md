@@ -518,3 +518,38 @@ one with a different approach, or a later pop3-rev session may already have trac
   in the shipped game. **Concrete next step**: locate Space's `ui_cmd` case the same way B/`0xBF` (CALL_TO_ARMS)
   was found - grep `backup.xml`'s own `switchD_<addr>::caseD_<id>` symbols for `process_cmd`'s main dispatch
   table (`0x4AD814`/`0x4AD8DC`, per commands.tsv) for whichever case reads either global, and read it end to end.
+- **User correction, later session: the icon-click camera-jump and the "Space" bell alarm are two SEPARATE
+  systems, not one with a missing reader.** The clickable notification stack (building/fight under attack,
+  preacher conversion in progress, enemy spell cast - all sharing one icon stack with a click-to-camera-jump
+  action) is a different, generic multi-event system - most likely the already-identified `fire_advisor_message_
+  once`/`0x44D7F0`/`render_land_ui_1` pipeline (pop3-rev-analysis.md "Notifications"), whose CLICK handler
+  (as opposed to its per-frame draw, already found) is still unlocated - `render_land_ui_1` (`0x44A2F0`-
+  `0x44ABD4`) is the right place to keep looking (it reads/writes the shared record `0x68B6A1`/`0x68C6xx`
+  nowhere else in the exe, so any click-detection for it, if present, lives inside this same function). Space
+  is explicitly NOT part of that system - it's its own dedicated keybind, separate from the icon stack.
+  **This session's attempt to find Space's own binding via `backup.xml`'s `switchD_`/`caseD_` symbols failed**
+  (`switchD_004ab6f3`/`004abc0e`/`004adda9` are the only ones Ghidra recognised anywhere near `process_cmd` -
+  none of them are the `0x4AD814`/`0x4AD8DC` table B/G use, which Ghidra apparently never recognised as a
+  switch at all). **Instead, validated a reusable, much faster alternative this session: reading the remap+jump
+  tables' raw bytes directly out of the exe file** (`.text` VMA `0x401000` -> file offset `0x400`, a plain
+  Python `struct.unpack_from` one-liner) rather than hand-decoding the disassembly - confirmed correct by
+  reproducing `ui_cmd 0xBF`/`0xC1`'s own already-known handler addresses (`0x4AD2BC`/`0x4AD318`) exactly from
+  the raw table bytes. **Also discovered `process_cmd` actually chains TWO such table pairs** (an outer one at
+  `0x4AD740`/`0x4AD5C4` whose own cases can fall through into the `0x4AD814`/`0x4AD8DC` pair via a shared tail
+  at `0x4ABBE2`, using a DIFFERENT index formula - `raw_id-0xF` - than whatever formula the 0xBF/0xC1 cases use
+  to reach the same second table directly; the two formulas were independently verified against known-good
+  answers but not yet reconciled with each other) - see `0x4AAB80`'s own corrected `functions.tsv` row for
+  the full mechanism. **A promising scancode-shaped lead (DIK_SPACE=0x39, DIK_RETURN=0x1C, DIK_NUMPADENTER=0x9C
+  all appearing as literal comparisons inside `0x4A9D90`) turned out to be a false trail**: that function is a
+  generic "set/toggle one named OPTION by id" dispatcher (already correctly identified by a prior, unrelated
+  session chasing an Angel-of-Death lead), and `0x39` there is just an option id that happens to numerically
+  coincide with the DIK_SPACE scancode, not an actual keyboard check - its real callers (who pass it option id
+  `0x39`) were not identified. Chasing it anyway all the way through to `ui_cmd 0x5b`'s own handler
+  (`0x4ABD86`, now fully traced, own `functions.tsv`/`commands.tsv` rows) found a PAUSE/UI-panel-visibility
+  toggle, not an alarm - confirming this was the wrong trail, not an incomplete one. **The real Space/bell-alarm
+  binding remains unlocated.** Given how easy it is to find a numerically-plausible but wrong lead in this
+  exe's heavily-reused id space, **a live memory check is very likely faster than continuing static analysis
+  here**: watch `0x89C6E5`/`0x89DB05` (and, as a cross-check, `0x89D167`/`0x895DBB`) while the user presses
+  Space in a real game with an active fight or a building under attack, the same way `scripts/livemem.py` was
+  used for the mouse-tracking investigation (`docs/cheat.md` "Docker headless rig") - this would show directly
+  which global(s) actually change, if any, cutting out the dispatch-table archaeology entirely.
