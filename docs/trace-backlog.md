@@ -489,3 +489,32 @@ one with a different approach, or a later pop3-rev session may already have trac
   live memory check was run this session to confirm a garrisoned firewarrior's position fields really do read as
   "at the doorway" while inside (reasonable from `go_into_building`'s already-documented mechanics, but untested
   here) - worth a live check if this needs stronger confirmation before going into a reimplementation spec.
+
+## Notifications
+
+- **The building-alert "song + notification" has (at least) two genuinely separate halves, and only one of them
+  was found to actually do anything - the other may be dead code.** Picking up on `0x409140`/`0x409200`'s own
+  already-documented but unexplored tail (writes a camera-alert position `0x89C6E5` and ORs `0x89DB05` bit
+  `0x8000`, gated to the LOCAL PLAYER's own buildings only, debounced by a one-shot gate `0x89CE60`): (1)
+  **the audible siren is real and already fully traced** - `0x408ED0` plays sound `0x34` on a double-gated roll
+  for ANY alerted building regardless of tribe (prior session, see "Combat" above) - this part needs no further
+  work. (2) **the camera-jump/banner half could not be confirmed to do anything.** A third writer of the
+  identical `0x89C6E5`/bit-`0x8000` pair was found this session, inside `main_loop_inner`/`0x4EC6F0` (own
+  `functions.tsv` row) - a generic "a fight involving you is happening somewhere" sweep over a not-yet-identified
+  active-fight list (`0x890358`, own row, open), separate from the building-specific writers, confirming this
+  notification channel is meant to be a general "something combat-related needs your attention, look here"
+  signal, not building-exclusive. But an exhaustive search of every instruction form that could read bit `0x8000`
+  of `0x89DB05`, or read `0x89C6E5` at all, anywhere in `dis.txt` found **zero consumers** - every other bit in
+  the same per-tribe dword has a reader (mostly the level-script condition-check cluster around `0x48D8xx`), just
+  not this one. The debounce gate itself (`0x89CE60`) looks like it resets every turn (traced to `0x4EC785`
+  inside `main_loop_inner`, reusing a register from an unrelated adjacent per-turn stats write - not confirmed
+  with full certainty it's always 0 there), so this isn't a "fires once ever" oddity explaining the missing
+  reader either. **Confirmed-not-done this session**: finding the "Space" keybind (shortcuts.md: "camera to the
+  tower under attack") in `process_cmd`'s own `ui_cmd` dispatch table, which would settle this definitively one
+  way or the other - either it reads `0x89C6E5`/bit `0x8000` (missed by this search, e.g. via an addressing
+  pattern not covered, or an indirect/pointer-based access) confirming the mechanism is real and just rarely
+  exercised, or it reads something else entirely (e.g. `0x895DBB`'s own HUD-widget struct, which `0x89D167`
+  already writes - "Combat" above, `0x4ECA2D`'s row) and this whole `0x89C6E5` pair genuinely never got wired up
+  in the shipped game. **Concrete next step**: locate Space's `ui_cmd` case the same way B/`0xBF` (CALL_TO_ARMS)
+  was found - grep `backup.xml`'s own `switchD_<addr>::caseD_<id>` symbols for `process_cmd`'s main dispatch
+  table (`0x4AD814`/`0x4AD8DC`, per commands.tsv) for whichever case reads either global, and read it end to end.
