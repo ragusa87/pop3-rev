@@ -415,3 +415,26 @@ one with a different approach, or a later pop3-rev session may already have trac
   but regroup timed out) on top of `0x4E5FD0`'s own original 0-3. Full write-up: `docs/functions.tsv` row
   `0x4cceb0` (substantially extended), `0x48c650` (all 5 codes consolidated), `0x48c680` (new),
   `0x4d14f0`/`0x43ba10` (corrected/extended), `0x4f3af0`/`0x4f3b10`/`0x4f5950` (new, named but not traced).
+
+## Combat
+
+- **RESOLVED this session: `0x416D70`, the watchtower sentry's own "visibility/LOS test," is not a line-of-sight
+  check at all.** Fully read (21 instructions): it's the canonical standalone tribe-relations/diplomacy gate
+  (tribe==0xFF / tribe==tribe / diplomacy bitmask `0x9608B6`) that several other combat functions
+  (`0x51EAB0`/`0x51C4C0`/`0x43ABF0`/`0x51D0B0`) had each independently hand-inlined - no position, terrain or
+  obstruction read anywhere in it. The watchtower sentry scan (`0x40BD20`) only ever decides to "alert" based on
+  tribe/diplomacy, the same as every other combat eligibility scan in the exe - there is no separate geometric
+  line-of-sight mechanism for towers. Full write-up: `docs/functions.tsv` row `0x416d70` (also corrected
+  `0x40BD20`'s own stale "LOS/visibility check" label to match). Two of its 6 call sites (`0x408ED0`, `0x514410`)
+  were only read as far as this one call and remain open leads of their own if a future session wants the rest
+  of their scans (melee-adjacent filter, and an AoE damage scan respectively).
+- **Follow-up, same session: `0x408ED0` fully traced - and `0x40BD20` turns out NOT to be an autonomous sentry
+  after all.** `0x408ED0` (`docs/functions.tsv`, new row) is the per-turn, every-building re-check that silences
+  an already-active "alerted" flag (`+0x9C` bit `0x10`) once no enemy remains near the building's own doorway
+  cells - not a detector, a "stand-down" check. Re-reading `0x40BD20`'s own existing write-up alongside it
+  surfaced a bigger correction already on record there but worth restating: `0x40BD20` isn't a per-turn
+  autonomous watch either - it's the handler for the player's own "B" rally hotkey (and the rare `CALL_TO_ARMS`
+  script opcode), invoked through `0x40BCE0`'s worklist walk, not `unit_processing_class_2_bldg`. **So the actual
+  autonomous first-detection trigger that sets `+0x9C` bit `0x10` in the first place is still unlocated** - a
+  concrete, well-scoped next step: search for writers of that bit (building `+0x9C`, word field) elsewhere in the
+  exe.
