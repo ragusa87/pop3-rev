@@ -1,0 +1,51 @@
+waiting for D3DPOPTB.EXE or POPTB.EXE to start...
+found pid 1989167, watching (quiet unless something engages in combat)...
+watching shaman + anyone you select as a follower for fight/pre-fight entry (states 25/29)...
+(now tracking follower@0x90b6db)
+(now tracking follower@0x90b4c2)
+(now tracking follower@0x90b2a9)
+(now tracking follower@0x90b090)
+(now tracking follower@0x90ae77)
+(now tracking follower@0x90299d)
+(now tracking follower@0x902784)
+(now tracking follower@0x90256b)
+(now tracking follower@0x902352)
+(now tracking follower@0x902139)
+(now tracking follower@0x901f20)
+(now tracking follower@0x8ff047)
+*** follower@0x8ff047 ENTERED COMBAT (state 10 -> 29) pos=(-788, 25968) still_on_guard_order=True
+*** shaman@0x91750b ENTERED COMBAT (state 10 -> 25) pos=(-683, 25864) still_on_guard_order=False
+*** follower@0x902352 ENTERED COMBAT (state 10 -> 25) pos=(-632, 25752) still_on_guard_order=True
+*** follower@0x902139 ENTERED COMBAT (state 10 -> 25) pos=(-666, 25764) still_on_guard_order=True
+    follower@0x8ff047 left combat (state 25 -> 10) pos=(-472, 25870)
+    shaman@0x91750b left combat (state 25 -> 10) pos=(-321, 26024)
+    follower@0x902352 left combat (state 25 -> 10) pos=(-370, 25716)
+    follower@0x902139 left combat (state 25 -> 10) pos=(-79, 25827)
+*** follower@0x90b6db ENTERED COMBAT (state 10 -> 29) pos=(-2706, 24846) still_on_guard_order=False
+*** follower@0x90299d ENTERED COMBAT (state 10 -> 29) pos=(-3115, 24328) still_on_guard_order=False
+*** follower@0x90256b ENTERED COMBAT (state 10 -> 29) pos=(-2701, 24807) still_on_guard_order=False
+*** follower@0x902139 ENTERED COMBAT (state 10 -> 29) pos=(-2871, 24783) still_on_guard_order=False
+*** follower@0x90b090 ENTERED COMBAT (state 10 -> 29) pos=(-3298, 24143) still_on_guard_order=False
+*** follower@0x902352 ENTERED COMBAT (state 10 -> 29) pos=(-3066, 24122) still_on_guard_order=False
+*** follower@0x902784 ENTERED COMBAT (state 10 -> 25) pos=(-2916, 24623) still_on_guard_order=False
+*** follower@0x901f20 ENTERED COMBAT (state 10 -> 25) pos=(-3062, 24511) still_on_guard_order=False
+*** follower@0x8ff047 ENTERED COMBAT (state 10 -> 25) pos=(-3220, 24234) still_on_guard_order=False
+*** shaman@0x91750b ENTERED COMBAT (state 10 -> 25) pos=(-3105, 24382) still_on_guard_order=False
+*** follower@0x90ae77 ENTERED COMBAT (state 10 -> 25) pos=(-2959, 24349) still_on_guard_order=False
+*** follower@0x90b4c2 ENTERED COMBAT (state 10 -> 25) pos=(-3063, 24313) still_on_guard_order=False
+*** follower@0x90b2a9 ENTERED COMBAT (state 10 -> 25) pos=(-2962, 24615) still_on_guard_order=False
+    follower@0x902139 left combat (state 29 -> 10) pos=(-3170, 24000)
+    follower@0x90256b left combat (state 25 -> 10) pos=(-3210, 23848)
+*** follower@0x90256b ENTERED COMBAT (state 10 -> 25) pos=(-3151, 24016) still_on_guard_order=False
+    shaman@0x91750b left combat (state 25 -> 10) pos=(-3154, 24275)
+    follower@0x90299d left combat (state 25 -> 10) pos=(-3454, 24191)
+    follower@0x8ff047 left combat (state 25 -> 10) pos=(-3378, 24493)
+*** follower@0x8ff047 ENTERED COMBAT (state 10 -> 25) pos=(-3595, 24371) still_on_guard_order=False
+*** follower@0x90299d ENTERED COMBAT (state 10 -> 25) pos=(-3334, 24050) still_on_guard_order=False
+    follower@0x90b4c2 left combat (state 25 -> 10) pos=(-2669, 24423)
+    follower@0x90ae77 left combat (state 25 -> 10) pos=(-2980, 24395)
+    follower@0x901f20 left combat (state 25 -> 10) pos=(-2801, 24140)
+*** follower@0x90ae77 ENTERED COMBAT (state 10 -> 25) pos=(-3632, 24328) still_on_guard_order=False
+*** follower@0x902139 ENTERED COMBAT (state 10 -> 25) pos=(-2845, 24568) still_on_guard_order=False
+*** follower@0x901f20 ENTERED COMBAT (state 10 -> 29) pos=(-3718, 24415) still_on_guard_order=False
+*** follower@0x90b4c2 ENTERED COMBAT (state 10 -> 25) pos=(-3456, 24860) still_on_guard_order=False
