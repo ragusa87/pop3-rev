@@ -438,3 +438,23 @@ one with a different approach, or a later pop3-rev session may already have trac
   autonomous first-detection trigger that sets `+0x9C` bit `0x10` in the first place is still unlocated** - a
   concrete, well-scoped next step: search for writers of that bit (building `+0x9C`, word field) elsewhere in the
   exe.
+- **RESOLVED, later session (2026-11-07): the "still unlocated" writer found, and it overturns the "autonomous
+  sentry" framing entirely - there is no detection radius or LOS scan involved at all.** A full-exe search for
+  `[reg+0x9c],0x10` writes (not just reads) in `dis.txt` turned up exactly one: a trivial 2-instruction setter at
+  `0x40BAE0` (`building_set_alerted`, new `docs/functions.tsv` row) - `building+0x9c |= 0x10`, nothing else, no
+  caller-side gating of its own. Its only 5 call sites are all inside `attack_order_handler`/`0x51A2A0`'s
+  building-target (class-2) sub-state machine (pinned down at `0x51B0E7` in an earlier session), one per
+  "hit" sub-state, each immediately after that sub-state's own `0x407810(building,6)` "shake the building" call.
+  **So the real trigger is "a unit just landed a melee hit on this building," full stop** - no occupancy check,
+  no garrison-type check, no tower-type check, no DT_RADIUS-scaled range: the only preconditions are the ones
+  `attack_order_handler` already enforces to reach that branch at all (target is class 2/any building, target's
+  tribe differs from the attacker's). The player-reported "tower alarm (song + notification) when a manned tower
+  spots an enemy at range, scaled by elevation" conflates two genuinely separate mechanisms that happen to share
+  one downstream consumer (`0x89D167`'s "fight involving you" flag, per `0x40BD20`'s own write-up): (1) this
+  bit/`0x408ED0`'s sound-0x34 siren, which is a generic "any of my buildings is currently being melee-attacked"
+  alarm with zero range component, not tower- or garrison-specific; (2) the DT_RADIUS-scaled detection radius
+  (`0x40B450`/`0x40BD20`) is real but belongs to the unrelated, player-hotkey-only "B" rally command, confirmed
+  in an earlier session to never run autonomously. Also found, not yet traced: `0x40BAE0`'s paired getter
+  `0x40BAC0`/`building_is_alerted` has 2 call sites (`0x471129`, `0x472494`) that look like render-reveal checks
+  for normally-hidden enemy objects - a plausible lead for the notification/reveal half of the alarm, left open
+  for a future session (own `functions.tsv` row has the detail).
