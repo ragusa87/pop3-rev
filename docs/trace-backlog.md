@@ -553,3 +553,22 @@ one with a different approach, or a later pop3-rev session may already have trac
   Space in a real game with an active fight or a building under attack, the same way `scripts/livemem.py` was
   used for the mouse-tracking investigation (`docs/cheat.md` "Docker headless rig") - this would show directly
   which global(s) actually change, if any, cutting out the dispatch-table archaeology entirely.
+- **User correction, same thread: `0x4A9D90` genuinely IS a keyboard dispatcher after all - just not for gameplay
+  hotkeys. It's the multiplayer chat / BYRNE cheat-code text-entry box's own per-keystroke handler.** Confirmed
+  by reading the exe's own static data: `0x4A9D90` and its sibling `0x4AA1C0` (own `functions.tsv` rows) are
+  function-pointer fields inside a dialog-descriptor struct at `0x5CDB98`, which also holds seven repeated
+  UTF-16 `"%s: %s"` format strings - a chat scrollback entry shape (sender + message), not a settings panel.
+  `0x526A80` (own row) is the generic dialog-event pump that invokes the descriptor's own callback - the actual
+  reason `0x4A9D90` has zero direct callers anywhere in `dis.txt` (it's only ever reached through this indirect,
+  function-pointer path, which is why the prior Angel-of-Death session and this thread's own earlier session
+  both mischaracterized it from the disassembly alone). This retroactively validates the DIK-scancode-shaped
+  checks inside it: Enter/Numpad-Enter (`0x1C`/`0x9C`) really is keyboard input, reading as "submit the typed
+  chat line" (`ui_cmd 0xB0`); a code-`1` case reads as "cancel/close" (`ui_cmd 0x9B`, shared with `0x4AF780`'s
+  own dismiss-dialog call to the same id). **Still open**: the Space-shaped case (`esi==0x39`) calls `ui_cmd
+  0x5b`/`0x63`, both confirmed elsewhere to be pause/UI-panel toggles - doesn't obviously fit "type a space
+  character into a chat message." Working hypothesis, not confirmed: this same per-keystroke callback may be
+  shared between ordinary chat AND the separate BYRNE cheat-code entry screen (AGENTS.md's "hold TAB+F11..."
+  note), with Space's effect depending on which one is active. **This does NOT answer the original "Space: bell
+  alarm" question** - if anything it makes `0x4A9D90` a LESS likely candidate for that keybind now that its real
+  purpose (a chat box, only reachable while that dialog is open) is understood; the live-memory check recommended
+  above remains the fastest way to find the real one.
