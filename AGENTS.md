@@ -3,10 +3,8 @@
 Read `CONTEXT.md` first for a big-picture overview before diving into the exe, memory, or docs.
 
 ## Where the exe lives
-The game executable (`D3DPOPTB.EXE`, the Direct3D build every address in this repo is traced against; sha256
-`5234beab740375608ca35bdcd436626f1a6a5677230e1ce7be0fab8f4ef93da5` - spot-checked byte-identical to
-`backup/backup.xml` at several independent landmarks across sessions despite not matching `Makefile`'s own pinned
-hash, safe to keep using) lives in **`game/` at this repo's own root** - gitignored, never committed (the
+The game executable (`D3DPOPTB.EXE`, the Direct3D build every address in this repo is traced against) lives in
+**`game/` at this repo's own root** - gitignored, never committed (the
 clean-room boundary below), but persistent on disk across sessions in the same container, unlike a session's own
 scratchpad. `setup.sh` (used by both skills) now checks there FIRST, before falling back to a couple of known
 local Wine install paths and a bounded filesystem search - run it with no `GAME=` override and it should just
@@ -18,6 +16,21 @@ scratchpad-only copy that won't survive the next session. Also worth checking fo
 `POPTB.EXE` (same code, different link order, same `game/` dir) - never analysed directly (`sl.py`/`dis.txt`
 assume the Direct3D build), but useful for live-memory checks when it runs better; `docs/poptb_map.tsv` maps
 addresses between the two builds.
+
+**Known-good `D3DPOPTB.EXE` builds, by sha256** - none of these match `Makefile`'s own pinned hash, safe to keep
+using anyway; each was spot-checked against known addresses rather than trusted on hash alone, so a hash not
+listed here needs its own spot-check before being trusted the same way:
+- `5234beab740375608ca35bdcd436626f1a6a5677230e1ce7be0fab8f4ef93da5` - spot-checked byte-identical to
+  `backup/backup.xml` at several independent landmarks across sessions.
+- `3a5065c7420b3fcde208bf220bc86dfbac95e025ab2492caf9c7ea5308dfbe4f` (md5 `6b053fd57e8a90d7717e179fc83f80ad`) -
+  **a different build from the one above** (user-confirmed: "the Ghidra analysis is not my version", probably
+  v1.03; a GOG release is a third variant the user may upload later, not yet seen in this repo). Spot-checked by
+  rebuilding `dis.txt` from it and re-reading 5 addresses already written up from the OTHER build
+  (`0x40BD20`/`0x408ED0`/`0x51A2A0`/`0x40BAE0`/`0x407810`, see pop3-rev-analysis.md "Watchtower sentry scan and
+  alarm") - every one disassembled to the exact instruction sequence the existing analysis already describes, so
+  this build is at least code-identical in the regions traced so far even though its own hash differs. Don't
+  assume that extends to the WHOLE exe (e.g. a patched intro/copy-protection stub) without a landmark check in
+  whatever region a future session newly touches.
 
 ## Role: document only
 Agents working from this repo analyse the original game and document it. They never implement anything:
