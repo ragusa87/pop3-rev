@@ -63,28 +63,6 @@ if an earlier log entry here says it was "written directly" into that repo.
   relies on `KNOTS` for could instead be read off directly from those records (a static data dump, once
   `vconfig_dat_mem`'s exact field layout for pitch/K is nailed down) rather than extrapolated. See §16 below for
   the full mechanism and exact addresses/UI-command ids.
-- **§15 (2026-11-06, new) "ordinary-construction worker throttling and wood-delivery mechanism traced" -> `open-populous3`'s
-  `docs/specs/buildings.md` "Construction"/"Building it" section + `TODO.md`.** Resolves backlog item #12
-  (`docs/trace-backlog.md` had no entry yet for this - picked up via a direct task assignment). Key corrections to
-  check against the current `[ours]` design: (1) **worker concurrency is `max(1, floor(assigned/2))`, not "every
-  assigned brave works every tick"** - at most half a construction/repair plan's currently-assigned braves are
-  ever simultaneously sent out to fetch wood; the exe found no separate hard per-building-kind cap enforced in the
-  per-tick controller itself (a per-type table is read but never used there - the real "max assignable braves per
-  kind" `buildings.md` already describes may be enforced only at the Assign-brave command, not checked this
-  session). (2) **A fresh plan/upgrade gets one wood piece (100 units) for free at creation**, via a direct
-  `+100` stock injection, not fetched by a brave - matches `buildings.md`'s own "the first piece of wood is
-  brought to the site... as in the game" line almost exactly, except the exe does it by fiat. (3) **Ordinary
-  construction wood-gathering reuses the SAME low-level pickup primitive and per-type max-carry constant as
-  vehicle-hut wood-gathering (task #10/§13's own finding) but through a COMPLETELY SEPARATE order/state machine**,
-  not `0x495520`/`0x496750` at all - so "vehicle huts and ordinary construction share one wood-delivery system" is
-  NOT quite right; they share a primitive, not the orchestration. (4) **A brave does NOT deposit its carried wood
-  directly into the construction site's wood stock** - it DROPS its full carry on the ground near the door as an
-  ordinary wood-pile object, exactly matching `buildings.md`'s own "drops the piece on the ground next to the
-  door" line; this session could not find the function that then moves a dropped pile's wood into the site's own
-  stock counter (every caller of the two candidate primitives was checked and none fit) - flagged as a genuinely
-  open question, not papered over, with a concrete next step (a live memory watch of a plan's own stock vs. a
-  dropped pile across several ticks) for whichever session next has the game running. See §15 below for the full
-  trace (addresses, tables, and exactly what was and wasn't resolved).
 - **§14 (2026-11-06, new) "ground-fire duration resolved" -> `open-populous3`'s `crates/game-core/src/firestorm.rs`/
   `lightning.rs`/`ground_fire.rs`, `TODO.md`'s "Earthquake and Firestorm" bullet.** `ground_fire::TICKS` (currently
   a guessed `9`, shared by both casters) should split into two real, exe-confirmed values: **22 turns for
@@ -1674,76 +1652,6 @@ this entry is queue-only per this file's own stated purpose; a session that atta
 update `crates/game-core/src/firestorm.rs`/`lightning.rs`/`ground_fire.rs`/`tree.rs` and `TODO.md`'s own line (the
 "Burning trees... and the ground fire... have guessed lengths" bullet, `TODO.md` "Earthquake and Firestorm")
 accordingly, then trim this section.
-
-## 15. Ordinary-construction worker throttling and wood-delivery mechanism (2026-11-06)
-
-Traced `0x4B8BB0`, described going in as "a 16-tick 'plan' controller handling multi-worker throttling for
-ordinary building construction" (task #12/`docs/trace-backlog.md`). It is the per-turn handler for a class-9
-"wood-stock companion" object (the SAME struct `0x4BA2C0` - the already-documented construction/wear 0-4 visual
-stage machine - reads/writes its own `+0x96` stock field on), reached via the generic class-9 dispatch whenever
-that companion's own sub-kind is 2 (a distinct sub-kind 1, `0x4B8470`, exists and was not traced).
-
-**1. Worker concurrency, the main question - resolved with a concrete formula.** Each tick, once past a one-time
-warm-up countdown (see point 3), the controller buckets its own assigned workers (array `+0x6A`, count `+0x9A`)
-by their current order-kind via a helper (`0x4BA260`), separating out the genuinely-idle subset, and computes a
-budget: `max(1, floor(assigned_count / 2)) - (how many are already out fetching wood)`, clamped to how much wood
-is still needed before the site's own full-cost threshold. It then recruits up to that many MORE idle assigned
-workers into the wood-fetch order. **So at most half of a plan's currently-assigned braves (rounded down, minimum
-one) are ever simultaneously sent to fetch wood** - the rest stay in reserve (role not identified; plausibly
-reserved for other sub-tasks, not confirmed). A per-type table (`0x5A723E+0x16`) is read into a local here but
-never used again - it is NOT the enforcement point for "each kind has only a maximum" (`buildings.md`'s own
-existing text); that cap, if real, must be enforced elsewhere (the Assign-brave command, not traced this session).
-No evidence was found of workers being required to coordinate flattening/hammering through this same concurrency
-budget - only the wood-fetch recruitment was traced.
-
-**2. The ~16-tick rhythm, re-examined - likely conflates two different things, both real.** `0x4B8BB0` itself has
-a 16-bit countdown (`+0x94`) that decrements once per tick (floor at 1 via one code path, reaching true 0 via a
-second path gated on "at least one worker assigned") and, on its ONE-TIME 1->0 transition, pokes a nearby
-decorative effect object's own duration field to exactly 16 - not a recurring 16-tick cycle in this function
-(this field's own initial value was not independently located this session, though a literal 16 appears in
-exactly this spot). Separately, and likely the REAL source of a "16" figure in construction/growth pacing: a
-sibling function, `0x4050C0` (a pre-existing catalog row already said "hut growth, every 16 turns"), handles a
-villager hut's size-upgrade and was traced further this session - it's called UNCONDITIONALLY every turn from the
-generic building dispatcher, with its own probabilistic growth-accumulator (not an explicit turn-count modulo)
-most likely producing that observed ~16-turn average cadence. **Recommendation: treat "every ~16 turns" as a hut
-GROWTH-CHECK cadence (matches the game's other known 16-turn cadence, mana accrual per CONTEXT.md), not as a
-literal fixed period of `0x4B8BB0`'s own wood-fetch throttle**, which is better modelled as "evaluated every turn,
-gated once by a short one-time startup delay."
-
-**3. Free first wood piece at creation.** Whenever `0x4050C0` creates a new building instance (confirmed for a
-hut's own size-up), it immediately seeds that instance's wood-stock companion with `+100` wood (one "wood piece",
-the universal 100-unit constant) via `0x4BA2C0`, right after zeroing its stock - matching `buildings.md`'s own
-"the first piece of wood is brought to the site... as in the game" line, except the exe grants it by fiat at
-creation rather than requiring a brave to fetch it. Not confirmed whether plain initial building PLACEMENT
-(not a hut upgrade) reaches this same function or a sibling for its own first piece.
-
-**4. Wood delivery: reuses the primitive, NOT the vehicle-hut state machine - and the final hop is unresolved.**
-`process_cmd`'s order-kind dispatch table sends ordinary-construction wood-fetch to its OWN handler, `0x4340A0`
-(order-kind 7) - a separate implementation from order-kind 6's `0x495520` (which vehicle-hut crew and other
-generic "work" orders use). The two share the SAME low-level pickup primitive (`0x4A7860`/`transfer_wood`) and
-the SAME per-person-type max-carry constant (100, table `0x5A7074`) for the "pick wood off a tree/pile into my
-own carry" step - so "shares a primitive" is correct, "shares the orchestrating code" is not. Critically,
-**`0x4340A0`'s own state machine never calls `transfer_wood` a second time to deposit the carried wood into the
-site's stock** - every one of the 6 total call sites of `0x4A7860` and all 7 of `0x4BA2C0` in the whole exe were
-enumerated this session, and none matches "person carry -> construction-site companion stock" (unlike the
-vehicle-hut path, `0x496750`, which does call `transfer_wood` a second time with the hut itself as receiver).
-Instead, on reaching the building, the brave calls a separate helper (`0x4D58C0`) that DROPS its entire current
-carry on the ground as an ordinary wood-pile object - matching `buildings.md`'s own "drops the piece on the
-ground next to the door" line closely. **What happens to that dropped pile - i.e. how it actually becomes
-construction progress - was NOT resolved this session.** Two live possibilities, neither confirmed: (a) the same
-order-kind-7 state machine treats a fresh pile as just another "resource" target on a later pass (wood piles are
-already special-cased in its own chopping state), closing the loop through code already read without a separate
-deliver call; or (b) some other, unfound mechanism consumes dropped piles near a site directly. **This is this
-session's one genuinely open thread** - the natural next step is a live memory check (watch a construction
-site's own wood-stock field and a nearby brave's carried-wood field across several real deliveries) rather than
-further static search, since every call site of the two obvious candidate primitives has already been checked
-statically.
-
-Full exe detail (every address, table, and the per-type raw values read directly from the exe): `pop3-rev/docs/functions.tsv`
-rows `0x4b8bb0` (rewritten), `0x4ba260`, `0x4ba1b0`, `0x40afd0`, `0x4340a0`, `0x4d58c0`, `0x4050c0` (extended),
-`0x403280` (new, partial), `0x405269`/`0x408ab0` (new, stub/lead rows), plus the task-#12 addenda on `0x4ba2c0`'s
-and `0x495520`'s own existing rows (correcting the latter's earlier "presumably reaches the same states" guess
-for ordinary construction).
 
 ## 16. Camera zoom-preset index advancement resolved (2026-11-06)
 

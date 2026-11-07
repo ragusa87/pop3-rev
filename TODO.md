@@ -89,7 +89,25 @@ object is the mouse-position tracker, and that `globals.toml`'s claimed
 roles for these 3 offsets are right, just modeled as flat globals in that
 project's build vs. a class member here.
 
-**Not yet live-verified** (no live-memory access this session) - the object
-layout (`+0x14`, `+0x28`/`+0x2c`, the `+0x38` rect, the `+0x1c` sub-object's
-own 0xf8 bytes) is still open for a session that can watch `0xd0595c` while
-moving the mouse.
+**Partially live-verified, a later session (Docker headless rig, `docs/cheat.md` "Docker headless
+rig")**: `scripts/watch_mouse.py` (committed) polled the object while moving the mouse via
+`xdotool mousemove`/`click`. Confirmed: **`+0x38` is a 4-dword rect `(left,top,right,bottom)` = the
+client clip bounds, read as `(0,0,640,480)` the whole session** (the game's own 640x480 internal
+resolution) - the "`SetClipRect`-style method ... stores a 4-dword rect at +0x38" static read was
+exactly right. **`+0x28`/`+0x2c` are a relative-delta pair, not independent state**: the one
+motion event that actually registered (an `xdotool mousemove` immediately followed by `click 1`,
+landing far outside the window at raw screen coords (966,600) due to this rig's window-offset
+quirks) moved `+0x20`/`+0x24` from `(320,240)` to `(158,88)` (a `(-162,-152)` delta) and
+`+0x28`/`+0x2c` read exactly `(-162,-152)` at that same moment - i.e. they hold the LAST applied
+relative delta that updated the absolute position, not a continuously-reset-to-zero pair as
+guessed. Consistent with the game treating the mouse as DirectInput relative/exclusive-acquired
+(X11 absolute warps get translated into a relative delta by whatever last-known-position diffing
+produces them, rather than the game reading an absolute X position directly) - matches the
+already-documented "accumulates deltas for offset 0/4 (DIMOFS_X/DIMOFS_Y)" buffered-input read.
+**Still open**: `+0x14` (read constant `1` throughout, never changed - maybe a
+device-acquired/clip-enabled flag, not confirmed) and the `+0x1c` sub-object's own contents
+(pointer stayed `0` the whole session - never lazily allocated, so its own `0xf8`-byte layout is
+still unobserved). **Caveat for a future session**: most `xdotool mousemove`/`click` attempts in
+this headless rig did NOT register at all (see `docs/cheat.md`'s "Docker headless rig" notes on
+unreliable input delivery) - only one specific click-after-move sequence produced the confirmed
+data point above; don't assume a bare `mousemove` alone will reliably update this object.

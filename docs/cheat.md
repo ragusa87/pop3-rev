@@ -384,41 +384,150 @@ generic per-turn drowning check ("Drowning") while its own dedicated sink-and-di
 other check's own "not drowning if bit 0x2" reads backwards until you realize it means "already handled
 elsewhere," not "safe."
 
-## TODO (needs a live session - can't do this in the cloud): do the Reincarnation Centre's 8 pillars rise together, or one by one?
+## RESOLVED (live session, game now available in-container): the Reincarnation Centre's 8 pillars rise STAGGERED, not together - the static trace was wrong, or incomplete
 
-Open dispute, not resolved this session: static tracing of the level-start Reincarnation Centre
-sequence (`docs/functions.tsv` rows `0x41c140`/`0x4a7d80`/`0x4a7eb0`) found all 8 standing stones
-allocated in one tight, uninterrupted loop with no turn boundary between them, and `alloc_unit`
-(`0x4ed8a0`) confirmed to call each one's type-specific init (and thus start its rise) synchronously
-- i.e. the code reads as "all 8 start rising in the same simulation tick." The user, from having
-actually watched/played it, is confident they rise one after another, just very close together -
-disassembly alone can't settle that against a first-hand observation, and this cloud session has no
-running game, no display, and no `sudo`, so it can't be checked here either.
+The dispute above is settled in the user's favour. Live poll (`scripts/watch_pillars.py`, run via
+the Docker rig - see "Docker headless rig" below - against a freshly-loaded level 1, launched
+straight into via the `-LEVEL 1` command-line switch to skip menu/FMV nondeterminism) of the local
+tribe's 8-entry pillar-slot array (`tribe_struct+0xA0D`) and each resolved pillar's own `+0x2C`
+state / `+0x41` height (i16), polled every 0.02s (turns run ~12/s, so several samples per turn):
 
-**How to check it, next session with the game actually running** (same `find_game()`/`ptrace`
-approach as "Live memory: measuring a Blast" above, read-only):
-1. Start a fresh level (or reload one) so the RC intro fires from scratch.
-2. Poll global byte `0x89D17C` each turn (synced to the turn counter `0x89D188`, not wall-clock -
-   turns run ~12/s) until bit `0x20` goes from clear to set - that's the turn Phase A
-   (`0x41c140`) fires.
-3. From that turn on, for the tribe(s) being watched, compute `tribe_struct = idx*0xC65 + 0x89D1C8`
-   and read its own 8-entry pillar-slot array at `tribe_struct+0xA0D` (word thing-indices, `0` =
-   empty slot); resolve each nonzero index through the generic thing-pointer table `0x890390` to
-   get each pillar's own unit record (`0x8E0428`-based pool, `0xB3` bytes/record, same layout
-   "Live memory: measuring a Blast" already confirmed: `+0x2C` state, `+0x41` height i16).
-4. Log, per turn, each of the 8 slots' own `+0x2C` (should read `6` once risen) and `+0x41` (height,
-   should climb from `ground-256` to `ground` over ~16 turns per the static trace). **The question
-   this settles**: do all 8 slots' height values move in lockstep turn-by-turn (confirms
-   "simultaneous," matching the static trace), or does each slot's own climb visibly START a turn
-   or more after the previous one's (confirms the user's "staggered, but close" observation,
-   meaning the static trace above missed something - worth a fresh disassembly pass on the 8-pillar
-   loop in `0x41c140` if so, since nothing in it currently explains a turn-by-turn stagger)?
-5. Also worth polling slot occupancy itself (when each of the 8 words in `tribe_struct+0xA0D`
-   transitions from `0` to a real thing-index) in case the ALLOCATION itself is staggered somehow
-   this session's static read of the loop didn't catch (e.g. a retry/skip on an invalid cell).
+```
+turn=37 slot7 spawns (id=1626), height=-112
+turn=40 slot6 spawns (id=1550), height=-112   (slot7 already at -64, 3 turns into its own rise)
+turn=41 slot5 spawns (id=1498), height=-112
+turn=44 slot4 spawns (id=1662), height=-112
+turn=45 slot3 spawns (id=1686), height=-112
+turn=48 slot2 spawns (id=1602), height=-154
+turn=49 slot1 spawns (id=1528), height=-112
+turn=52 slot0 spawns (id=1736), height=-148
+```
 
-Not yet written as a script (`measure_blast.py`-style) since it needs catching the exact level-load
-moment live, not just a running level - write one once this is actually run.
+Each pillar's own height then climbs independently (consistent with the static trace's "+16/turn
+for 16 turns" once it has spawned) - confirmed NOT in lockstep: at any given turn in this window,
+up to 3 different pillars are mid-rise at 3 different heights simultaneously, visibly staggered.
+Net: **spawn order is slot 7 down to slot 0 (reverse of what a naive "loop 0..7" read would
+predict), arriving at intervals that alternate +3/+1 turns (37, 40, 41, 44, 45, 48, 49, 52) - total
+span 15 turns (~1.25s) for all 8 to start**, not "all in the same tick" as `0x41c140`'s static
+trace (`docs/functions.tsv`) concluded. Screenshot at turn 77 (a scripted tutorial pause a few
+turns after the last pillar finished) visually confirms a fully-formed, normal-looking stone
+circle, consistent with the player-facing effect being "they all rise close together" even though
+they demonstrably do not start in the same tick.
+
+**RE-TRACED, a later static session: `0x41c140` itself was never the function that ran.** Re-read
+it instruction-by-instruction - it is exactly what the prior static trace said (a single
+uninterrupted loop, all 8 pillars in one tick, no delay mechanism anywhere in it) - but it
+unconditionally sets global `0x89D17C` bit `0x20` as its very first action on any real run, and
+nothing in the exe clears that bit except its own sibling `0x41C520`'s very end. Since the bit
+stayed clear through the entire live-observed window (turn 0 through 61, polled continuously),
+`0x41c140` provably never executed during that playthrough - "contradicted by live data" was really
+"wrong function identified," not an error in reading `0x41c140`.
+
+The real mechanism, found by following the live data instead: class-7 effect **TYPE 7**'s own init
+(`0x50C690`, already named `move_rs_pillar`/"move rs pillar" by an earlier session that had
+correctly read its queue-based, one-slot-at-a-time replace logic but hadn't yet connected it to
+level-start, having filed it as "maintenance/relocation, not part of the intro" - that call is now
+withdrawn) pops ONE pending `(slot, x, z)` job off the generic scratch stack `0x892443` per spawn
+and places/replaces exactly one of the 8 pillars - a genuinely staggered, re-triggerable mechanism,
+unlike `0x41c140`'s own tight loop. **Still open**: who spawns these type-7 effects one at a time,
+1-3 turns apart, matching the observed 37/40/41/44/45/48/49/52 sequence, and who pushes the 8
+matching jobs onto the scratch stack beforehand - no literal `push 0x7`/`push 0x7` (type/class) call
+site exists anywhere in the exe for this, so the type is computed in a register at every real call
+site, same as the Angel-of-Death statue's own register-typed spawn (AGENTS.md's own cited
+precedent).
+
+**Lead chased, same session - dead end, but narrowed the search**: `SET_REINCARNATION`'s native
+`interpret_script` opcode handler was found (`0x48DC26`, case 0x88 of dispatch `switchD_0048cc8d` -
+`ai-scripts.md`'s id 1164 confirmed real: `1164-0x404=0x88`, matches exactly). Its ON-case only
+sets a land-reservation bit (`tribe+0x93D` bit `0x10000`) and calls `0x44FF80`, which computes the
+site's 8 ring cells + center and stamps/claims them in the map's 0x4000-entry land-zone table
+(`0x8A03E4`), additionally directional-searching and flattening ground for the human tribe
+(`0x450610` mode 3/4, destroys blocking scenery per cell). **Neither function ever touches the
+pillar-queue stack `0x892443` or calls `alloc_unit` with a type-7 effect** - so `SET_REINCARNATION`
+reserves/flattens the land but does not itself spawn pillars.
+
+**FULLY RESOLVED, same session, by live-verifying the `SET_REINCARNATION` dead end and then reading
+`0x41c140`'s own call site (`load_level`) in full.** `scripts/watch_rc_flags.py` (new, committed)
+polled `tribe+0x93D` alongside the pillar array on a fresh `-LEVEL 1` load: `SET_REINCARNATION`'s own
+bit `0x10000` never fired (confirming the dead end live, not just statically), but bit `0` (the
+"prepare rs land" ground-flatten effect's own busy flag, see below) went high at turn 14 and low at
+turn 35 - almost exactly the first pillar's turn-37 appearance, 2 turns later. That timing match was
+the thread that unravelled the whole mechanism:
+
+- `load_level` calls `0x41C140` only when `BYTE[ds:0x89C661] bit 0x8 AND BYTE[ds:0x89B7A3] bit 0x8`
+  are BOTH set (`0x42B501`-`0x42B513`) - an alternate/rarer path, neither bit set in the observed
+  session, which is why it never ran.
+- The ORDINARY path, a few instructions earlier in the SAME function and reached unconditionally for
+  every active tribe (`0x42B446`-`0x42B47F`): `set_tribe_start_pos` (`0x419790`) -> `clear_tribe_1`
+  (`0x419810` - derives the RC anchor from the shaman's own position, calls `0x44FF80` to reserve its
+  land) -> `process_tribe_1` (`0x419880` - issues the shaman **order-kind 18**, `order_execute`'s own
+  dispatch table `0x432D18`, previously flagged "not traced").
+- Order-kind 18's handler (`0x433A10`, newly traced) is the shaman's own 4-state "(re)build the RC"
+  task: states 0-1 walk to the site; **state 2** box-clears the ground and spawns the **"prepare rs
+  land" effect** (class 7 type 8, `0x50C780`/`0x50C840`) - its ~20-tick run is exactly `tribe+0x93D`
+  bit 0's observed turn 14-34/35 window; **state 3**, once the ground-flatten finishes, fires one
+  **`class-8/type-1` "standard shot" projectile per pillar slot**, a tick apart, each carrying a
+  generic impact-spec (`+0x7C=7`/`+0x7D=7`/`+0x80=`slot/`+0x82,0x84=`target position).
+- The shot's own arrival triggers the GENERIC class-8 impact handler `0x4BB290` (shared by every shot
+  in the game - fireballs, volcano shots, etc., each with their OWN different impact-spec), which
+  stages `(slot, x, z)` onto the scratch stack `0x892443` and spawns `alloc_unit(class=7, type=7)` -
+  landing in `0x50C690`'s already-documented "move rs pillar" slot-replace logic.
+- Each shot's own flight time (varying by distance from the shaman to each of the 8 ring slots) is
+  exactly what produces the observed staggered 1-3-tick gaps between pillar appearances - no
+  per-turn poller, no hidden scheduler, just ordinary projectile travel time.
+
+Net: `0x41c140`'s own code was correct and unchanged throughout this whole investigation; it's simply
+the alternate/rarer of two level-load paths, and the ordinary one (`process_tribe_1` -> shaman order
+18 -> shots -> generic shot-impact handler) is what actually builds the Reincarnation Centre on a
+normal level load. Full write-up: `docs/functions.tsv` rows `0x41c140`/`0x50c690`/`0x432d18`/`0x4bb290`
+(all extended), new rows `0x48dc26`, `0x44ff80`, `0x450610`, `0x419790`, `0x419810`, `0x419880`,
+`0x433a10`.
+
+**Tool**: `scripts/watch_pillars.py` (committed, reusable) - run via
+`scripts/docker/capture.sh scripts/watch_pillars.py --every 0.02` inside the Docker rig (see
+"Docker headless rig" below), started before the level loads (it retries `find_game()` until the
+process appears, then logs unconditionally from turn 0). Resolves each pillar's thing-id through
+the generic id->pointer table confirmed in `dis.txt` as `mov reg, DWORD PTR [reg*4+0x890390]`
+(a flat array of live runtime pointers, one per thing-id, not a stride-based index into
+`unit_array` - worth noting generically, this wasn't spelled out this precisely before).
+
+## Docker headless rig (new this session - the game is now runnable in-container, not just inspectable live by the user)
+
+A full headless Wine + Xvfb + x11vnc + openbox rig already exists (`docker-compose.yml`,
+`docker/Dockerfile`, `docker/entrypoint.sh`, `scripts/docker/*.sh`) - `cap_add: SYS_PTRACE` gives
+root-inside-container real ptrace access to `/proc/<pid>/mem`, no host `sudo` prompt needed.
+Previously documented as existing (`docs/camera.md`) but this session is the first to actually
+drive it end-to-end for a new investigation:
+
+- `docker compose up -d` (from the repo root) starts it; `docker compose ps -a` to check state -
+  if a stopped container shows `Exited (1)` on restart, it's almost always a stale
+  `/tmp/.X99-lock` left in its writable layer from a prior run ending uncleanly; `docker compose rm
+  -f pop3 && docker compose up -d` clears it (safe - the Wine prefix and this repo are both
+  separately bind-mounted, nothing is lost).
+- `scripts/docker/launch_game.sh` / `start_level1.sh` launch the exe. **The main menu's
+  highlighted/default item is NOT reliably "NOUVELLE PARTIE"** even on a cold wine process - it
+  persists the last-used item across full process restarts (some menu-state file in the shared,
+  host-bind-mounted Wine prefix), so a fresh container can land on e.g. "MULTIJOUEUR" instead.
+  Don't assume the documented key sequence's defaults still hold; screenshot
+  (`docker compose exec pop3 bash -c "import -display :99 -window root /tmp/x.png"` then
+  `docker cp` it out) to check the actual highlighted item before pressing Return.
+- **`xdotool key Down`/`Up` sent in a tight loop (even with 0.3-0.4s between presses) silently
+  drops roughly a third to half of the presses** - repeated short bursts moved the highlight by
+  fewer steps than keys sent, inconsistently. Single presses with >=0.6-1s between them and a
+  screenshot to confirm landed reliably; don't trust a multi-press batch without verifying after.
+- **Simplest fix, once found this session: the exe takes an undocumented `-LEVEL N` command-line
+  switch** (confirmed via `strings D3DPOPTB.EXE`, alongside the already-known `-allres` etc.) -
+  `wine D3DPOPTB.EXE -allres -LEVEL 1` skips straight to the level-select star map with that level
+  already focused (one `Return` away from actually loading it), bypassing the unreliable menu
+  navigation above entirely and making repeated fresh-level captures deterministic. Still shows the
+  Bullfrog/EA legal splash first (any keypress dismisses it).
+- The in-level tutorial (level 1) pauses the simulation turn counter (`0x89D188`, confirmed static
+  while a modal dialog is up) on scripted checkpoints (e.g. "I've built my reincarnation site..." at
+  turn 77 in this session's run) - if a poll looks "stuck," check for a dialog via screenshot before
+  assuming the poller is broken.
+- Screenshot recipe: `docker compose exec pop3 bash -c "import -display :99 -window root
+  /tmp/x.png"` (ImageMagick, already in the image) then `docker cp pop3-rev-pop3-1:/tmp/x.png
+  <local path>` - the container's `$DISPLAY` is `:99`, not the host's.
 
 ## Scripts this session (scratchpad, not preserved across sessions)
 
