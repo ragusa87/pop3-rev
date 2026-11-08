@@ -149,6 +149,28 @@ one with a different approach, or a later pop3-rev session may already have trac
   staggered fade. Full write-up: `docs/functions.tsv` rows `0x514d00`/`0x514f60`, `docs/effect_states.csv` rows
   57/59.
 
+- **RESOLVED, later session: the long-open "real alloc site for class-7 type `0x5B` ('statue to AoD')" question -
+  there is no runtime alloc site at all.** Exhaustively walked every `alloc_unit` call site in the exe (~188
+  total: 107 with a literal `push 0x7` class immediate, the rest register/table-driven for class and/or type) -
+  none compute `0x5B` except one, `load_level2`'s own generic per-"thing" loader (`0x485011`, new
+  `functions.tsv` row). That function reads class/type/tribe as three adjacent raw bytes straight out of each
+  level file's own thing record while parsing a level at load time - **a "statue to AoD" effect is simply
+  something a specific level file places directly as an ordinary thing, the exact same mechanism that places
+  every person/building/scenery/effect in a level, not a scripted PopScript opcode or a native hand-off like
+  `CALL_TO_ARMS`.** This fully explains why the literal byte `0x5B` could never be found anywhere else in the
+  exe's own code or static data: it genuinely is level content, not exe content, and this container has no level
+  files to check which campaign level(s) actually place it. **This closes the question as far as static exe-only
+  analysis can go** - finding WHICH level(s) use it would need an actual level file, out of scope here. Also
+  mapped (along the way, same `load_level2` per-thing loop): the per-spell "which effects does casting this
+  spell spawn" table (`0x5A80D0`, stride `0x3E`, 5-byte effect-type array at row offset `+0x28`) for spell types
+  0-30, confirming `0x4C23E0`'s own existing row's Blast example byte-for-byte (`[0x5,0x3,0x4e,0x26,0]`) - useful
+  as ground truth for any future table-driven alloc-site hunt, but contains no `0x5B` either. Side finding, not
+  itself about this effect: `load_level2`'s own CLASS==1 (person) loading branch shows that enabling the
+  `0x89C661` bit `0x8` "BYRNE" cheat flag before loading a level forces every level-placed person except shamans
+  (type 7, which gets a tribe remap instead) to a tribeless wildman - not live-verified, not yet cross-checked
+  against `pop3-rev-analysis.md`'s own cheat-mode documentation. Full write-up: `docs/functions.tsv` rows
+  `0x479840`/`0x485011` (new).
+
 ## Native AI / AI scripting
 
 - **RESOLVED this session: `GIVE_UP_AND_SULK`'s real unit-level effect, and the wiki's claim is false.**
