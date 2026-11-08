@@ -621,3 +621,30 @@ one with a different approach, or a later pop3-rev session may already have trac
   long session on disassembly archaeology whenever the question smells like "what does clicking X actually DO"
   (network sends, file I/O, and other externally-visible actions are exactly the kind of thing that shows up as
   a named import, even when the UI code that triggers them is deeply indirect/callback-based).
+
+- **RESOLVED, later session: which class-10 controller type reaches `0x51F470` via `0x5028B0`'s "anything else"
+  branch - the previous session's own open lead from the combat self-defense tracing above.** It's type `0xA`
+  ("guard control" per `docs/unit_types`), NOT a FORMATION (type 6) controller as the branch structure there
+  might suggest. Confirmed via `0x4ECAC0`'s own per-turn object-classification pass (Ghidra's `init_tribe_struct`
+  - a likely misnomer, confirmed to run every turn from `main_loop_inner`/`0x4EC942`, not once at level load):
+  its class-10 sub-dispatch (table `0x4ED4F4`, types 1-13) pushes type `0xA` specifically onto
+  `guard_control_units` (`0x890360`); type 6/FORMATION controllers go onto a different, unidentified list
+  entirely. The SAME classification pass also confirmed `fight_units`(`0x890358`)/`pre_fight_units`(`0x89035C`)
+  are built from controller types 8/9 (matching `docs/unit_types`' own naming exactly), and that
+  `guard_control_units` ALSO receives effect type `0x5A` ("atlantis invoke" - unidentified, plausibly unused/cut
+  content) and shot type `6` (not in `docs/unit_types`' own shot list at all) - so the list is a genuine mixed
+  bag by design. The guard-control coordinator's own init (`0x5027E0`, new `functions.tsv` row) was also traced:
+  it's a stationary sentry planted at a fixed world position (decoded from a scan-centre cell word) with a FIXED
+  6-cell scan radius, running `0x51F470`'s person-targeting eligibility scan every other tick - **plausibly the
+  actual "manned structure detects a nearby enemy at range" mechanism earlier sessions looked for and didn't find
+  while tracing the watchtower alert bit (`0x40BD20`) and the building-hit alarm (`0x40BAE0`), both confirmed to
+  have NO range component of their own.** Correction to an earlier session's framing: the scratch stack
+  `0x892443` (which the guard-control init also pops from) is NOT position-job-specific - re-confirmed this
+  session as a pervasively reused generic argument-scratch area used by unrelated functions exe-wide
+  (`init_unit_building`/`0x403676` among them); isolate by immediate caller context, don't trust a bare search for
+  all its touches. **Two concrete open leads for a future session**: (1) what allocates a type-`0xA` guard-control
+  object in the first place (which building type or script action spawns a guard post sentry) - not found, the
+  277-touch scratch-stack search above was abandoned as too unfocused; (2) what reads/consumes the scan result
+  this coordinator stores in its own `+0x78` on a later tick - i.e. what it actually DOES once it finds a
+  hostile (raise the watchtower-style alert? issue an attack order? something else?) - not traced. Full write-up:
+  `docs/functions.tsv` rows `0x51f470`/`0x5028b0`/`0x4ecac0`/`0x5027e0` (new).
