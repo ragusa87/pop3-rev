@@ -670,3 +670,20 @@ one with a different approach, or a later pop3-rev session may already have trac
   this coordinator stores in its own `+0x78` on a later tick - i.e. what it actually DOES once it finds a
   hostile (raise the watchtower-style alert? issue an attack order? something else?) - not traced. Full write-up:
   `docs/functions.tsv` rows `0x51f470`/`0x5028b0`/`0x4ecac0`/`0x5027e0` (new).
+
+- **CORRECTED, later session: the "stationary sentry" framing just above is wrong - type `0xA` is the "join/hold
+  a melee ring" (order kind `0xB`/11) companion object `0x519F10`'s own row already named as "a THIRD
+  combat-adjacent controller type... a genuinely separate 'ring' object", not an unrelated guard post.** Both of
+  this item's own open leads are now resolved. (1) **Allocator**: exactly 2 call sites in the whole exe create a
+  type-`0xA` controller, `0x519F10`'s own sub-state-0 path and a second, redundant site inside `0x432DF0`'s own
+  body (much bigger than its previously-documented opening bit-copy segment, own extended `functions.tsv` row) -
+  BOTH reached only for order kind 11, never from a building or script action. (2) **`+0x78` consumer**:
+  `0x519F10`'s own per-tick dispatch checks it before its normal sub-state switch - a nonzero result (the
+  periodic `0x51F470` scan found something) resets a non-ready ring member's own sub-state back to 0, forcing it
+  to re-run `attack_order_handler` - i.e. the scan lets an ongoing melee ring re-engage a new or moved target,
+  not detect an approaching enemy from a fixed watch position (this companion has no fixed position at all - it's
+  anchored at wherever the ring's own target currently is). Side note: since this companion's own type (`0xA`)
+  doesn't match `0x51F470`'s self-type matrix (4/6/8), its ordinary person-hit result (`2`) can in practice only
+  ever report an Angel of Death - its real value almost certainly comes from result `3` (the `0x4BAAB0`
+  alternate-slot hit instead, which bypasses that matrix). Full write-up: `docs/functions.tsv` rows
+  `0x51f470`/`0x5028b0`/`0x5027e0`/`0x432df0` (all re-corrected/extended).
