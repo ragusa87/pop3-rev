@@ -572,3 +572,28 @@ one with a different approach, or a later pop3-rev session may already have trac
   alarm" question** - if anything it makes `0x4A9D90` a LESS likely candidate for that keybind now that its real
   purpose (a chat box, only reachable while that dialog is open) is understood; the live-memory check recommended
   above remains the fastest way to find the real one.
+- **RESOLVED, same thread, without any live check: "the chat should have icons for which tribe to send to"
+  (user recollection) - confirmed true, found end to end via the exe's own import table and strings, not by
+  running the game.** With no Wine/display available in this environment to do the live check the prior entry
+  recommended, searched `strings`/`objdump -x` for anything chat/network-shaped instead: found a real, demangled
+  C++ import, `?SendChat@MLDPlay@@QAEHKPAGKPAK@Z` = `int MLDPlay::SendChat(unsigned long dest, unsigned short*
+  text, unsigned long, unsigned long*)`, imported from `weanetr.dll` (the game's DirectPlay-style multiplayer
+  library). Resolved its IAT slot with `pefile` (`0xD0C9B8`, own `functions.tsv` row) and found 4 call sites;
+  the one inside the chat-send function (`0x4AE5B0`, own row) is a clean, self-contained answer: a 4-byte array
+  `0x96AAB6`-`0x96AAB9` holds one "selected as recipient" flag per UI slot - slots 0-2 for the 3 tribes other
+  than the local player (via an index-remap helper, `0x4A25B0`, own row, "the Nth tribe other than me"), slot 3
+  a dedicated "ALL" flag. If nothing is explicitly selected, or ALL is set, one broadcast `SendChat(0xFFFFFFFF,
+  ...)` goes out; otherwise one `SendChat` call per individually-selected tribe. The icon click/toggle handler
+  itself (`0x49EB50`, own row, found via the same array) has real UI logic matching a typical radio-adjacent
+  multi-select: toggling an individual tribe auto-syncs the ALL flag (set if all 3 end up selected, cleared
+  otherwise) and refuses to let you deselect your way down to zero recipients (forces the last one back on).
+  **Net: exactly the mechanism the user described** - per-tribe recipient icons plus an "everyone" option,
+  controlling the destination of each `SendChat` call. Still open, lower priority: which on-screen widget/icon
+  list actually owns the `0x49EB50` callback (not the same descriptor as the chat text box itself, `0x5CDB98`,
+  which has no spare callback slot for it) and the other 3 `SendChat` call sites (`0x40F593`/`0x40FC2B`/`0x45438D`)
+  not yet traced. **Methodological note for the next "we can't run the game" situation**: `strings -e l` (UTF-16)
+  plus `objdump -x`'s import table, and demangling of any `?Name@Class@@...` C++ symbols found there, turned out
+  to be a far faster and more conclusive path than guessing from UI code alone - worth trying BEFORE spending a
+  long session on disassembly archaeology whenever the question smells like "what does clicking X actually DO"
+  (network sends, file I/O, and other externally-visible actions are exactly the kind of thing that shows up as
+  a named import, even when the UI code that triggers them is deeply indirect/callback-based).
