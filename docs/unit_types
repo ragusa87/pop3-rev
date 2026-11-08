@@ -106,7 +106,7 @@ unit_class|unit_type|description
 7|1|simple blast
 7|2|sprite circles
 7|3|smoke
-7|4|lightning elem
+7|4|falling spark (was mislabeled "lightning elem" - live-checked: renders as a tiny tribe-coloured sparkle/point of light, NOT a bolt/zigzag shape; shared by Lightning's own falling-bolt-chain and the "standard shot"'s in-flight trail, see functions.tsv 0x50bd70/0x4bab30)
 7|5|burn cell obstacle
 7|6|flatten land
 7|7|move rs pillar

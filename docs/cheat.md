@@ -622,3 +622,105 @@ run as a cheap insurance step after EVERY GDB session regardless of how it ended
 detach looked. Generalizes: any future live session setting a software breakpoint in this exe should
 keep a same-recipe restore script on hand and run it unconditionally, and should expect an occasional
 hard crash requiring a full level reload even when nothing looks wrong.
+
+## The RC intro's "shaman fires a beam at the stone" visual, traced end to end - and a static mis-read caught by a read-only live poll (later session, 2026-11-08)
+
+Prompted by a user question: "the shaman faces the stone that goes up and there's an animation
+between the shaman and the stone, can you trace it?" - the "it rises" half (ground-flatten, 8
+staggered pillars, the shaman's own order-kind 18) was already fully documented
+(`docs/functions.tsv` `0x433a10`/`0x41c140`/`0x50c690`); the "beam between them" half had never
+been chased - the shaman's own state 3 was known to "fire a class-8/type-1 standard shot per
+pillar slot," but neither that shot's own per-type init (`init_unit_type_8`'s type-1 case) nor its
+per-turn flight handler had ever been opened (the latter was a bare one-line stub: "which exact
+behaviour maps to this address is not preserved from the source").
+
+**Resolved the jump table and the two functions statically first**: read `init_unit_type_8`'s own
+8-entry table (`0x4bada8`) by pulling its raw dwords directly from the exe file (the same
+file-offset trick `docs/trace-backlog.md`'s "Notifications" section already documents for
+`process_cmd`'s own tables - `VMA - 0x401000 + 0x400`), confirming type 1 -> `0x4BAB30`. Traced it
+and its sibling per-turn flight function (`0x4BAF00`, states 1/2's shared handler) instruction by
+instruction - but came away with a mechanically-plausible-looking reading that was actually WRONG in
+an important way: a block that copies one field into the object's own current-position field
+(`+0x3D`) on its first tick looked, read cold, like it SNAPPED the shot's position straight to its
+destination immediately, which would mean no real flight at all (just an instant pop).
+
+**Rather than trust that read, settled it with a cheap, read-only live poll instead of more
+disassembly staring** - no breakpoints, no synthetic key presses, so none of this session's earlier
+crash risk applied: a short script (scratch-only, not committed) scans the flat thing-id table
+(`0x890390`) each tick for any live class-8/type-1 object and dumps its position/destination/launch
+fields, run during an ordinary level-1 load (the RC rebuild fires automatically, no player input
+needed at all). **The live data overturned the static "snap" reading outright**: across 8 distinct
+shot ids (one per pillar ring slot, matching `tribe+0xA0D`'s own 8 slots) sampled turn to turn, each
+shot's own `+0x3D` position genuinely moved, turn over turn, from a SHARED launch point toward its
+own distinct destination - e.g. one shot's position moved from `(5888,55040,86)` to `(5732,55040,88)`
+between two consecutive turns, a real step toward its own destination `(4352,55040,...)`, not an
+instant jump. The live data also cleanly resolved which of the two position-like fields
+(`+0x70`/`+0x76`) is which - the 8 shots' own `+0x76` values traced out a perfect 8-point ring
+(radius ~1536 units) around one shared centre point, which is exactly what all 8 shots' own `+0x70`
+held in common - i.e. **`+0x76` is each shot's own individual destination (a ring slot), `+0x70` is
+the shared launch point (the shaman's own position/RC anchor)**, the reverse of what a naive
+"written first, so it must be the origin" read of the init code suggests.
+
+**The visual itself**: each turn a shot hasn't yet arrived, its flight handler samples up to 20
+small jittered points along its own path and spawns a **class-7/type-4 "lightning elem" effect** at
+each one - the exact same falling-bolt-chain-link object the Lightning spell's own visible bolt is
+built from (`process_lightning_elem`/`0x50BD70`, already documented). So the player-visible effect
+really is a beam of sorts: a rapid burst of brief lightning-bolt segments snapping from the shaman
+to the target ring slot, resolving (per the live data) within 1-2 turns - matching the
+already-documented "staggered 1-3-turn gaps between pillar appearances" from a much earlier session.
+Full write-up: `docs/functions.tsv` rows `0x4bab30` (new), `0x4baf00` (rewritten from the old stub),
+`0x433a10` (cross-reference added).
+
+**Methodological takeaway**: a static disassembly read that "looks" unambiguous can still be wrong
+about which of two similar-looking fields is which, especially for a function explicitly flagged by
+an earlier session as having lost its own field semantics; a short, READ-ONLY live poll (no
+breakpoints, no synthetic input - just `/proc/pid/mem` reads, the same safe technique
+`watch_pillars.py` already established) is cheap insurance worth reaching for whenever a static trace
+produces a mechanically-plausible-but-narratively-odd conclusion (here: "the projectile instantly
+teleports to its target," which would be a strange thing for this engine to actually do given the
+many OTHER shot types that visibly fly).
+
+## RC shot trail corrected: it's a small sparkle, NOT a lightning bolt (later session, 2026-11-08)
+
+The previous session's own "it's a chain of lightning-bolt segments" conclusion was wrong - caught by
+the user, who had already implemented it in open-populous and compared it against the real game.
+Re-traced statically first, then confirmed with actual screenshots.
+
+**Static re-read found a real error in the earlier trace**: `0x50BEB0` (called from `process_lightning_elem`/
+`0x50BD70` once a falling piece's own lifetime expires) does NOT spawn a new chained object - it was
+misread. It operates on the SAME `self`: sets its state back to 4 (falling) and calls `unit_set_object`/
+`0x4EE700(&self+0x33, kind, offset)`, where `offset` is the object's own CURRENT sprite index plus 4 and
+`kind` (1, or 0x1D once a threshold byte is hit) selects a row in the draw-class table `0x5A6AF8`. So this
+is one single object that falls under physics and periodically advances its own sprite frame/draw-class -
+not a chain of multiple pieces each spawning the next. Table row 1 (the normal case) is a near-empty,
+minimal entry - nothing in it suggests a dramatic zigzag bolt shape.
+
+**Live screenshots settled it beyond doubt.** Set up the same Docker rig, loaded level 1, and this time
+captured the exact turn window (37-52) tightly - a small script polling `simulation_turn` directly and
+firing `import` screenshots only while turn was in range, avoiding the earlier sessions' problem of
+screenshots landing well before or after the shot-firing window. Zoomed crops of turns 37 and 41 show
+the effect clearly: a single tiny, tribe-coloured (blue, matching the local tribe) 4-point sparkle/glint,
+floating near the shot's current position - visually indistinguishable in style from the small gold
+sparkles the ground-levelling ring effect already uses nearby, just a different tint. **No bolt, no
+zigzag, no jagged line, nothing connecting the shaman and the stone at all** - the "connection" a player
+perceives is just "a few twinkles drift from near her to near the slot, then the stone appears," not a
+rendered beam of any kind.
+
+**Corrected**: `docs/functions.tsv` rows `0x50bd70` (now named `process_lightning_elem`, rewritten to
+describe the real single-object sprite-advance mechanism), `0x4baf00` (the "lightning elem"/"crackling
+arc" language replaced with "falling spark"/"tiny sparkle"), and `docs/unit_types`'s own class-7/type-4
+row (renamed from "lightning elem" to "falling spark" with a note on the correction). The object is still
+genuinely SHARED with Lightning's own falling-bolt-chain (confirmed, same function), but its actual
+on-screen appearance is a generic small sparkle, not anything lightning-shaped - the old name was an
+unverified guess (almost certainly inherited from "this is the same object Lightning's code uses" without
+ever checking what it draws), not a finding, and no future session should assume a "lightning" label in
+this catalog means the game actually draws a bolt.
+
+**Methodological note, sharpening the previous session's own one**: a live screenshot beats both a static
+disassembly read AND a live memory-poll of struct fields when the question is specifically "what does
+this look like" - the earlier position-tracking poll correctly proved the object moves, but said nothing
+about its shape/colour, which is exactly the kind of claim this session's static trace got wrong by
+inferring it from a type NAME in `docs/unit_types` (itself unverified) rather than the actual sprite/
+draw-class data. Tight-window screenshot timing (poll `simulation_turn` in-process, fire `import` only
+while in the target range) is the fix for the earlier sessions' own "screenshots landed outside the
+window" problem - worth reusing for any future "what does X actually look like" question.
