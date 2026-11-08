@@ -64,7 +64,19 @@ one with a different approach, or a later pop3-rev session may already have trac
   `+0x6` - sibling properties in the same per-mesh-type row, not the same value) onto the statue's own `+0x3B`.
   **This does not explain the "f1" byte itself** - narrowed, not resolved: a future session should search
   specifically for a byte READ at `objs0_struct_row_base+6` (not just the table-base load alone, which 104
-  unrelated call sites across the exe also do) to find what actually consults it. `caseD_b` (`person_states.tsv`
+  unrelated call sites across the exe also do) to find what actually consults it.
+
+  **RESOLVED (as far as static search allows), later session: nothing in the exe's own code ever reads "f1"
+  (`objs0_struct+0x6`).** `backup.xml` turns out to already carry a full human-authored `objs0_struct` layout
+  (`<STRUCTURE NAME="objs0_struct" SIZE="0x36">`) - `+0x6` is literally named `f1` there too (an earlier analyst
+  didn't resolve it either), `+0x7` is `morph_index`, `+0x2c` (read constantly elsewhere in this catalog, e.g. the
+  Blast/Firestorm fireball rows) is `shapes_index`. Walked all 104 loads of the table's own pointer variable
+  (`0x895EC1`/`objs0_mem`) exe-wide checking for a subsequent `+0x6` byte read: none exist anywhere - only the 2
+  already-known writes (both inside the AoD statue-crumble effect) ever touch it. Its neighbour `morph_index`
+  (`+0x7`), by contrast, is read/written in at least 12 separate functions - genuinely used, unlike `f1`. Best
+  supported conclusion: `f1` is dead/write-only in this exe build (can't rule out a Direct3D-side consumer this
+  search method is blind to, but none exists in the CPU-side code). Full write-up: `docs/functions.tsv` row
+  `0x4a66c0`. `caseD_b` (`person_states.tsv`
   row 28, full write-up there) turns out to be a 5-angel squadron spawn-and-launch sequence (a leader spawning 2
   wingmen in a flanking V-formation, each of those spawning one more, then the leader joining the ordinary
   hunting loop while the 4 escorts are routed into a newly-found, still-unopened case, raw `0x11`) - **confirming,
@@ -148,6 +160,28 @@ one with a different approach, or a later pop3-rev session may already have trac
   spark-shower formation that detaches and scatters to the ground all at once at impact, not a per-particle
   staggered fade. Full write-up: `docs/functions.tsv` rows `0x514d00`/`0x514f60`, `docs/effect_states.csv` rows
   57/59.
+
+- **RESOLVED, later session: the long-open "real alloc site for class-7 type `0x5B` ('statue to AoD')" question -
+  there is no runtime alloc site at all.** Exhaustively walked every `alloc_unit` call site in the exe (~188
+  total: 107 with a literal `push 0x7` class immediate, the rest register/table-driven for class and/or type) -
+  none compute `0x5B` except one, `load_level2`'s own generic per-"thing" loader (`0x485011`, new
+  `functions.tsv` row). That function reads class/type/tribe as three adjacent raw bytes straight out of each
+  level file's own thing record while parsing a level at load time - **a "statue to AoD" effect is simply
+  something a specific level file places directly as an ordinary thing, the exact same mechanism that places
+  every person/building/scenery/effect in a level, not a scripted PopScript opcode or a native hand-off like
+  `CALL_TO_ARMS`.** This fully explains why the literal byte `0x5B` could never be found anywhere else in the
+  exe's own code or static data: it genuinely is level content, not exe content, and this container has no level
+  files to check which campaign level(s) actually place it. **This closes the question as far as static exe-only
+  analysis can go** - finding WHICH level(s) use it would need an actual level file, out of scope here. Also
+  mapped (along the way, same `load_level2` per-thing loop): the per-spell "which effects does casting this
+  spell spawn" table (`0x5A80D0`, stride `0x3E`, 5-byte effect-type array at row offset `+0x28`) for spell types
+  0-30, confirming `0x4C23E0`'s own existing row's Blast example byte-for-byte (`[0x5,0x3,0x4e,0x26,0]`) - useful
+  as ground truth for any future table-driven alloc-site hunt, but contains no `0x5B` either. Side finding, not
+  itself about this effect: `load_level2`'s own CLASS==1 (person) loading branch shows that enabling the
+  `0x89C661` bit `0x8` "BYRNE" cheat flag before loading a level forces every level-placed person except shamans
+  (type 7, which gets a tribe remap instead) to a tribeless wildman - not live-verified, not yet cross-checked
+  against `pop3-rev-analysis.md`'s own cheat-mode documentation. Full write-up: `docs/functions.tsv` rows
+  `0x479840`/`0x485011` (new).
 
 ## Native AI / AI scripting
 
@@ -438,3 +472,230 @@ one with a different approach, or a later pop3-rev session may already have trac
   autonomous first-detection trigger that sets `+0x9C` bit `0x10` in the first place is still unlocated** - a
   concrete, well-scoped next step: search for writers of that bit (building `+0x9C`, word field) elsewhere in the
   exe.
+- **RESOLVED, later session (2026-11-07): the "still unlocated" writer found, and it overturns the "autonomous
+  sentry" framing entirely - there is no detection radius or LOS scan involved at all.** A full-exe search for
+  `[reg+0x9c],0x10` writes (not just reads) in `dis.txt` turned up exactly one: a trivial 2-instruction setter at
+  `0x40BAE0` (`building_set_alerted`, new `docs/functions.tsv` row) - `building+0x9c |= 0x10`, nothing else, no
+  caller-side gating of its own. Its only 5 call sites are all inside `attack_order_handler`/`0x51A2A0`'s
+  building-target (class-2) sub-state machine (pinned down at `0x51B0E7` in an earlier session), one per
+  "hit" sub-state, each immediately after that sub-state's own `0x407810(building,6)` "shake the building" call.
+  **So the real trigger is "a unit just landed a melee hit on this building," full stop** - no occupancy check,
+  no garrison-type check, no tower-type check, no DT_RADIUS-scaled range: the only preconditions are the ones
+  `attack_order_handler` already enforces to reach that branch at all (target is class 2/any building, target's
+  tribe differs from the attacker's). The player-reported "tower alarm (song + notification) when a manned tower
+  spots an enemy at range, scaled by elevation" conflates two genuinely separate mechanisms that happen to share
+  one downstream consumer (`0x89D167`'s "fight involving you" flag, per `0x40BD20`'s own write-up): (1) this
+  bit/`0x408ED0`'s sound-0x34 siren, which is a generic "any of my buildings is currently being melee-attacked"
+  alarm with zero range component, not tower- or garrison-specific; (2) the DT_RADIUS-scaled detection radius
+  (`0x40B450`/`0x40BD20`) is real but belongs to the unrelated, player-hotkey-only "B" rally command, confirmed
+  in an earlier session to never run autonomously. Also found, not yet traced: `0x40BAE0`'s paired getter
+  `0x40BAC0`/`building_is_alerted` has 2 call sites (`0x471129`, `0x472494`) that look like render-reveal checks
+  for normally-hidden enemy objects - a plausible lead for the notification/reveal half of the alarm, left open
+  for a future session (own `functions.tsv` row has the detail).
+- **FOUND, later session (2026-11-07): a THIRD, genuinely autonomous combat mechanism, separate from both of the
+  above - the player's own "self-defense" report (a firewarrior garrisoned in a building throws fire at a nearby
+  enemy without leaving; a garrisoned warrior walks out to fight one on its own, neither via the B hotkey or the
+  building-attack alarm).** Traced the issuer of order kind `0x15`/21 ("attack, self-issued auto-scan" in the
+  `order_execute`/`0x432D18` catalog, previously unlocated): `0x4D4690` (own `functions.tsv` row, already known
+  to run for every owned person every eligible tick from earlier Preacher-conversion tracing) dispatches by
+  person type - preacher/shaman to `preacher_auto_scan`/`0x51E7B0`, firewarrior (gated by a trivial check,
+  `0x51FCD0`) to its own dedicated scan `0x51E9A0` (new row), everything else to the generic melee scan
+  `0x51E5E0`/`0x51EAB0` - with a GHOST-status override (`self+0x11` bit `0x8`) to a parallel scanner `0x51E6F0`
+  (new row) regardless of type. **Confirmed by reading `0x51E9A0`'s own code**: the firewarrior's scan reads its
+  OWN CURRENT cell (`+0x3D`/`+0x3F`) as the scan centre - it does not walk anywhere first, consistent with its
+  ranged nature (`firewarrior_fire`/`0x51FBF0`) - and **nothing anywhere in this whole dispatch chain
+  (`0x4D4690`, `0x51E5E0`, `0x51E7B0`, `0x51E9A0`) checks whether the unit is currently a building occupant**
+  (the `+0x86` array) before running. Also confirmed the call site feeding `0x4D4690` (inside the generic
+  per-person per-turn tick, `~0x4D3B3F`) only excludes units with no tribe (`+0x2F==0xFF`, i.e. wildmen/neutral) -
+  no occupancy/garrison exclusion there either. **Net reading (not live-verified this session): this is one
+  single autonomous "if I can see an enemy from where I am, attack it" mechanism that produces two different
+  VISIBLE outcomes purely because of each type's own engagement range** - a ranged firewarrior can satisfy its
+  self-issued attack order from wherever it currently stands (even a building's doorway cell, so it fires
+  without leaving), while a melee type (warrior, generic scan) needs `attack_order_handler`'s own
+  approach/arrival sub-states to physically close distance first, which - if it started inside a building -
+  means walking out through the door before it can land a hit. Two outcomes, one mechanism, no building-specific
+  code anywhere in the chain. **All four of this entry's own "open leads" resolved, later session (static only,
+  no Wine/game data available in that container).** `0x51F470` (firewarrior candidate search) and `0x51EE10`
+  (ghost-path candidate search) both fully traced: same square-area per-cell scan skeleton and tribe/diplomacy/
+  hostility gate (reusing `0x4DE7B0`, the SAME helper `0x40BD20`'s watchtower scan uses - not sentry-specific),
+  but `0x51EE10`'s own candidate filter is narrower (ghost-or-shaman-only, plus a `+0x9d==0`/per-state-table
+  check) - a ghosted unit's auto-defense targets other ghosts or enemy shamans specifically, not any nearby
+  enemy. `0x51F470` turned out to be a GENERIC helper, not firewarrior-exclusive: a second confirmed caller
+  (`0x5028D5`, inside the `guard_control_units` per-turn walk's "any class-10 controller type other than
+  6/FORMATION" branch) runs a controller object through the exact same person-targeting eligibility matrix -
+  which controller type this is, and what it does with the result, is a new open lead. `0x51F470`'s own two
+  result codes (previously "plausibly building vs. person, not confirmed") are now resolved: code `2` is an
+  ordinary person hit; code `3` is a confirmed SEPARATE "alternate target slot of this cell" hit via a new
+  helper (`0x4BAAB0`, own `functions.tsv` row), through a different per-cell table field than the person-chain
+  - supporting, not just hypothesizing, the building-target reading. `0x520480` fully traced: it's genuine
+  same-cell deduplication - when self (or any unit) shares its EXACT cell with another unit of the same type/
+  tribe/state/cached-order-kind (further requiring BOTH ghost-flagged if self is), it hands that other unit the
+  SAME order group and marks it "already acted," so a ghost and its still-living original (the most plausible
+  real-world case of two units sharing a cell) attack together from one scan rather than duplicating it - not
+  building-eviction, as suspected, and not live-verified whether that same-cell case ever truly occurs.
+  **Order kind `0x22` is RESOLVED, not just "not yet traced": `order_execute`'s own bounds check
+  (`sub eax,3; cmp eax,0x1E; ja default`) puts `0x22`(34) outside the table's kinds-3-33 range entirely
+  (`34-3=31>30`), so it falls to the same silent "no handler, never completes" path as any invalid kind - a
+  firewarrior's "alternate target slot" self-issued order is permanently inert once issued, never actually
+  attacking anything.** `0x51FCD0`'s own gate (`unit+0xB2==1`) is still not conclusively explained, but a new
+  data point was found: `0x43A4D0` (the disguise/infiltration order) tests the SAME `+0xB2` offset as a
+  multi-bit flags byte (bits `0x1`/`0x2`) on a DIFFERENT unit type, confirming the offset is reused for at
+  least 3 unrelated purposes across unit types (spy disguise flags, this firewarrior check, and the Angel of
+  Death's own kill-count byte) - whether the firewarrior's reading is "bit 0 of a shared flags byte" or a wholly
+  separate reuse remains open. No live memory check was run (none available in that container either) to confirm
+  a garrisoned firewarrior's position fields really do read as "at the doorway" while inside - still open if
+  this needs stronger confirmation before going into a reimplementation spec. Full write-up:
+  `docs/functions.tsv` rows `0x51f470`/`0x51ee10`/`0x520480`/`0x51fcd0`/`0x4baab0` (new)/`0x432d18` (kind 0x22
+  addendum).
+
+## Notifications
+
+- **The building-alert "song + notification" has (at least) two genuinely separate halves, and only one of them
+  was found to actually do anything - the other may be dead code.** Picking up on `0x409140`/`0x409200`'s own
+  already-documented but unexplored tail (writes a camera-alert position `0x89C6E5` and ORs `0x89DB05` bit
+  `0x8000`, gated to the LOCAL PLAYER's own buildings only, debounced by a one-shot gate `0x89CE60`): (1)
+  **the audible siren is real and already fully traced** - `0x408ED0` plays sound `0x34` on a double-gated roll
+  for ANY alerted building regardless of tribe (prior session, see "Combat" above) - this part needs no further
+  work. (2) **the camera-jump/banner half could not be confirmed to do anything.** A third writer of the
+  identical `0x89C6E5`/bit-`0x8000` pair was found this session, inside `main_loop_inner`/`0x4EC6F0` (own
+  `functions.tsv` row) - a generic "a fight involving you is happening somewhere" sweep over a not-yet-identified
+  active-fight list (`0x890358`, own row, open), separate from the building-specific writers, confirming this
+  notification channel is meant to be a general "something combat-related needs your attention, look here"
+  signal, not building-exclusive. But an exhaustive search of every instruction form that could read bit `0x8000`
+  of `0x89DB05`, or read `0x89C6E5` at all, anywhere in `dis.txt` found **zero consumers** - every other bit in
+  the same per-tribe dword has a reader (mostly the level-script condition-check cluster around `0x48D8xx`), just
+  not this one. The debounce gate itself (`0x89CE60`) looks like it resets every turn (traced to `0x4EC785`
+  inside `main_loop_inner`, reusing a register from an unrelated adjacent per-turn stats write - not confirmed
+  with full certainty it's always 0 there), so this isn't a "fires once ever" oddity explaining the missing
+  reader either. **Confirmed-not-done this session**: finding the "Space" keybind (shortcuts.md: "camera to the
+  tower under attack") in `process_cmd`'s own `ui_cmd` dispatch table, which would settle this definitively one
+  way or the other - either it reads `0x89C6E5`/bit `0x8000` (missed by this search, e.g. via an addressing
+  pattern not covered, or an indirect/pointer-based access) confirming the mechanism is real and just rarely
+  exercised, or it reads something else entirely (e.g. `0x895DBB`'s own HUD-widget struct, which `0x89D167`
+  already writes - "Combat" above, `0x4ECA2D`'s row) and this whole `0x89C6E5` pair genuinely never got wired up
+  in the shipped game. **Concrete next step**: locate Space's `ui_cmd` case the same way B/`0xBF` (CALL_TO_ARMS)
+  was found - grep `backup.xml`'s own `switchD_<addr>::caseD_<id>` symbols for `process_cmd`'s main dispatch
+  table (`0x4AD814`/`0x4AD8DC`, per commands.tsv) for whichever case reads either global, and read it end to end.
+- **User correction, later session: the icon-click camera-jump and the "Space" bell alarm are two SEPARATE
+  systems, not one with a missing reader.** The clickable notification stack (building/fight under attack,
+  preacher conversion in progress, enemy spell cast - all sharing one icon stack with a click-to-camera-jump
+  action) is a different, generic multi-event system - most likely the already-identified `fire_advisor_message_
+  once`/`0x44D7F0`/`render_land_ui_1` pipeline (pop3-rev-analysis.md "Notifications"), whose CLICK handler
+  (as opposed to its per-frame draw, already found) is still unlocated - `render_land_ui_1` (`0x44A2F0`-
+  `0x44ABD4`) is the right place to keep looking (it reads/writes the shared record `0x68B6A1`/`0x68C6xx`
+  nowhere else in the exe, so any click-detection for it, if present, lives inside this same function). Space
+  is explicitly NOT part of that system - it's its own dedicated keybind, separate from the icon stack.
+  **This session's attempt to find Space's own binding via `backup.xml`'s `switchD_`/`caseD_` symbols failed**
+  (`switchD_004ab6f3`/`004abc0e`/`004adda9` are the only ones Ghidra recognised anywhere near `process_cmd` -
+  none of them are the `0x4AD814`/`0x4AD8DC` table B/G use, which Ghidra apparently never recognised as a
+  switch at all). **Instead, validated a reusable, much faster alternative this session: reading the remap+jump
+  tables' raw bytes directly out of the exe file** (`.text` VMA `0x401000` -> file offset `0x400`, a plain
+  Python `struct.unpack_from` one-liner) rather than hand-decoding the disassembly - confirmed correct by
+  reproducing `ui_cmd 0xBF`/`0xC1`'s own already-known handler addresses (`0x4AD2BC`/`0x4AD318`) exactly from
+  the raw table bytes. **Also discovered `process_cmd` actually chains TWO such table pairs** (an outer one at
+  `0x4AD740`/`0x4AD5C4` whose own cases can fall through into the `0x4AD814`/`0x4AD8DC` pair via a shared tail
+  at `0x4ABBE2`, using a DIFFERENT index formula - `raw_id-0xF` - than whatever formula the 0xBF/0xC1 cases use
+  to reach the same second table directly; the two formulas were independently verified against known-good
+  answers but not yet reconciled with each other) - see `0x4AAB80`'s own corrected `functions.tsv` row for
+  the full mechanism. **A promising scancode-shaped lead (DIK_SPACE=0x39, DIK_RETURN=0x1C, DIK_NUMPADENTER=0x9C
+  all appearing as literal comparisons inside `0x4A9D90`) turned out to be a false trail**: that function is a
+  generic "set/toggle one named OPTION by id" dispatcher (already correctly identified by a prior, unrelated
+  session chasing an Angel-of-Death lead), and `0x39` there is just an option id that happens to numerically
+  coincide with the DIK_SPACE scancode, not an actual keyboard check - its real callers (who pass it option id
+  `0x39`) were not identified. Chasing it anyway all the way through to `ui_cmd 0x5b`'s own handler
+  (`0x4ABD86`, now fully traced, own `functions.tsv`/`commands.tsv` rows) found a PAUSE/UI-panel-visibility
+  toggle, not an alarm - confirming this was the wrong trail, not an incomplete one. **The real Space/bell-alarm
+  binding remains unlocated.** Given how easy it is to find a numerically-plausible but wrong lead in this
+  exe's heavily-reused id space, **a live memory check is very likely faster than continuing static analysis
+  here**: watch `0x89C6E5`/`0x89DB05` (and, as a cross-check, `0x89D167`/`0x895DBB`) while the user presses
+  Space in a real game with an active fight or a building under attack, the same way `scripts/livemem.py` was
+  used for the mouse-tracking investigation (`docs/cheat.md` "Docker headless rig") - this would show directly
+  which global(s) actually change, if any, cutting out the dispatch-table archaeology entirely.
+- **User correction, same thread: `0x4A9D90` genuinely IS a keyboard dispatcher after all - just not for gameplay
+  hotkeys. It's the multiplayer chat / BYRNE cheat-code text-entry box's own per-keystroke handler.** Confirmed
+  by reading the exe's own static data: `0x4A9D90` and its sibling `0x4AA1C0` (own `functions.tsv` rows) are
+  function-pointer fields inside a dialog-descriptor struct at `0x5CDB98`, which also holds seven repeated
+  UTF-16 `"%s: %s"` format strings - a chat scrollback entry shape (sender + message), not a settings panel.
+  `0x526A80` (own row) is the generic dialog-event pump that invokes the descriptor's own callback - the actual
+  reason `0x4A9D90` has zero direct callers anywhere in `dis.txt` (it's only ever reached through this indirect,
+  function-pointer path, which is why the prior Angel-of-Death session and this thread's own earlier session
+  both mischaracterized it from the disassembly alone). This retroactively validates the DIK-scancode-shaped
+  checks inside it: Enter/Numpad-Enter (`0x1C`/`0x9C`) really is keyboard input, reading as "submit the typed
+  chat line" (`ui_cmd 0xB0`); a code-`1` case reads as "cancel/close" (`ui_cmd 0x9B`, shared with `0x4AF780`'s
+  own dismiss-dialog call to the same id). **Still open**: the Space-shaped case (`esi==0x39`) calls `ui_cmd
+  0x5b`/`0x63`, both confirmed elsewhere to be pause/UI-panel toggles - doesn't obviously fit "type a space
+  character into a chat message." Working hypothesis, not confirmed: this same per-keystroke callback may be
+  shared between ordinary chat AND the separate BYRNE cheat-code entry screen (AGENTS.md's "hold TAB+F11..."
+  note), with Space's effect depending on which one is active. **This does NOT answer the original "Space: bell
+  alarm" question** - if anything it makes `0x4A9D90` a LESS likely candidate for that keybind now that its real
+  purpose (a chat box, only reachable while that dialog is open) is understood; the live-memory check recommended
+  above remains the fastest way to find the real one.
+- **RESOLVED, same thread, without any live check: "the chat should have icons for which tribe to send to"
+  (user recollection) - confirmed true, found end to end via the exe's own import table and strings, not by
+  running the game.** With no Wine/display available in this environment to do the live check the prior entry
+  recommended, searched `strings`/`objdump -x` for anything chat/network-shaped instead: found a real, demangled
+  C++ import, `?SendChat@MLDPlay@@QAEHKPAGKPAK@Z` = `int MLDPlay::SendChat(unsigned long dest, unsigned short*
+  text, unsigned long, unsigned long*)`, imported from `weanetr.dll` (the game's DirectPlay-style multiplayer
+  library). Resolved its IAT slot with `pefile` (`0xD0C9B8`, own `functions.tsv` row) and found 4 call sites;
+  the one inside the chat-send function (`0x4AE5B0`, own row) is a clean, self-contained answer: a 4-byte array
+  `0x96AAB6`-`0x96AAB9` holds one "selected as recipient" flag per UI slot - slots 0-2 for the 3 tribes other
+  than the local player (via an index-remap helper, `0x4A25B0`, own row, "the Nth tribe other than me"), slot 3
+  a dedicated "ALL" flag. If nothing is explicitly selected, or ALL is set, one broadcast `SendChat(0xFFFFFFFF,
+  ...)` goes out; otherwise one `SendChat` call per individually-selected tribe. The icon click/toggle handler
+  itself (`0x49EB50`, own row, found via the same array) has real UI logic matching a typical radio-adjacent
+  multi-select: toggling an individual tribe auto-syncs the ALL flag (set if all 3 end up selected, cleared
+  otherwise) and refuses to let you deselect your way down to zero recipients (forces the last one back on).
+  **Net: exactly the mechanism the user described** - per-tribe recipient icons plus an "everyone" option,
+  controlling the destination of each `SendChat` call. Still open, lower priority: which on-screen widget/icon
+  list actually owns the `0x49EB50` callback (not the same descriptor as the chat text box itself, `0x5CDB98`,
+  which has no spare callback slot for it) and the other 3 `SendChat` call sites (`0x40F593`/`0x40FC2B`/`0x45438D`)
+  not yet traced. **Methodological note for the next "we can't run the game" situation**: `strings -e l` (UTF-16)
+  plus `objdump -x`'s import table, and demangling of any `?Name@Class@@...` C++ symbols found there, turned out
+  to be a far faster and more conclusive path than guessing from UI code alone - worth trying BEFORE spending a
+  long session on disassembly archaeology whenever the question smells like "what does clicking X actually DO"
+  (network sends, file I/O, and other externally-visible actions are exactly the kind of thing that shows up as
+  a named import, even when the UI code that triggers them is deeply indirect/callback-based).
+
+- **RESOLVED, later session: which class-10 controller type reaches `0x51F470` via `0x5028B0`'s "anything else"
+  branch - the previous session's own open lead from the combat self-defense tracing above.** It's type `0xA`
+  ("guard control" per `docs/unit_types`), NOT a FORMATION (type 6) controller as the branch structure there
+  might suggest. Confirmed via `0x4ECAC0`'s own per-turn object-classification pass (Ghidra's `init_tribe_struct`
+  - a likely misnomer, confirmed to run every turn from `main_loop_inner`/`0x4EC942`, not once at level load):
+  its class-10 sub-dispatch (table `0x4ED4F4`, types 1-13) pushes type `0xA` specifically onto
+  `guard_control_units` (`0x890360`); type 6/FORMATION controllers go onto a different, unidentified list
+  entirely. The SAME classification pass also confirmed `fight_units`(`0x890358`)/`pre_fight_units`(`0x89035C`)
+  are built from controller types 8/9 (matching `docs/unit_types`' own naming exactly), and that
+  `guard_control_units` ALSO receives effect type `0x5A` ("atlantis invoke" - unidentified, plausibly unused/cut
+  content) and shot type `6` (not in `docs/unit_types`' own shot list at all) - so the list is a genuine mixed
+  bag by design. The guard-control coordinator's own init (`0x5027E0`, new `functions.tsv` row) was also traced:
+  it's a stationary sentry planted at a fixed world position (decoded from a scan-centre cell word) with a FIXED
+  6-cell scan radius, running `0x51F470`'s person-targeting eligibility scan every other tick - **plausibly the
+  actual "manned structure detects a nearby enemy at range" mechanism earlier sessions looked for and didn't find
+  while tracing the watchtower alert bit (`0x40BD20`) and the building-hit alarm (`0x40BAE0`), both confirmed to
+  have NO range component of their own.** Correction to an earlier session's framing: the scratch stack
+  `0x892443` (which the guard-control init also pops from) is NOT position-job-specific - re-confirmed this
+  session as a pervasively reused generic argument-scratch area used by unrelated functions exe-wide
+  (`init_unit_building`/`0x403676` among them); isolate by immediate caller context, don't trust a bare search for
+  all its touches. **Two concrete open leads for a future session**: (1) what allocates a type-`0xA` guard-control
+  object in the first place (which building type or script action spawns a guard post sentry) - not found, the
+  277-touch scratch-stack search above was abandoned as too unfocused; (2) what reads/consumes the scan result
+  this coordinator stores in its own `+0x78` on a later tick - i.e. what it actually DOES once it finds a
+  hostile (raise the watchtower-style alert? issue an attack order? something else?) - not traced. Full write-up:
+  `docs/functions.tsv` rows `0x51f470`/`0x5028b0`/`0x4ecac0`/`0x5027e0` (new).
+
+- **CORRECTED, later session: the "stationary sentry" framing just above is wrong - type `0xA` is the "join/hold
+  a melee ring" (order kind `0xB`/11) companion object `0x519F10`'s own row already named as "a THIRD
+  combat-adjacent controller type... a genuinely separate 'ring' object", not an unrelated guard post.** Both of
+  this item's own open leads are now resolved. (1) **Allocator**: exactly 2 call sites in the whole exe create a
+  type-`0xA` controller, `0x519F10`'s own sub-state-0 path and a second, redundant site inside `0x432DF0`'s own
+  body (much bigger than its previously-documented opening bit-copy segment, own extended `functions.tsv` row) -
+  BOTH reached only for order kind 11, never from a building or script action. (2) **`+0x78` consumer**:
+  `0x519F10`'s own per-tick dispatch checks it before its normal sub-state switch - a nonzero result (the
+  periodic `0x51F470` scan found something) resets a non-ready ring member's own sub-state back to 0, forcing it
+  to re-run `attack_order_handler` - i.e. the scan lets an ongoing melee ring re-engage a new or moved target,
+  not detect an approaching enemy from a fixed watch position (this companion has no fixed position at all - it's
+  anchored at wherever the ring's own target currently is). Side note: since this companion's own type (`0xA`)
+  doesn't match `0x51F470`'s self-type matrix (4/6/8), its ordinary person-hit result (`2`) can in practice only
+  ever report an Angel of Death - its real value almost certainly comes from result `3` (the `0x4BAAB0`
+  alternate-slot hit instead, which bypasses that matrix). Full write-up: `docs/functions.tsv` rows
+  `0x51f470`/`0x5028b0`/`0x5027e0`/`0x432df0` (all re-corrected/extended).
