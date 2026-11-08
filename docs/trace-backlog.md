@@ -480,15 +480,39 @@ one with a different approach, or a later pop3-rev session may already have trac
   without leaving), while a melee type (warrior, generic scan) needs `attack_order_handler`'s own
   approach/arrival sub-states to physically close distance first, which - if it started inside a building -
   means walking out through the door before it can land a hit. Two outcomes, one mechanism, no building-specific
-  code anywhere in the chain. **Open leads for a future session**: `0x51F470`/`0x51EE10` (the actual
-  candidate-finder helpers for the firewarrior/ghost scans, named but not read), `0x520480` (a shared post-order
-  tail both `0x51E6F0` and `0x51E9A0` call - confirmed NOT a building-exit/eviction call, but its real purpose,
-  something involving a same-cell "ghost double" of the acting unit, is unresolved), the new order kind `0x22`
-  (34, self-issued only by `0x51E9A0` on one specific found-type, not yet traced through `order_execute`'s own
-  dispatch), and `0x51FCD0`'s own gate condition (`unit+0xB2==1` on a firewarrior - meaning not confirmed). No
-  live memory check was run this session to confirm a garrisoned firewarrior's position fields really do read as
-  "at the doorway" while inside (reasonable from `go_into_building`'s already-documented mechanics, but untested
-  here) - worth a live check if this needs stronger confirmation before going into a reimplementation spec.
+  code anywhere in the chain. **All four of this entry's own "open leads" resolved, later session (static only,
+  no Wine/game data available in that container).** `0x51F470` (firewarrior candidate search) and `0x51EE10`
+  (ghost-path candidate search) both fully traced: same square-area per-cell scan skeleton and tribe/diplomacy/
+  hostility gate (reusing `0x4DE7B0`, the SAME helper `0x40BD20`'s watchtower scan uses - not sentry-specific),
+  but `0x51EE10`'s own candidate filter is narrower (ghost-or-shaman-only, plus a `+0x9d==0`/per-state-table
+  check) - a ghosted unit's auto-defense targets other ghosts or enemy shamans specifically, not any nearby
+  enemy. `0x51F470` turned out to be a GENERIC helper, not firewarrior-exclusive: a second confirmed caller
+  (`0x5028D5`, inside the `guard_control_units` per-turn walk's "any class-10 controller type other than
+  6/FORMATION" branch) runs a controller object through the exact same person-targeting eligibility matrix -
+  which controller type this is, and what it does with the result, is a new open lead. `0x51F470`'s own two
+  result codes (previously "plausibly building vs. person, not confirmed") are now resolved: code `2` is an
+  ordinary person hit; code `3` is a confirmed SEPARATE "alternate target slot of this cell" hit via a new
+  helper (`0x4BAAB0`, own `functions.tsv` row), through a different per-cell table field than the person-chain
+  - supporting, not just hypothesizing, the building-target reading. `0x520480` fully traced: it's genuine
+  same-cell deduplication - when self (or any unit) shares its EXACT cell with another unit of the same type/
+  tribe/state/cached-order-kind (further requiring BOTH ghost-flagged if self is), it hands that other unit the
+  SAME order group and marks it "already acted," so a ghost and its still-living original (the most plausible
+  real-world case of two units sharing a cell) attack together from one scan rather than duplicating it - not
+  building-eviction, as suspected, and not live-verified whether that same-cell case ever truly occurs.
+  **Order kind `0x22` is RESOLVED, not just "not yet traced": `order_execute`'s own bounds check
+  (`sub eax,3; cmp eax,0x1E; ja default`) puts `0x22`(34) outside the table's kinds-3-33 range entirely
+  (`34-3=31>30`), so it falls to the same silent "no handler, never completes" path as any invalid kind - a
+  firewarrior's "alternate target slot" self-issued order is permanently inert once issued, never actually
+  attacking anything.** `0x51FCD0`'s own gate (`unit+0xB2==1`) is still not conclusively explained, but a new
+  data point was found: `0x43A4D0` (the disguise/infiltration order) tests the SAME `+0xB2` offset as a
+  multi-bit flags byte (bits `0x1`/`0x2`) on a DIFFERENT unit type, confirming the offset is reused for at
+  least 3 unrelated purposes across unit types (spy disguise flags, this firewarrior check, and the Angel of
+  Death's own kill-count byte) - whether the firewarrior's reading is "bit 0 of a shared flags byte" or a wholly
+  separate reuse remains open. No live memory check was run (none available in that container either) to confirm
+  a garrisoned firewarrior's position fields really do read as "at the doorway" while inside - still open if
+  this needs stronger confirmation before going into a reimplementation spec. Full write-up:
+  `docs/functions.tsv` rows `0x51f470`/`0x51ee10`/`0x520480`/`0x51fcd0`/`0x4baab0` (new)/`0x432d18` (kind 0x22
+  addendum).
 
 ## Notifications
 
