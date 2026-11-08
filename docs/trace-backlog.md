@@ -656,6 +656,45 @@ one with a different approach, or a later pop3-rev session may already have trac
   (network sends, file I/O, and other externally-visible actions are exactly the kind of thing that shows up as
   a named import, even when the UI code that triggers them is deeply indirect/callback-based).
 
+- **Attempted the recommended live-memory check, later session (2026-11-08) - initially looked like a NEW, more
+  fundamental blocker than "mouse doesn't work" (ordinary gameplay hotkeys not reaching the game at all), but a
+  user correction resolved it: it's a focus problem, not a broken input path.** Full method in `docs/cheat.md`
+  ("`process_cmd` breakpoint method..."): a GDB breakpoint on `process_cmd`'s own `ui_cmd` argument load
+  (`0x4AABA1`, fires on EVERY call regardless of id - a strictly better probe than guessing which global a handler
+  might write) caught **Escape live, `ebx=0x9b`**, confirming `commands.tsv`'s own row for that id, but `b`/
+  `space`/`g` initially produced zero hits. Once the game window was kept actively focused (not just activated
+  once beforehand - something between test runs, e.g. a screenshot command, was stealing it back), `b` reliably
+  produced **`ebx=0xbf`** (confirming the long-standing static guess for the "B: help the tower" keybind for the
+  first time live) and - during one interleaved b/space run - a single hit of **`ebx=0x59`**, a previously
+  uncatalogued id. Delivery remained flaky even with focus held (likely genuine X11 synthetic-event drop, matching
+  this repo's older "`xdotool key Down`/`Up`... silently drops roughly a third to half of presses" note) - `0x59`
+  was not reproduced in ~9 further isolated single-key attempts of either key, but `b` was also never seen to
+  produce `0x59` across 11 attempts (always `0xbf` or nothing), making `space` the more parsimonious source.
+  **RESOLVED (probable, not 100% certain): `ui_cmd 0x59` is very likely Space's own binding, and it is NOT a pause
+  toggle or a dead end this time - it's a genuine, complete "jump camera to the current combat alert" mechanism,
+  traced end to end statically after the live hit pointed at it.** Three new pieces, none previously catalogued:
+  `0x4DA2A0` (runs every tick for every owned person, alongside the already-known self-defense auto-scan call
+  cluster at `~0x4D3B3F`) detects a hostile sharing the person's own cell and STAGES an alert - the hostile's
+  pointer into `0x8922DC`, a 96-turn TTL into `0x89C6A5`, and the THREATENED PERSON'S OWN cell into `0x89C6A1`;
+  `0x4F0E00` (called every turn from `main_loop_inner`, right alongside the already-documented `0x89D167`/
+  `0x890358` fight-notification writes) validates/expires that record and, while it's live, plays **sound `0x23`**
+  on a periodic pulse (4x/32 turns if visible to the local player, 1x/32 turns if not) - very plausibly the
+  audible "under attack" alarm itself; and `0x4ABD0D` (`process_cmd`'s own `ui_cmd 0x59` handler) consumes
+  `0x89C6A1` and feeds it through a newly-traced camera-recenter pipeline (`0x417CA0`/`0x417D80`, which writes a
+  camera-focus position into `0x89C6E3` - immediately ADJACENT to, and plausibly the missing other half of, the
+  long-dead-ended `0x89C6E5` "camera-alert position" global from the ORIGINAL Space investigation, which searched
+  for readers of `0x89C6E5` itself and found none - the off-by-one-field address may be why). Full write-up in
+  `docs/functions.tsv` (`0x4da2a0`/`0x4f0e00`/`0x417ca0`/`0x417d80`/`0x4abd0d`) and `docs/commands.tsv` (`ui_cmd
+  0x59`). **Still open**: confirm the key binding beyond one ambiguous live hit (a cleaner reproduction - ideally
+  triggering a real in-game attack so the alert is actually pending, then pressing Space and watching `0x89C6A1`
+  flip to `-1` and the camera move, would settle it definitively); the role of the second linked object `0x8922E0`
+  `0x4F0E00` also validates; and what `0x478820`/`0x449080` (minor calls in this same chain) actually do. **Also
+  logged as an operational hazard, not specific to this investigation**: letting a GDB session attached to this
+  exe die uncleanly (`SIGKILL`/timeout instead of a real detach) leaves its software breakpoint's `0xCC` byte
+  stuck in the tracee's memory, crashing the game the next time anything executes that address - this happened
+  three times this session (twice from an unclean timeout, once for an undiagnosed reason after a clean detach) -
+  see `docs/cheat.md`'s own write-up for the restore-byte workaround, needed every time.
+
 - **RESOLVED, later session: which class-10 controller type reaches `0x51F470` via `0x5028B0`'s "anything else"
   branch - the previous session's own open lead from the combat self-defense tracing above.** It's type `0xA`
   ("guard control" per `docs/unit_types`), NOT a FORMATION (type 6) controller as the branch structure there

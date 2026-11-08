@@ -536,3 +536,89 @@ Written to `/tmp/claude-1000/-home-laurent-compile-pop3-rev/<session>/scratchpad
 pokes that did, transiently), `diag.py`/`diag2.py` (read-only state dumps), `watch_unblock.py`
 (continuous re-clear loop), `watch_cast.py` (poll during a live cast attempt). Scratchpad paths are
 session-specific and get cleaned up; the snippets above are the parts worth keeping.
+
+## `process_cmd` breakpoint method: Escape confirmed as `ui_cmd 0x9b`, and a likely resolution of the long-chased Space/alarm mystery (later session, 2026-11-08)
+
+Picking up `docs/trace-backlog.md`'s own "a live memory check is very likely faster than continuing
+static analysis" recommendation for the unresolved "Space: bell alarm" keybind - this session set up
+the Docker rig fresh (`game/D3DPOPTB.EXE` wasn't present; copied in from the host's own
+`~/.wine/drive_c/Program Files (x86)/Bullfrog/.../D3DPOPTB.EXE`, sha256 `3a5065c7...` - matches
+AGENTS.md's second known-good build) and drove it to a running level 1 (`start_level1.sh`'s own fixed
+sleeps weren't enough this run - needed 4 Escapes, not the scripted 1, to clear a longer intro FMV;
+screenshot-and-adjust, as the script's own comments already warn).
+
+**Method - a GDB hardware-breakpoint-free software breakpoint at `process_cmd`'s own argument load,
+NOT a watchpoint on a global**: `process_cmd`/`0x4AAB80`'s raw `ui_cmd` id argument is loaded into
+`ebx` at `0x4AAB9A` (`mov ebx,[esp+0x350]`); breaking one instruction later, at `0x4AABA1`, catches
+`ebx` already populated on EVERY call to `process_cmd`, for ANY key/command, before any dispatch -
+far more direct than guessing which global a given keybind's handler might write. `docker compose exec
+-u root pop3 gdb -q -nx`, scripted via a short Python wrapper (attach, `break *0x4aaba1`, a `commands`
+block that `printf`s `$ebx` and auto-`continue`s), run interactively (not `-batch`) so the wrapper can
+send `SIGINT` to GDB itself (not the tracee) after sending test keys via `xdotool`, then
+`delete breakpoints`/`detach`/`quit` cleanly from the resulting prompt.
+
+**Result**: pressing **Escape** - both inside the tutorial's own modal "OK" dialog and in plain
+gameplay with no dialog up - hits the breakpoint with **`CMD raw_id=0x9b`**, live-confirming
+`commands.tsv`'s existing `ui_cmd 0x9b` row (previously only "named," flagged as an open question
+whether it's a real second entry into the cancel/close state machine `0x9c`'s row already documents).
+This is the first live (not purely static) keybind confirmation in this catalog's history - worth
+updating `commands.tsv`'s own `input` column for `0x9b` to `Escape (live-confirmed)`.
+
+**Initial attempt made it look like a much bigger blocker than Space alone**: `b`/`space`/`g`/`Tab`/
+`Return`-in-gameplay/`p`, sent via both `xdotool key` and held `keydown`/`keyup`, first produced ZERO
+breakpoint hits, while Escape and dialog-Return worked every time. **User correction: this is a focus
+problem, not a broken input path - keep the game window focused the whole time, not just activated
+once.** That was the key: the active window (checked via `xdotool getactivewindow getwindowname`) kept
+reading back as `Wine Desktop` (the real top-level X window in Wine's virtual-desktop mode; "Populous,
+The Beginning", id `23068687`, is a child of it, not independently focusable via `xdotool
+windowactivate`/`windowfocus` - those calls report success but don't stick). Minimizing OTHER X11
+interactions between focus being naturally correct (right after live menu/dialog navigation, which
+inherently proves input is reaching the game) and sending the test key - no screenshots, no window
+queries in between - made `b` reliably produce **`ebx=0xbf`**, confirming the long-standing static
+guess for shortcuts.md's "B: help the tower" keybind, live, for the first time. A background loop
+calling `xdotool windowactivate`/`windowfocus` continuously on the CHILD window id did NOT help and if
+anything made things worse (every single key dropped while it ran) - likely fighting Wine's own
+internal focus bookkeeping rather than helping it. **Net practical recipe**: do the minimum number of
+X11 calls between a known-good input moment (menu/dialog navigation) and the test keypress; avoid
+touching window focus explicitly on the child id at all.
+
+Even with that fixed, delivery stayed flaky - consistent with this repo's older finding ("Docker
+headless rig" above) that `xdotool key Down`/`Up` bursts silently drop a third to half their presses;
+isolated single keys here had a roughly 1-in-4-to-5 hit rate, not 100%. A big WIN from this, though:
+during one interleaved `b`/`space`/`b`/`space` run, ONE hit came back as **`ebx=0x59`** - a raw id
+`commands.tsv` had never seen before. Resolved its handler address with the exe-raw-byte-table method
+(`docs/trace-backlog.md`'s own "Notifications" section documents the technique) without needing
+another live session: `0x59` -> `0x4AABD1` (the shared fallthrough shim) -> second table -> **`0x4ABD0D`**.
+Static tracing of that handler (and its callees) turned up a complete, previously uncatalogued
+mechanism - see `docs/functions.tsv` (`0x4da2a0`/`0x4f0e00`/`0x417ca0`/`0x417d80`/`0x4abd0d`) and
+`docs/commands.tsv` (`ui_cmd 0x59`) for the full write-up: a per-person per-turn detector
+(`0x4DA2A0`) stages "a hostile is threatening one of my people, here's where" into three new globals
+(`0x8922DC`/`0x89C6A5`/`0x89C6A1`); a per-turn validator (`0x4F0E00`, called from `main_loop_inner`
+right next to the already-documented fight-notification writes) expires it and periodically plays
+**sound `0x23`** while it's live (very plausibly the actual alarm sound); and `0x4ABD0D` - `ui_cmd
+0x59`'s own handler - consumes the staged position and jumps the camera there via a newly-traced
+camera-recenter pipeline. This is the most complete, best-corroborated candidate yet for the
+long-chased "Space: camera to the tower/fight under attack" keybind - though the live key-binding
+itself is PROBABLE rather than certain (one hit, in an interleaved test, never cleanly reproduced in
+isolation - `b` was tested 11 times total and never once produced `0x59`, making it the more
+parsimonious source, but a cleaner reproduction - ideally with a real pending in-game attack - would
+settle it definitively). The earlier "arrow key pans the camera" read from an even earlier session may
+still be a false positive (a scripted tutorial camera move coincident with the keypress) - not
+re-checked this session, now a lower priority given the focus fix above would make it easy to re-test
+cleanly.
+
+**Hazard found the hard way, three times: do NOT let this GDB session get killed uncleanly while
+attached, and don't assume a clean-looking detach always leaves the game healthy.** Three times this
+session the wine process crashed outright (Wine's own "Program Error"/WineDbg popup, `Exception
+c0000005`) - twice after a GDB session ended via `subprocess.run(..., timeout=N)` (which `SIGKILL`s GDB
+on timeout) rather than a clean `delete`+`detach`, and once for an undiagnosed reason after a session
+that reported a clean detach. A `SIGKILL`ed GDB leaves its software breakpoint's `0xCC` byte physically
+patched into the tracee's memory forever (no tracer left alive to restore it) - the NEXT time any
+thread executes that address, it traps with no debugger attached and Wine's crash handler fires. Fix
+used successfully every time after: a tiny standalone restore script
+(`mem.seek(0x4aaba1); mem.write(bytes([0x8d]))` - `0x8d` being this exact build's own original opcode
+byte at that address, confirmed by reading `game/D3DPOPTB.EXE` at file offset `0x4aaba1-0x401000+0x400`)
+run as a cheap insurance step after EVERY GDB session regardless of how it ended or how clean the
+detach looked. Generalizes: any future live session setting a software breakpoint in this exe should
+keep a same-recipe restore script on hand and run it unconditionally, and should expect an occasional
+hard crash requiring a full level reload even when nothing looks wrong.
