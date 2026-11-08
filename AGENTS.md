@@ -86,6 +86,12 @@ Agents working from this repo analyse the original game and document it. They ne
   certainly have further unlabeled switches past these; the `grep "switchD_<addr>"` trick remains the way to find
   the next one's raw case ids for free instead of hand-decoding a jump table.
 - `docs/cheat.md`: narrative log of live-memory sessions (blast pushes, damage constants, etc.), not a catalog.
+- `docs/weanetr-dll.md`: import catalog for `weanetr.dll`, the exe's external multiplayer-networking library
+  (`MLDPlay` class, DirectPlay-flavoured) - all 21 imports with demangled C++ signatures and IAT addresses, found
+  via `strings`/`objdump -x`/`pefile`/`llvm-undname` on the exe alone (no live memory, no Wine) when a UI question
+  turned out to hinge on an externally-visible action (network send). Same "check the DLL imports first" method
+  is worth trying again whenever a question is about what clicking something actually DOES (network, file I/O)
+  rather than how the UI looks, especially in an environment without Wine/a display for a live check.
 - `docs/camera.md`: working log for the camera/flyby investigation (raw addresses, candidate tribe_struct
   fields, confidence levels, dead ends, tools) - the fuller record behind what's written into `open-populous`
   `docs/specs/pop3-rev-analysis.md` "Camera flyby state (tribe_struct)".
