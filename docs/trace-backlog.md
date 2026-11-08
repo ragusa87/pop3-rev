@@ -64,7 +64,19 @@ one with a different approach, or a later pop3-rev session may already have trac
   `+0x6` - sibling properties in the same per-mesh-type row, not the same value) onto the statue's own `+0x3B`.
   **This does not explain the "f1" byte itself** - narrowed, not resolved: a future session should search
   specifically for a byte READ at `objs0_struct_row_base+6` (not just the table-base load alone, which 104
-  unrelated call sites across the exe also do) to find what actually consults it. `caseD_b` (`person_states.tsv`
+  unrelated call sites across the exe also do) to find what actually consults it.
+
+  **RESOLVED (as far as static search allows), later session: nothing in the exe's own code ever reads "f1"
+  (`objs0_struct+0x6`).** `backup.xml` turns out to already carry a full human-authored `objs0_struct` layout
+  (`<STRUCTURE NAME="objs0_struct" SIZE="0x36">`) - `+0x6` is literally named `f1` there too (an earlier analyst
+  didn't resolve it either), `+0x7` is `morph_index`, `+0x2c` (read constantly elsewhere in this catalog, e.g. the
+  Blast/Firestorm fireball rows) is `shapes_index`. Walked all 104 loads of the table's own pointer variable
+  (`0x895EC1`/`objs0_mem`) exe-wide checking for a subsequent `+0x6` byte read: none exist anywhere - only the 2
+  already-known writes (both inside the AoD statue-crumble effect) ever touch it. Its neighbour `morph_index`
+  (`+0x7`), by contrast, is read/written in at least 12 separate functions - genuinely used, unlike `f1`. Best
+  supported conclusion: `f1` is dead/write-only in this exe build (can't rule out a Direct3D-side consumer this
+  search method is blind to, but none exists in the CPU-side code). Full write-up: `docs/functions.tsv` row
+  `0x4a66c0`. `caseD_b` (`person_states.tsv`
   row 28, full write-up there) turns out to be a 5-angel squadron spawn-and-launch sequence (a leader spawning 2
   wingmen in a flanking V-formation, each of those spawning one more, then the leader joining the ordinary
   hunting loop while the 4 escorts are routed into a newly-found, still-unopened case, raw `0x11`) - **confirming,
