@@ -134,7 +134,7 @@ unit_class|unit_type|description
 7|0x1d|big fire
 7|0x1e|lightning
 7|0x1f|flatten
-7|0x20|general
+7|0x20|general (confirmed this session: a reusable, generic timed-sprite type, not lightning-specific by name - its only confirmed spawn site is Lightning's own bolt-flash, hfx 1361/draw class 41, effect state 36, see effect_states.csv)
 7|0x21|shape sparkle
 7|0x22|lava flow
 7|0x23|volcano explosions
@@ -144,7 +144,7 @@ unit_class|unit_type|description
 7|0x27|explosion 2
 7|0x28|lava square
 7|0x29|whirlwind element
-7|0x2a|lightning strand
+7|0x2a|lightning strand (fully traced this session: one 1-tick line-segment of the jagged bolt shape, drawn via a newly-identified "line between position and position+velocity" renderer, table 0x5A6AF8 row 0x23 byte0=0x12 - not a sprite image; effect state 39, see effect_states.csv)
 7|0x2b|whirlwind dust
 7|0x2c|raise land
 7|0x2d|lower land
