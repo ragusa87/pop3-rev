@@ -786,3 +786,18 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   reading ("a per-tribe 'already alerted to infiltrators' latch") is a guess from the one new call site found,
   not independently confirmed; a live session comparing its value before/after a successful vs. failed arson
   attempt against the same tribe would settle it.
+- **Checked, inconclusive: whether `0x439D30`'s own substate-4 discovery-roll tables (`0x89DDE7`/`0x89DDEA`,
+  stride 3173 bytes/tribe, and the derived percent-curve `0x960812`, stride 48) are the exe's own implementation
+  of `open-populous`'s already-documented AI-script attribute `INT_ATTR_SPY_DISCOVER_CHANCE` (id 1040,
+  `ai-scripts.md`).** Computed the confirmed `script_vars` address for `SPY_DISCOVER_CHANCE`/`ENEMY_SPY_MAX_STAND`/
+  `SPY_CHECK_FREQUENCY`/`MAX_SPY_ATTACKS` at every tribe index, using the one CONFIRMED accessor for that array
+  (`0x48C650`'s own row: `script_vars[tribe_idx*3138 + var_id]`, base `0x9607B2`) - none land anywhere near
+  `0x89DDE7`/`0x89DDEA`/`0x960812` (a different `0x89xxxx`/`0x96xxxx` region, no arithmetic overlap with the
+  3138-dword stride). **So this session's own discovery-roll tables are NOT a direct read of the script-variable
+  array through the one confirmed accessor** - either they're a genuinely separate, hardcoded diplomacy/threat
+  table unconnected to any AI-script attribute, or `INT_ATTR_SPY_DISCOVER_CHANCE` reaches them through a
+  DIFFERENT accessor this session didn't locate (e.g. a value copied out of `script_vars` into a smaller
+  per-tribe cache at AI-init time, the way `0x461D70`'s own row already documents a similar "copy tribe setup
+  into a smaller per-tribe AI cache" pattern for OTHER attributes). A future session should look for every
+  OTHER reader of `0x89DDE7`/`0x89DDEA` (not just this one call site) and check whether any of them also reads
+  `script_vars[tribe_idx*3138 + 1040]` nearby, which would confirm a copy-out rather than a coincidence.
