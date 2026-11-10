@@ -782,14 +782,29 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   firewarrior's OWN, unrelated whole-byte `+0xB2` countdown instead (`0x51FCD0`'s own row, corrected). The spy's
   real decrementer is still unfound - worth a targeted search restricted to spy-only code paths (type `== 5`
   checks) rather than the generic per-person tail, or a live watch of a disguised spy's `+0xB2` byte over several
-  turns.
-- **The player-facing UI path to order kind 15 (arson) and kind 16 (disguise) was not found.** Every kind-15
-  issuer found this session is the AI's own spy branch inside `0x4CE2C0`; kind 16's inline handler (table
-  `0x432D18`'s own row) calling `0x4DE760` is a strong candidate for the disguise command, but which `ui_cmd`
-  case (a right-click on a tribe's HUD icon with a spy selected, per the user's own description of play) queues
-  it was not traced - this needs either a live session (watch `0x438730`'s own order_set call stack while
-  performing the click in a debugger) or a dedicated static pass through `process_cmd`'s own dispatch tables the
-  way `commands.tsv`'s own method already does for other commands, not attempted this session for lack of time.
+  turns. **Follow-up, later session: ran the narrower type-5-restricted search this suggested - still no
+  decrementer found, but turned up TWO complete, previously-unknown reveal mechanisms instead** (own new rows
+  `0x4DEF50`/`0x4DA2A0`, both operate on `+0xB2` without ever touching just its bottom 6 bits): `0x4DEF50` reveals
+  a disguised spy that ends up in the EXACT SAME map cell as an enemy spy (every 4 ticks) - the likely mechanism
+  behind "spotted by a spy of the tribe it imitates", with a now-confirmed exact proximity (same cell, not a
+  radius); `0x4DA2A0` separately reveals a disguised spy within a tribe's own ordinary line of sight when that
+  tribe is the one it currently counts as (real tribe while transitioning, disguise tribe once settled), and ALSO
+  sets a trio of globals (`0x8922DC`/`0x89C6A5`/`0x89C6A1`) that read as the backing state for an on-screen
+  marker, plausibly the spy-indicator UI - not confirmed which element consumes them. Both are genuinely new
+  mechanisms, not the countdown's own decrementer - that remains unfound after two dedicated searches.
+- **The player-facing UI path to order kind 15 (arson) and kind 16 (disguise) still was not found, and one whole
+  avenue is now confirmed ruled out, later session.** Chased the AI's own "queue a UI-style order template, apply
+  it to a type-filtered selection" mechanism (`0x435730`/`0x435780`/`0x4359B0`/`0x435CB0`, own new rows) all the
+  way through - every one of its 62 call sites sits inside the native AI's own task-handler address range
+  (0x4C6000-0x4D08000), none in `process_cmd`/`process_tribe_cmd` - so despite LOOKING exactly like a generic
+  "selection + command template" mechanism a player click could plausibly reuse, it's AI-internal, not a player
+  path, and in fact issues kind 16 (disguise) itself at least twice more (`0x4C9340`'s task-13 alert, `0x4CE0A0`),
+  on top of the already-known inline `0x4DE760` call in `0x4CE2C0` - **the AI disguises its own spies via at
+  least three independent code paths, strengthening the case that disguise may be AI-exclusive in the exe**
+  the same way arson already looked. A dedicated static pass through `process_cmd`'s own dispatch tables
+  (`commands.tsv`'s own method) was still not attempted this session (ran out of time chasing the AI avenue
+  instead) - still the recommended next static step, or a live session watching `0x438730`'s own order_set call
+  stack while performing the click in a debugger.
 - **Whether a player-controlled spy can even reach kind 15 at all.** The AI's own spy branch is reached through
   `maybe_ai_func_1`, the native AI task scheduler - not confirmed whether a human player's spy, given some other
   command, can enter the same order kind, or whether "set building on fire" is purely an AI behaviour the player
@@ -819,3 +834,22 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   into a smaller per-tribe AI cache" pattern for OTHER attributes). A future session should look for every
   OTHER reader of `0x89DDE7`/`0x89DDEA` (not just this one call site) and check whether any of them also reads
   `script_vars[tribe_idx*3138 + 1040]` nearby, which would confirm a copy-out rather than a coincidence.
+- **New, later session: a likely candidate for the "hover a spy, the cursor changes" mechanic found, not
+  confirmed live.** `0x47B1D0` (own new row, fully traced) is a mouse-hover/pick-resolution dispatcher; its
+  person-class branch, for a foreign-tribe unit whose `0x4DE720`-effective tribe matches the currently-viewed
+  tribe (only reachable for a disguised spy mid-transition, disguising as the viewed tribe), writes an opcode-0x4E
+  record into that tribe's own per-tribe staging slot (`0x897997`, the session-lifecycle/AI-queue structure
+  "Order kinds and player commands" already documents) carrying the unit's own id. Not traced: who READS that
+  staging slot and turns an opcode-0x4E record into any visible effect (a cursor change, an icon) - `0x504060`/
+  `0x4AFFF0` (own new, un-traced rows) are this same function's own generic "is this pickable"/"commit the pick"
+  tail, not the consumer of the opcode-0x4E record itself. A live session changing the mouse cursor while
+  hovering a disguised enemy spy mid-transition, cross-checked against this opcode, would settle it.
+- **Open: whether a player-controlled spy can reach kind 15 (arson) at all is now a notch more likely "no".**
+  Every disguise issuer found across two sessions (the inline `0x4DE760` call in `0x4CE2C0`, `0x4C9340`'s task-13
+  alert, `0x4CE0A0`) and the only arson issuer (`0x43B8E0`, from `0x4CE2C0`'s own spy branch) are ALL native-AI
+  code, reached only through `maybe_ai_func_1`'s own task scheduler - three independent disguise paths and the
+  one arson path, all AI-only, found so far. Still not proof a player path doesn't exist elsewhere (`process_cmd`
+  itself was not exhaustively searched this session - see the UI-path bullet above), but the balance of evidence
+  across two sessions now leans toward "arson, and possibly disguise too, may simply be AI-exclusive in this
+  build" rather than a missed player command - worth stating as the working hypothesis for a spec write-up,
+  flagged as unconfirmed.
