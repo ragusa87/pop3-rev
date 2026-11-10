@@ -760,11 +760,29 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   read these the way `livemem.py`/a debugger would, ideally cross-checked against an actual in-game timed
   infiltration attempt (stopwatch the crouch-to-throw windup, the ignite-to-reveal-roll window, count how many
   attempts before being caught at a fixed save/seed).
-- **The bottom-6-bits "blink" countdown `0x4DE760` arms (`SPY_DISGUISE_DELAY`=63) has no confirmed consumer.**
-  Static search in `dis.txt` for another read of `+0xB2`'s bottom 6 bits outside the handful of flag-bit
-  (bits 0/1/2) uses already attributed to `0x43A4D0`/`0x43ABF0` turned up nothing conclusive this session. A
-  live session should find what reads this countdown down to 0 - the most likely place is a per-tick visual
-  (tint/colour-cycle) or a "can't be targeted as an obvious enemy yet" gate during the transition.
+- **RESOLVED, later session: the bottom-6-bits "blink" countdown `0x4DE760` arms (`SPY_DISGUISE_DELAY`=63) has
+  two confirmed consumers, and together they are the whole spy/disguise mechanic's real effect, not just its
+  visuals.** `0x4DE7B0` (own corrected `functions.tsv` row, found via its 36 call sites across essentially every
+  targeting/eligibility path in the game - the watchtower, `preacher_strike_scan`, `attack_target_eligibility`,
+  the generic melee/firewarrior scans, the kind-28 handler): while the countdown is still running, a spy counts
+  as its REAL tribe for every one of these checks - **the "short vulnerable transition" the user described from
+  play, now mechanically confirmed**; once it reaches 0, it counts as its APPARENT (disguise) tribe instead,
+  fooling them. `0x4DE700` (own new row) feeds the SAME split into both renderers (`draw_polygons`/
+  `draw_polygons_globe`): while running, the spy's OWN viewer sees its colour blink between real and apparent
+  every couple of turns (`simulation_turn` parity); once settled, it shows the apparent tribe steadily - **the
+  "blink to the other tribe colour, then settle" animation**, also confirmed. **Still open**: what actually
+  DECREMENTS the countdown each tick - no writer of just `+0xB2`'s bottom 6 bits was found this session, only
+  `0x4DE760`'s own initial arm (to 63) and `0x4DE7F0`'s own full-byte clear (reveal) - so the real 63->0 timeline
+  (is it 63 ticks, 63 turns, gated by some rhythm check?) is still unconfirmed; and a second, differently-framed
+  accessor (`0x4DE720`, own new row) disagrees with `0x4DE7B0`'s own framing of which state means what - worth
+  resolving together with the decrementer search. **One promising lead chased and ruled out this same session**:
+  `+0xB2`'s own generic per-tick decrementer, `0x4D42A0` (own new row, called every turn from
+  `unit_processing_class_1_person`'s shared tail) - its own per-type gate (`0x5A7090` bit `0x40`) is set ONLY for
+  firewarrior (type 6), clear for spy (type 5), so it never touches a spy's disguise byte at all; it decrements a
+  firewarrior's OWN, unrelated whole-byte `+0xB2` countdown instead (`0x51FCD0`'s own row, corrected). The spy's
+  real decrementer is still unfound - worth a targeted search restricted to spy-only code paths (type `== 5`
+  checks) rather than the generic per-person tail, or a live watch of a disguised spy's `+0xB2` byte over several
+  turns.
 - **The player-facing UI path to order kind 15 (arson) and kind 16 (disguise) was not found.** Every kind-15
   issuer found this session is the AI's own spy branch inside `0x4CE2C0`; kind 16's inline handler (table
   `0x432D18`'s own row) calling `0x4DE760` is a strong candidate for the disguise command, but which `ui_cmd`
