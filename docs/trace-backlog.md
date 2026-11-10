@@ -738,3 +738,51 @@ one with a different approach, or a later pop3-rev session may already have trac
   ever report an Angel of Death - its real value almost certainly comes from result `3` (the `0x4BAAB0`
   alternate-slot hit instead, which bypasses that matrix). Full write-up: `docs/functions.tsv` rows
   `0x51f470`/`0x5028b0`/`0x5027e0`/`0x432df0` (all re-corrected/extended).
+
+## Spy disguise and infiltration
+
+Traced this session purely from a static `D3DPOPTB.EXE` (a cloud session - no `game/constant.dat`, no Wine, no
+`livemem.py`, no way to run the game at all, only the disassembly/consts.txt route): the disguise-application
+primitive (`0x4DE760`, writes the apparent-tribe byte + the exe's own named constant `SPY_DISGUISE_DELAY`=63) and
+order kind 15's handler (`0x439D30`), a full approach/aim/throw-firebrand/ignite-building/discovery-roll/withdraw
+sequence, issued in every confirmed case from the native AI's own spy-only dispatch branch (`0x4CE2C0`). Also
+corrected `0x4D6F90`, a previous session's misattributed "disguise issuer" (it's person state 17's unrelated
+on-enter handler). Full write-up: `docs/functions.tsv` rows `0x439c30`/`0x439d30`/`0x4de740`/`0x4de760`/`0x4d6f90`
+(corrected)/`0x43a4d0`/`0x43b8e0`/`0x4ce2c0` (addenda), `docs/person_states.tsv` row 17. Everything below needs
+either a live memory session (an agent with Wine/the running game, or the user's own measurement) or a future
+static pass with `game/constant.dat` present - **not done this session, left open on purpose**:
+
+- **Live values for every table this session could only read the FORMULA/shape of.** `0x439D30` substate 2's
+  firebrand windup delay reads `*0x59DF44` - a POINTER variable that is zero in the static image (populated at
+  runtime, presumably from a loaded resource file) - so neither it nor the paired `0x5A6AFB` table's real
+  per-object numbers could be confirmed; same for the discovery-roll threshold table `0x960812` and the
+  per-tribe "already alerted" latch `0x89DDE7`/relation byte `0x89DDEA` substate 4 reads. A live session should
+  read these the way `livemem.py`/a debugger would, ideally cross-checked against an actual in-game timed
+  infiltration attempt (stopwatch the crouch-to-throw windup, the ignite-to-reveal-roll window, count how many
+  attempts before being caught at a fixed save/seed).
+- **The bottom-6-bits "blink" countdown `0x4DE760` arms (`SPY_DISGUISE_DELAY`=63) has no confirmed consumer.**
+  Static search in `dis.txt` for another read of `+0xB2`'s bottom 6 bits outside the handful of flag-bit
+  (bits 0/1/2) uses already attributed to `0x43A4D0`/`0x43ABF0` turned up nothing conclusive this session. A
+  live session should find what reads this countdown down to 0 - the most likely place is a per-tick visual
+  (tint/colour-cycle) or a "can't be targeted as an obvious enemy yet" gate during the transition.
+- **The player-facing UI path to order kind 15 (arson) and kind 16 (disguise) was not found.** Every kind-15
+  issuer found this session is the AI's own spy branch inside `0x4CE2C0`; kind 16's inline handler (table
+  `0x432D18`'s own row) calling `0x4DE760` is a strong candidate for the disguise command, but which `ui_cmd`
+  case (a right-click on a tribe's HUD icon with a spy selected, per the user's own description of play) queues
+  it was not traced - this needs either a live session (watch `0x438730`'s own order_set call stack while
+  performing the click in a debugger) or a dedicated static pass through `process_cmd`'s own dispatch tables the
+  way `commands.tsv`'s own method already does for other commands, not attempted this session for lack of time.
+- **Whether a player-controlled spy can even reach kind 15 at all.** The AI's own spy branch is reached through
+  `maybe_ai_func_1`, the native AI task scheduler - not confirmed whether a human player's spy, given some other
+  command, can enter the same order kind, or whether "set building on fire" is purely an AI behaviour the player
+  only ever witnesses from the other side (as a target), with the player's OWN in-play arson (per the user's
+  report, "I do this with my own spy") going through a different, still-unlocated path.
+- **`0x8A03EA`'s own cell-table meaning (0x439C30's "genuine tribemate at the door" scan) wasn't cross-checked
+  against the near-identical `0x8A03E4`/`0x8A03EC` slots used elsewhere in this session's own investigation** -
+  plausibly the same per-cell "other object list" family at a different byte offset within the same cell record,
+  not confirmed.
+- **The person-state-21 table `0x89DDE7` (read by both this session's substate-4 discovery roll and the
+  already-documented state-21 tick handler, `0x4D3701`) still has no confirmed meaning** - this session's own
+  reading ("a per-tribe 'already alerted to infiltrators' latch") is a guess from the one new call site found,
+  not independently confirmed; a live session comparing its value before/after a successful vs. failed arson
+  attempt against the same tribe would settle it.
