@@ -836,16 +836,29 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   into a smaller per-tribe AI cache" pattern for OTHER attributes). A future session should look for every
   OTHER reader of `0x89DDE7`/`0x89DDEA` (not just this one call site) and check whether any of them also reads
   `script_vars[tribe_idx*3138 + 1040]` nearby, which would confirm a copy-out rather than a coincidence.
-- **New, later session: a likely candidate for the "hover a spy, the cursor changes" mechanic found, not
-  confirmed live.** `0x47B1D0` (own new row, fully traced) is a mouse-hover/pick-resolution dispatcher; its
-  person-class branch, for a foreign-tribe unit whose `0x4DE720`-effective tribe matches the currently-viewed
-  tribe (only reachable for a disguised spy mid-transition, disguising as the viewed tribe), writes an opcode-0x4E
-  record into that tribe's own per-tribe staging slot (`0x897997`, the session-lifecycle/AI-queue structure
-  "Order kinds and player commands" already documents) carrying the unit's own id. Not traced: who READS that
-  staging slot and turns an opcode-0x4E record into any visible effect (a cursor change, an icon) - `0x504060`/
-  `0x4AFFF0` (own new, un-traced rows) are this same function's own generic "is this pickable"/"commit the pick"
-  tail, not the consumer of the opcode-0x4E record itself. A live session changing the mouse cursor while
-  hovering a disguised enemy spy mid-transition, cross-checked against this opcode, would settle it.
+- **RESOLVED, later session: the opcode-0x4E staging record's own consumer is `process_tribe_cmd`'s own
+  `caseD_4e` (tribe_cmd 0x4E, `0x43FBAD`, own new `commands.tsv` row) - "reveal this specific unit" (resolves
+  the command's own arg2 as a unit id, validates it, calls `0x4DE7F0`).** So `0x47B1D0`'s own hover/pick code
+  (previous bullet) queuing this opcode for a disguised enemy spy whose apparent tribe matches the viewer really
+  does end in that spy being revealed - the "hover a spy, the cursor changes" mechanic resolves into "hovering/
+  targeting a disguised enemy spy under the specific condition `0x47B1D0` checks auto-reveals it", not just a
+  cosmetic cursor swap (though a cursor swap may ALSO happen somewhere in the same hover-handling code, not
+  separately confirmed). Combined with the AI worker-finder/combat-targeting callers already on `0x4DE7F0`'s
+  own row (12 total call sites, see that row) and `0x432DF0`'s own extended row (any newly-targeted-by-an-order
+  unit that turns out to be a spy gets revealed too), **every confirmed reveal trigger is now accounted for**:
+  same-cell enemy spy (`0x4DEF50`), seen-in-plain-sight-by-the-imitated-tribe (`0x4DA2A0`, cross-referenced this
+  session with `tower_detection_radius`/`0x40B450`'s own row to explain the community-reported "a spy in a tower
+  unmasks enemy spies over a large area"), and targeted-by-any-order-or-hover (`0x432DF0`/`0x43FBAD`). Checked
+  online this session (user's own suggestion) for independent confirmation - Giant Bomb's wiki and a fan
+  Populous wiki's own "Spy" page (via web search, pages themselves blocked by this session's own network
+  allowlist - summaries only) describe: disguising by selecting a spy and clicking an enemy tribe's colour on
+  the side panel; the disguise breaking if "an enemy follower's AI has line of sight to the spy's sabotage" or
+  "the opposing shaman right-clicks it" (Giant Bomb) or "finding and right-clicking a suspected enemy unit to
+  uncover it as a spy" (the fan wiki); another enemy spy seeing it also exposes it; and a spy garrisoned in a
+  guard tower unmasks enemy spies over a large area. All of these now have a matching, independently-derived
+  static mechanism except the specific "opposing SHAMAN right-click" framing (the reveal commands found are not
+  shaman-specific - any targeting/hover reaches them) - a minor discrepancy, plausibly just how players describe
+  "select a unit (often your shaman, since it's commonly kept selected) and right-click the suspect".
 - **RETRACTED, later session: the "arson/disguise may be AI-exclusive" working hypothesis just above does NOT
   hold up - there IS a player-reachable path into the exact same underlying primitive, found by re-checking the
   user's own hypothesis that this was a shared subroutine/controller, not an AI-only script.** `0x444F60` (own
