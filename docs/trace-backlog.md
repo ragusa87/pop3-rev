@@ -849,14 +849,47 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   same-cell enemy spy (`0x4DEF50`), seen-in-plain-sight-by-the-imitated-tribe (`0x4DA2A0`, cross-referenced this
   session with `tower_detection_radius`/`0x40B450`'s own row to explain the community-reported "a spy in a tower
   unmasks enemy spies over a large area"), and targeted-by-any-order-or-hover (`0x432DF0`/`0x43FBAD`). Checked
-  online this session (user's own suggestion) for independent confirmation - Giant Bomb's wiki and a fan
-  Populous wiki's own "Spy" page (via web search, pages themselves blocked by this session's own network
-  allowlist - summaries only) describe: disguising by selecting a spy and clicking an enemy tribe's colour on
-  the side panel; the disguise breaking if "an enemy follower's AI has line of sight to the spy's sabotage" or
-  "the opposing shaman right-clicks it" (Giant Bomb) or "finding and right-clicking a suspected enemy unit to
-  uncover it as a spy" (the fan wiki); another enemy spy seeing it also exposes it; and a spy garrisoned in a
-  guard tower unmasks enemy spies over a large area. All of these now have a matching, independently-derived
-  static mechanism except the specific "opposing SHAMAN right-click" framing (the reveal commands found are not
+  online this session (user's own suggestion) for independent confirmation - Giant Bomb's wiki (via web search,
+  page itself blocked by this session's own network allowlist - summary only) describes the disguise breaking if
+  "an enemy follower's AI has line of sight to the spy's sabotage" or "the opposing shaman right-clicks it";
+  another enemy spy seeing it also exposes it; and a spy garrisoned in a guard tower unmasks enemy spies over a
+  large area. **Later in the same session, the user directly pasted the full text of
+  [wiki.popre.net/Spy](https://wiki.popre.net/Spy) (this session's own `WebFetch` is also blocked on that host -
+  the user's paste is the only text of this specific page read this session, credited here per their own
+  request) - corrects and extends the Giant Bomb summary on several points:**
+  - **Disguising is a LEFT-click, not right-click**, on an enemy tribe's colour icon on the HUD side panel near
+    the shaman shortcut icon - "the icon switches to a masking button" once a tribe is chosen. The existing
+    static finding (kind 16, `0x4DE760`) doesn't pin down a specific click handler either way (still open, see
+    the bullet below) - this corrects the loose "clicking an enemy tribe's colour" framing to the exact UI
+    location and button, not the earlier session's unsourced guess at which mouse button.
+  - **Reveal is confirmed RIGHT-click** ("finding him and right-clicking him") - matches this session's own
+    `0x47B1D0`/tribe_cmd 0x4E finding exactly, no correction needed there.
+  - **Arson/sabotage uses the SAME procedure as an ordinary attack order**: "simply select the spy and left-click
+    a target to set it ablaze" - i.e. the wiki describes no separate dedicated command for arson, just a normal
+    attack-click whose target happens to be a building. Also: **"if a spy is not disguised when attempting to set
+    a fire, he will be quickly attacked"** - implying an undisguised spy's attack-click on a building still goes
+    through SOME arson-flavoured path (and fails/retaliates) rather than being silently treated as generic melee.
+    This reframes the still-open "player-facing UI path to order kind 15" item just above: the likely entry point
+    is not a separate UI case at all, but a **spy+building-target special case inside the generic attack-order
+    path** (`attack_order_handler`/`0x51A2A0`, `attack_target_eligibility`/`0x51C3C0`) - see the new bullet below
+    for where this was chased.
+  - **"Multiple Burns"**: a spy can set fire to several Huts in one go by holding Ctrl and left-clicking each Hut
+    in turn (not confirmed whether this extends to other building types). Not chased this session but worth
+    connecting to the ALREADY-confirmed Ctrl+Alt+click patrol-point mechanism (`0x4BA9B0`'s own row,
+    `for-open-populous.md` §11): that mechanism stores up to 8 targets in a unit's own secondary order slots
+    (`tribe+0xC5C` counter, slots 0-7) and `order_advance`'s round-robin scan then visits them in sequence - a
+    very similar-shaped "hold a modifier, click several targets, they queue and execute one after another"
+    behaviour. A Ctrl-click (no Alt) multi-burn queue could plausibly be either the SAME mechanism with a
+    different modifier-key gate, or a sibling one built the same way; not traced, a concrete next lead (check
+    `0x4BA9B0`'s own modifier-key read, and whether `process_cmd`/`process_tribe_cmd` has a second, Ctrl-only
+    entry point near it using the same slot-counter pattern but issuing kind 15 instead of kind 6/0xB).
+  - Also mentions a spy is weak in melee (reportedly ~3 spies needed to kill 1 brave) and a minor "attacking a
+    damaged building mid-repair" glitch - both consistent with/orthogonal to this session's own findings, not
+    independently chased (the combat-weakness number would need `game/constant.dat`'s own per-type stat table,
+    already flagged as missing above; the repair glitch is a minor curiosity, not core to disguise/arson/reveal,
+    left untraced by design).
+  All of the reveal-trigger claims now have a matching, independently-derived static mechanism except the
+  specific "opposing SHAMAN right-click" framing from Giant Bomb (the reveal commands found are not
   shaman-specific - any targeting/hover reaches them) - a minor discrepancy, plausibly just how players describe
   "select a unit (often your shaman, since it's commonly kept selected) and right-click the suspect".
 - **RETRACTED, later session: the "arson/disguise may be AI-exclusive" working hypothesis just above does NOT
