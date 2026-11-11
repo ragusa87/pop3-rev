@@ -832,3 +832,369 @@ what's already known from level 1 and reusable as a starting point - `scripts/wa
   that visual ID was made), its own real point bounding box gives an exact world-unit flame size directly, the
   same way `catalog::CAMP_FIRE`'s own flame boards did (160x160 units = 0.3125 cells, see
   `pop3-rev-analysis.md` "Ground fire, ignited trees, and a burning building's flame").
+
+## Spy disguise and infiltration
+
+Traced this session purely from a static `D3DPOPTB.EXE` (a cloud session - no `game/constant.dat`, no Wine, no
+`livemem.py`, no way to run the game at all, only the disassembly/consts.txt route): the disguise-application
+primitive (`0x4DE760`, writes the apparent-tribe byte + the exe's own named constant `SPY_DISGUISE_DELAY`=63) and
+order kind 15's handler (`0x439D30`), a full approach/aim/throw-firebrand/ignite-building/discovery-roll/withdraw
+sequence, issued in every confirmed case from the native AI's own spy-only dispatch branch (`0x4CE2C0`). Also
+corrected `0x4D6F90`, a previous session's misattributed "disguise issuer" (it's person state 17's unrelated
+on-enter handler). Full write-up: `docs/functions.tsv` rows `0x439c30`/`0x439d30`/`0x4de740`/`0x4de760`/`0x4d6f90`
+(corrected)/`0x43a4d0`/`0x43b8e0`/`0x4ce2c0` (addenda), `docs/person_states.tsv` row 17. Everything below needs
+either a live memory session (an agent with Wine/the running game, or the user's own measurement) or a future
+static pass with `game/constant.dat` present - **not done this session, left open on purpose**:
+
+- **Live values for every table this session could only read the FORMULA/shape of.** `0x439D30` substate 2's
+  firebrand windup delay reads `*0x59DF44` - a POINTER variable that is zero in the static image (populated at
+  runtime, presumably from a loaded resource file) - so neither it nor the paired `0x5A6AFB` table's real
+  per-object numbers could be confirmed; same for the discovery-roll threshold table `0x960812` and the
+  per-tribe "already alerted" latch `0x89DDE7`/relation byte `0x89DDEA` substate 4 reads. A live session should
+  read these the way `livemem.py`/a debugger would, ideally cross-checked against an actual in-game timed
+  infiltration attempt (stopwatch the crouch-to-throw windup, the ignite-to-reveal-roll window, count how many
+  attempts before being caught at a fixed save/seed).
+- **RESOLVED, later session: the bottom-6-bits "blink" countdown `0x4DE760` arms (`SPY_DISGUISE_DELAY`=63) has
+  two confirmed consumers, and together they are the whole spy/disguise mechanic's real effect, not just its
+  visuals.** `0x4DE7B0` (own corrected `functions.tsv` row, found via its 36 call sites across essentially every
+  targeting/eligibility path in the game - the watchtower, `preacher_strike_scan`, `attack_target_eligibility`,
+  the generic melee/firewarrior scans, the kind-28 handler): while the countdown is still running, a spy counts
+  as its REAL tribe for every one of these checks - **the "short vulnerable transition" the user described from
+  play, now mechanically confirmed**; once it reaches 0, it counts as its APPARENT (disguise) tribe instead,
+  fooling them. `0x4DE700` (own new row) feeds the SAME split into both renderers (`draw_polygons`/
+  `draw_polygons_globe`): while running, the spy's OWN viewer sees its colour blink between real and apparent
+  every couple of turns (`simulation_turn` parity); once settled, it shows the apparent tribe steadily - **the
+  "blink to the other tribe colour, then settle" animation**, also confirmed. **Still open**: what actually
+  DECREMENTS the countdown each tick - no writer of just `+0xB2`'s bottom 6 bits was found this session, only
+  `0x4DE760`'s own initial arm (to 63) and `0x4DE7F0`'s own full-byte clear (reveal) - so the real 63->0 timeline
+  (is it 63 ticks, 63 turns, gated by some rhythm check?) is still unconfirmed; and a second, differently-framed
+  accessor (`0x4DE720`, own new row) disagrees with `0x4DE7B0`'s own framing of which state means what - worth
+  resolving together with the decrementer search. **One promising lead chased and ruled out this same session**:
+  `+0xB2`'s own generic per-tick decrementer, `0x4D42A0` (own new row, called every turn from
+  `unit_processing_class_1_person`'s shared tail) - its own per-type gate (`0x5A7090` bit `0x40`) is set ONLY for
+  firewarrior (type 6), clear for spy (type 5), so it never touches a spy's disguise byte at all; it decrements a
+  firewarrior's OWN, unrelated whole-byte `+0xB2` countdown instead (`0x51FCD0`'s own row, corrected). The spy's
+  real decrementer is still unfound - worth a targeted search restricted to spy-only code paths (type `== 5`
+  checks) rather than the generic per-person tail, or a live watch of a disguised spy's `+0xB2` byte over several
+  turns. **Follow-up, later session: ran the narrower type-5-restricted search this suggested - still no
+  decrementer found, but turned up TWO complete, previously-unknown reveal mechanisms instead** (own new rows
+  `0x4DEF50`/`0x4DA2A0`, both operate on `+0xB2` without ever touching just its bottom 6 bits): `0x4DEF50` reveals
+  a disguised spy that ends up in the EXACT SAME map cell as an enemy spy (every 4 ticks) - the likely mechanism
+  behind "spotted by a spy of the tribe it imitates", with a now-confirmed exact proximity (same cell, not a
+  radius); `0x4DA2A0` separately reveals a disguised spy within a tribe's own ordinary line of sight when that
+  tribe is the one it currently counts as (real tribe while transitioning, disguise tribe once settled), and ALSO
+  sets a trio of globals (`0x8922DC`/`0x89C6A5`/`0x89C6A1`) that read as the backing state for an on-screen
+  marker, plausibly the spy-indicator UI - not confirmed which element consumes them. Both are genuinely new
+  mechanisms, not the countdown's own decrementer - that remains unfound after two dedicated searches.
+- **The player-facing UI path to order kind 15 (arson) and kind 16 (disguise) still was not found. One
+  caller family is confirmed AI-only, but - important correction, a later session, see the "RETRACTED" bullet
+  further down - the underlying PRIMITIVE itself is NOT AI-exclusive, only this one entry point into it was.**
+  Chased the AI's own "queue a UI-style order template, apply it to a type-filtered selection" mechanism
+  (`0x435730`/`0x435780`/`0x4359B0`/`0x435CB0`, own new rows) all the way through - every one of `0x435730`'s own
+  62 call sites sits inside the native AI's own task-handler address range (0x4C6000-0x4D08000), none in
+  `process_cmd`/`process_tribe_cmd` - so `0x435730` ITSELF is AI-internal, and it issues kind 16 (disguise) at
+  least twice more this way (`0x4C9340`'s task-13 alert, `0x4CE0A0`), on top of the already-known inline
+  `0x4DE760` call in `0x4CE2C0` - three independent AI-side disguise paths through this one entry point. **This
+  session did NOT also check for other, non-`0x435730` callers of the shared primitives it wraps
+  (`0x435780`/`0x435CB0`) - a later session did, and found one, directly from `process_tribe_cmd` - see below.**
+  A dedicated static pass through `process_cmd`'s own dispatch tables
+  (`commands.tsv`'s own method) was still not attempted this session (ran out of time chasing the AI avenue
+  instead) - still the recommended next static step, or a live session watching `0x438730`'s own order_set call
+  stack while performing the click in a debugger.
+- **Whether a player-controlled spy can even reach kind 15 at all.** The AI's own spy branch is reached through
+  `maybe_ai_func_1`, the native AI task scheduler - not confirmed whether a human player's spy, given some other
+  command, can enter the same order kind, or whether "set building on fire" is purely an AI behaviour the player
+  only ever witnesses from the other side (as a target), with the player's OWN in-play arson (per the user's
+  report, "I do this with my own spy") going through a different, still-unlocated path.
+- **`0x8A03EA`'s own cell-table meaning (0x439C30's "genuine tribemate at the door" scan) wasn't cross-checked
+  against the near-identical `0x8A03E4`/`0x8A03EC` slots used elsewhere in this session's own investigation** -
+  plausibly the same per-cell "other object list" family at a different byte offset within the same cell record,
+  not confirmed.
+- **The person-state-21 table `0x89DDE7` (read by both this session's substate-4 discovery roll and the
+  already-documented state-21 tick handler, `0x4D3701`) still has no confirmed meaning** - this session's own
+  reading ("a per-tribe 'already alerted to infiltrators' latch") is a guess from the one new call site found,
+  not independently confirmed; a live session comparing its value before/after a successful vs. failed arson
+  attempt against the same tribe would settle it.
+- **Checked, inconclusive: whether `0x439D30`'s own substate-4 discovery-roll tables (`0x89DDE7`/`0x89DDEA`,
+  stride 3173 bytes/tribe, and the derived percent-curve `0x960812`, stride 48) are the exe's own implementation
+  of `open-populous`'s already-documented AI-script attribute `INT_ATTR_SPY_DISCOVER_CHANCE` (id 1040,
+  `ai-scripts.md`).** Computed the confirmed `script_vars` address for `SPY_DISCOVER_CHANCE`/`ENEMY_SPY_MAX_STAND`/
+  `SPY_CHECK_FREQUENCY`/`MAX_SPY_ATTACKS` at every tribe index, using the one CONFIRMED accessor for that array
+  (`0x48C650`'s own row: `script_vars[tribe_idx*3138 + var_id]`, base `0x9607B2`) - none land anywhere near
+  `0x89DDE7`/`0x89DDEA`/`0x960812` (a different `0x89xxxx`/`0x96xxxx` region, no arithmetic overlap with the
+  3138-dword stride). **So this session's own discovery-roll tables are NOT a direct read of the script-variable
+  array through the one confirmed accessor** - either they're a genuinely separate, hardcoded diplomacy/threat
+  table unconnected to any AI-script attribute, or `INT_ATTR_SPY_DISCOVER_CHANCE` reaches them through a
+  DIFFERENT accessor this session didn't locate (e.g. a value copied out of `script_vars` into a smaller
+  per-tribe cache at AI-init time, the way `0x461D70`'s own row already documents a similar "copy tribe setup
+  into a smaller per-tribe AI cache" pattern for OTHER attributes). A future session should look for every
+  OTHER reader of `0x89DDE7`/`0x89DDEA` (not just this one call site) and check whether any of them also reads
+  `script_vars[tribe_idx*3138 + 1040]` nearby, which would confirm a copy-out rather than a coincidence.
+- **RESOLVED, later session: the opcode-0x4E staging record's own consumer is `process_tribe_cmd`'s own
+  `caseD_4e` (tribe_cmd 0x4E, `0x43FBAD`, own new `commands.tsv` row) - "reveal this specific unit" (resolves
+  the command's own arg2 as a unit id, validates it, calls `0x4DE7F0`).** So `0x47B1D0`'s own hover/pick code
+  (previous bullet) queuing this opcode for a disguised enemy spy whose apparent tribe matches the viewer really
+  does end in that spy being revealed - the "hover a spy, the cursor changes" mechanic resolves into "hovering/
+  targeting a disguised enemy spy under the specific condition `0x47B1D0` checks auto-reveals it", not just a
+  cosmetic cursor swap (though a cursor swap may ALSO happen somewhere in the same hover-handling code, not
+  separately confirmed). Combined with the AI worker-finder/combat-targeting callers already on `0x4DE7F0`'s
+  own row (12 total call sites, see that row) and `0x432DF0`'s own extended row (any newly-targeted-by-an-order
+  unit that turns out to be a spy gets revealed too), **every confirmed reveal trigger is now accounted for**:
+  same-cell enemy spy (`0x4DEF50`), seen-in-plain-sight-by-the-imitated-tribe (`0x4DA2A0`, cross-referenced this
+  session with `tower_detection_radius`/`0x40B450`'s own row to explain the community-reported "a spy in a tower
+  unmasks enemy spies over a large area"), and targeted-by-any-order-or-hover (`0x432DF0`/`0x43FBAD`). Checked
+  online this session (user's own suggestion) for independent confirmation - Giant Bomb's wiki (via web search,
+  page itself blocked by this session's own network allowlist - summary only) describes the disguise breaking if
+  "an enemy follower's AI has line of sight to the spy's sabotage" or "the opposing shaman right-clicks it";
+  another enemy spy seeing it also exposes it; and a spy garrisoned in a guard tower unmasks enemy spies over a
+  large area. **Later in the same session, the user directly pasted the full text of
+  [wiki.popre.net/Spy](https://wiki.popre.net/Spy) (this session's own `WebFetch` is also blocked on that host -
+  the user's paste is the only text of this specific page read this session, credited here per their own
+  request) - corrects and extends the Giant Bomb summary on several points:**
+  - **Disguising is a LEFT-click, not right-click**, on an enemy tribe's colour icon on the HUD side panel near
+    the shaman shortcut icon - "the icon switches to a masking button" once a tribe is chosen. The existing
+    static finding (kind 16, `0x4DE760`) doesn't pin down a specific click handler either way (still open, see
+    the bullet below) - this corrects the loose "clicking an enemy tribe's colour" framing to the exact UI
+    location and button, not the earlier session's unsourced guess at which mouse button.
+  - **Reveal is confirmed RIGHT-click** ("finding him and right-clicking him") - matches this session's own
+    `0x47B1D0`/tribe_cmd 0x4E finding exactly, no correction needed there.
+  - **Arson/sabotage uses the SAME procedure as an ordinary attack order**: "simply select the spy and left-click
+    a target to set it ablaze" - i.e. the wiki describes no separate dedicated command for arson, just a normal
+    attack-click whose target happens to be a building. Also: **"if a spy is not disguised when attempting to set
+    a fire, he will be quickly attacked"** - implying an undisguised spy's attack-click on a building still goes
+    through SOME arson-flavoured path (and fails/retaliates) rather than being silently treated as generic melee.
+    This reframes the still-open "player-facing UI path to order kind 15" item just above: the likely entry point
+    is not a separate UI case at all, but a **spy+building-target special case inside the generic attack-order
+    path** (`attack_order_handler`/`0x51A2A0`, `attack_target_eligibility`/`0x51C3C0`) - see the new bullet below
+    for where this was chased. **RULED OUT, later same session**: fully swept `0x51A2A0`'s own two previously
+    untraced `[reg+0x2a],0x2` checks (`0x51B84E`, `0x51C81D`) and every read of the attacker's own type byte inside
+    `0x51C4C0` (`attack_target_eligibility`'s generic fallthrough, where a spy/type-5 attacker lands) - **no
+    type-5+building special case exists anywhere in the order-execution/eligibility layer** (own updated
+    `functions.tsv` rows `0x51a2a0`/`0x51c4c0`). One genuinely new, narrower finding turned up along the way:
+    ordering a spy to attack a class-9 ("shape") target unconditionally reveals it (`0x51B682`, calls `0x4DE7F0`
+    whenever the attacker's type is 5, regardless of disguise state) - a fourth, narrower reveal trigger, distinct
+    from the three already catalogued above. **Conclusion: the wiki's "arson uses the same procedure as attacking"
+    must describe the PLAYER-FACING click (select spy, left-click target), not a shared underlying order kind** -
+    whatever decides kind 15 vs. kind 19 for that click has to happen in `process_cmd` itself, before an order is
+    ever queued/executed - pushing the open "player-facing UI path to kind 15" question fully back onto the
+    already-recommended, still-not-attempted static pass through `process_cmd`'s own dispatch tables (next
+    bullet), now with higher confidence there's no shortcut through the execution layer instead.
+  - **"Multiple Burns"**: a spy can set fire to several Huts in one go by holding Ctrl and left-clicking each Hut
+    in turn (not confirmed whether this extends to other building types). Not chased this session but worth
+    connecting to the ALREADY-confirmed Ctrl+Alt+click patrol-point mechanism (`0x4BA9B0`'s own row,
+    `for-open-populous.md` §11): that mechanism stores up to 8 targets in a unit's own secondary order slots
+    (`tribe+0xC5C` counter, slots 0-7) and `order_advance`'s round-robin scan then visits them in sequence - a
+    very similar-shaped "hold a modifier, click several targets, they queue and execute one after another"
+    behaviour. A Ctrl-click (no Alt) multi-burn queue could plausibly be either the SAME mechanism with a
+    different modifier-key gate, or a sibling one built the same way; not traced, a concrete next lead (check
+    `0x4BA9B0`'s own modifier-key read, and whether `process_cmd`/`process_tribe_cmd` has a second, Ctrl-only
+    entry point near it using the same slot-counter pattern but issuing kind 15 instead of kind 6/0xB). **User
+    clarification**: this is a CHAINING queue, not simultaneous multi-target arson - the spy finishes (or
+    abandons) the current burn, goes idle, THEN advances to the next queued Hut, one at a time. This is exactly
+    the user-visible behaviour `order_advance`'s own already-documented round-robin slot scan produces for patrol
+    points (advance to the next non-empty secondary slot once the current one's order ends) - strong support for
+    "same slot-queue mechanism, Ctrl-only modifier, kind 15 instead of kind 6/0xB" over a sibling/parallel
+    mechanism. Next step unchanged: find the modifier-key read and the (still-unlocated) `process_cmd`/
+    `process_tribe_cmd` entry point that queues kind 15 into these slots. **Checked, a later session: the
+    modifier-key read itself is still unlocated, but a plausible candidate surfaced and is worth chasing first.**
+    `0x895DAA` bit `0x1` already gates a runtime fork between `tribe_cmd 0x7B` vs `0x2A` inside `ui_cmd 0x71`'s own
+    case (own `commands.tsv` row, "plausibly 'ctrl held'"); its only 2 readers in the whole exe are both inside
+    that one case, and no literal-address WRITER of this byte was found anywhere in `dis.txt` - meaning (by the
+    same reasoning `0xD0595C`/`mouse_device`'s own row already established for the cursor position) it's almost
+    certainly written through a pointer into a device object's own buffered-state, not a literal global address
+    grep can find. **Chased, a later session: found the exe's only OTHER `DirectInputCreateA` call (`0xd05e58`,
+    own new `functions.tsv` row) - but it reads as a JOYSTICK, not a keyboard** (its ctor sets up DIPROPRANGE-shaped
+    axis-range properties, and its runtime accessor is queried with small enumerated button indices 2/3/5/8, not a
+    256-entry scancode table a keyboard's `GetDeviceState` buffer would need), so this does NOT resolve the lead.
+    Also checked and ruled out the simpler alternative: `backup.xml` has no actual import of `GetKeyState`/
+    `GetAsyncKeyState`/`GetKeyboardState` anywhere (all three are unused type-library declarations only, zero
+    `EXT_LIBRARY_REFERENCE` entries) - this exe does not poll Win32 keyboard state directly either. **Net,
+    reframed: the Ctrl/Shift read is most likely inline `WM_KEYDOWN`/`WM_KEYUP` window-message handling into a
+    custom bit array** - invisible to both the DirectInput-device and import-symbol searches tried so far, since
+    it would just be a `cmp`/`je` against a literal `0x100`/`0x101` message constant inside the window procedure,
+    writing straight into a bit of `0x895DAA`'s own byte (or a sibling one) rather than through any named API or
+    device vtable call. **Next concrete step**: find the window procedure itself (the `WndProc` registered via
+    `RegisterClass`/`CreateWindow`, or whatever dispatches `PeekMessage`/`GetMessage` results - a Win32-imports
+    grep the same way the DirectInput chase worked, looking for `DispatchMessage`/`RegisterClassA`/`CreateWindowA`
+    in `backup.xml`'s own `EXT_LIBRARY_REFERENCE` entries) and read its own message-switch for `WM_KEYDOWN`
+    (`0x100`)/`WM_KEYUP`(`0x101`)/`WM_SYSKEYDOWN`(`0x104`) cases with `wParam` compared against `VK_CONTROL`(`0x11`)
+    or `VK_SHIFT`(`0x10`) - that should lead straight to whatever byte(s) get toggled, then cross-check against
+    `0x895DAA` and every tribe_cmd-queuing case in the kind-15/arson-capable range the same way originally planned.
+  - **Also checked this same later session, a negative result worth recording**: swept every one of the shaman
+    resolver's (`0x4F25A0`, own new functions.tsv row) 23 call sites exe-wide looking for a dedicated "select the
+    shaman" HUD button - all 23 are AI-task/AI-script code, none in `process_cmd`'s own two switches (now fully
+    catalogued, see the function's own row for that sweep) or the `0x4A0F00-0x4A1400` stats-panel widget-callback
+    cluster (`0x450F30`'s own row - its 6-entry jump table is now FULLY resolved: indices 0/1/2/3 are the
+    type-filtered idle-select siblings already documented, **index 4 is `tribe_cmd 0x48`, "select all units
+    excluding the shaman" - own new commands.tsv row, found while chasing this very question**, index 5 is
+    `tribe_cmd 0x72`, "select units near a position", own new row). So there is likely no dedicated select-shaman
+    primitive at all - a player probably reaches her through the same generic single-unit-select path
+    (`tribe_cmd 0x2A`/`0x7B`) as any other unit, though that generic path's own UI click entry point was not
+    independently traced to confirm it. The spell-selection UI and the disguise-icon click were also not found in
+    this same cluster or either `process_cmd` switch - **both now look likely to be ANOTHER small standalone
+    widget-callback cluster analogous to `0x450F30`'s own, not yet located** (this exe's HUD evidently splits
+    "panel button clicks" across several small per-panel dispatcher functions like this one, rather than one
+    central table) - worth a targeted search for a sibling dispatcher with the same "6ish-entry jump table of
+    `set_tribe_command` tail blocks" shape, called from a DIFFERENT small cluster of standalone callbacks, nearer
+    whatever code already handles the spell-bar/tribe-colour HUD region (not identified this session).
+  - Also mentions a spy is weak in melee (reportedly ~3 spies needed to kill 1 brave) and a minor "attacking a
+    damaged building mid-repair" glitch - both consistent with/orthogonal to this session's own findings, not
+    independently chased (the combat-weakness number would need `game/constant.dat`'s own per-type stat table,
+    already flagged as missing above; the repair glitch is a minor curiosity, not core to disguise/arson/reveal,
+    left untraced by design).
+  All of the reveal-trigger claims now have a matching, independently-derived static mechanism except the
+  specific "opposing SHAMAN right-click" framing from Giant Bomb (the reveal commands found are not
+  shaman-specific - any targeting/hover reaches them) - a minor discrepancy, plausibly just how players describe
+  "select a unit (often your shaman, since it's commonly kept selected) and right-click the suspect".
+- **RETRACTED, later session: the "arson/disguise may be AI-exclusive" working hypothesis just above does NOT
+  hold up - there IS a player-reachable path into the exact same underlying primitive, found by re-checking the
+  user's own hypothesis that this was a shared subroutine/controller, not an AI-only script.** `0x444F60` (own
+  new row) is `process_tribe_cmd`'s own shared handler for a whole RUN of tribe_cmd opcodes (0x1E-0x5E, 65 ids,
+  Ghidra-folded onto one address because the per-case code is byte-identical) - reached directly from the
+  player's queued tribe commands (`set_tribe_command`/`0x479CF0`, fed by `ui_cmd` clicks via `commands.tsv`'s own
+  already-documented chain), and it calls the EXACT SAME `0x435780`(write a template)/`0x435CB0`(apply to
+  selection by type) pair the earlier session's own AI-task callers (`0x435730`) use - **with the order KIND read
+  directly from the player's own command argument** (`arg1`, masked to 16 bits - verified against the call
+  site's own stack cleanup), not hardcoded. So a tribe_cmd in this range carrying `arg1=0x10`(16, disguise) or
+  `0xF`(15, arson) WOULD issue exactly those orders to the player's current selection through this path - the
+  mechanism is generic/shared, not AI-exclusive; the earlier conclusion only reflected that the ONE caller family
+  checked (`0x435730`) happened to be AI-only, not that the underlying primitive was. **Still not found: which
+  SPECIFIC one of the ~9 aliased opcodes, queued from which `ui_cmd` case, actually carries `arg1=16` for the
+  real disguise click.** Every literal-opcode `set_tribe_command` call site in this range (4 found, opcodes
+  0x1E/0x27) passes `arg1=arg2=0` and reads as an unrelated population-milestone-notification feature (a sound/
+  flag write and a population-threshold check nearby, no spy context) - so the real disguise-issuing call, if it
+  uses this exact path, passes `arg1` via a register computed from UI state (which tribe icon was clicked),
+  not a literal int - a concrete, much narrower next step than the earlier blind sweep: find a `set_tribe_command`
+  call site (or a `ui_cmd` case feeding one) in `process_cmd`'s own body where the pushed opcode is one of
+  {0x1E,0x26,0x27,0x37,0x38,0x39,0x3A,0x3B,0x3C} (or any other alias not yet enumerated from `backup.xml`) and the
+  arg1 push is register-sourced rather than a literal `0`.
+- **New lead, later session (chasing the HUD dispatch question from a different angle - see the new "HUD widget
+  dispatch" section below): not every player action goes through `process_cmd`'s own two switches at all.** Found
+  a cluster of ~14 small, standalone widget-click-handler functions (`0x4A0F00-0x4A1400`) that call straight into
+  a shared dispatcher (`0x450F30`, own `functions.tsv` row) and from there `set_tribe_command` directly - entirely
+  bypassing the catalogued `ui_cmd` numbering space. This is a plausible explanation for why multiple sessions'
+  exhaustive sweeps of `process_cmd`'s own switches (`switchD_004aabca`/`switchD_004abc0e`, ~150 case ids between
+  them, now both fully catalogued - see `docs/commands.tsv`) never turned up a literal disguise(kind 16)/arson
+  (kind 15) click handler: **the tribe-colour HUD icon the user described (left-click, near the shaman shortcut)
+  may well be one of these same standalone widget callbacks, not a numbered `ui_cmd` case at all** - worth
+  checking the SAME `0x4A0Fxx`-`0x4A14xx`-shaped address range (or wherever else similar small per-widget
+  callback clusters exist) for one that computes `arg1=0x10` before calling `0x444F60`'s own tribe_cmd range (or
+  queues straight into `0x435780`/`0x435CB0`, the shared template-apply pair), rather than continuing to sweep
+  `process_cmd`'s own switches (now exhausted for this purpose).
+
+## HUD widget dispatch: idle-unit selection, panel toggle, building-type candidate (later session)
+
+Chased a parallel user-reported lead (HUD actions: dispatching units to buildings/vehicles, spell selection, a
+stats-panel "add idle units of a type to selection" button, HUD tab-switching, a dedicated select-the-shaman
+control) by pulling `process_cmd`'s own two internal switch statements wholesale via Ghidra's own switch analysis
+(`switchD_004aabca` and `switchD_004abc0e`, ~150 raw `ui_cmd` case ids between them, neither previously
+extracted by any session - see `docs/functions.tsv`'s own note on `process_cmd`, `0x4AAB80-0x4AD5C3`) and tracing
+the previously-uncatalogued contiguous `0x6e-0x96` id block plus its downstream `tribe_cmd` targets. Full detail
+in `docs/commands.tsv` (`ui_cmd` rows `0x6e`/`0x6f`, `0x71`-`0x78`; `tribe_cmd` rows `0x2a`, `0x2b`, `0x53`-`0x55`,
+`0x60`, `0x67`, `0x7b`, `0x7d`) and `docs/functions.tsv` (`0x450F30`, `0x4DE610`). Headline results:
+
+- **RESOLVED: the stats-panel "select all idle units of a type" button is now fully traced**, from the HUD click
+  (a cluster of standalone widget callbacks at `0x4A0F00-0x4A1400`, calling a shared dispatcher `0x450F30`) down
+  to the actual selection mechanism (`tribe_cmd 0x53`, `0x43FD62`: walks the tribe's own `person_units` list,
+  filters by type, claims and sets the selection flag `+0x7A` bit `0x80` on each match - the same selection bit
+  `0x4BA9B0`'s own patrol-point row already established). Three sibling ids (`0x54`/`0x55`/`0x7D`) are confirmed
+  queued from the same dispatcher's other jump-table slots but their own handler bodies weren't read this session
+  - a quick follow-up (read their own `switchD_0043e922` case bodies, confirm they're structurally identical to
+    0x53 with a different type filter) would close this out completely, along with the 2 further jump-table slots
+    (indices 4/5) `0x450F30`'s own body wasn't fully read for.
+- **Candidate, not confirmed: `ui_cmd 0x72`/`0x73` as a HUD-panel-open/close (tab-switch) pair** - `0x72` sets two
+  UI-mode bits together, `0x73` clears one of them alone, with no unit/position resolution at all in either case
+  - structurally exactly what a panel-open/tab-switch control should look like, but not checked against a live
+  keybind or specific panel this session.
+- **Candidate, NOT confirmed: `ui_cmd 0x77`/`0x78` as building/construction-type selection** - reads a
+  "currently selected type" byte into a per-type property table and branches on whether that type is literal
+  `0x11`(17); the shared cell-occupant gate `0x4B98F0` (already known from patrol points) is also called here.
+  Plausibly related to the user's "dispatch to building/vehicle" HUD description, but the branch actually
+  reached when type==17 (and what type ids even mean here) wasn't read - **this is the single most promising
+  unfinished thread for the vehicle/building dispatch question**, picking up from `0x4ACBAD`/`0x4BA640`.
+- **Not found this session despite a direct, targeted search: a dedicated "select the shaman" HUD button.**
+  Grepped for direct calls to the shaman resolver (`0x4F25A0`) and for reads of `tribe+0x89D` (the shaman
+  reference other commands use) anywhere inside `process_cmd`'s own two switches - zero hits in either. Combined
+  with the idle-selection finding above (reached via a STANDALONE widget callback, not a `ui_cmd` case at all),
+  the shaman-select button is more likely to be a similar standalone callback than a numbered `ui_cmd` case -
+  worth searching the same way (grep for `call 0x4f25a0` or a `tribe+0x89d` read ANYWHERE in the exe, then
+  checking which of those call sites sit in a small, HUD-shaped function rather than AI/scripted code).
+- **Spell-selection UI: not found, not chased this session** - no case in either switch was seen writing an
+  obvious "currently selected spell id" field or reading a spell-cost table directly; given the pattern above
+  (stats-panel and, plausibly, shaman-select both live OUTSIDE `process_cmd`'s switches), this is also a
+  candidate for a standalone widget-callback cluster rather than a `ui_cmd` case - not yet searched that way.
+- Two new, incidentally-found primitives worth a future session's attention: `0x4DE610` (functions.tsv row -
+  "is a preacher mid-sermon on this cell", a selection/re-targeting guard, sitting suspiciously close in address
+  space to the already-documented spy-disguise cluster `0x4DE700-0x4DE7F0` but NOT itself spy-related - a
+  coincidence worth remembering before assuming anything near that address range is disguise-related) and its
+  unread neighbour `0x4DE680`.
+
+## HUD widget dispatch, round 2: spell tab resolved, building tab clarified, disguise icon still not found (later session)
+
+Chased the user's own detailed, first-hand HUD descriptions (Population tab unit-count modifier, Shift+click
+building-tab worker dispatch, spell tab's two-mouse-button split, camera-relative radius selection, a per-tribe
+disguise icon row) one at a time. Full detail: `docs/commands.tsv` (`tribe_cmd` rows `0x74`/`0x75`, `ui_cmd 0x77`/
+`0x78` deepened) and `docs/functions.tsv` (`0x49E650`, `0x4BA640`, `0x4BA6B0`, `0x4B9D50`).
+
+- **CORRECTED, same day, a coordinator-relayed user correction (the user played the original game and
+  disagreed with the "exclusive solo-charge" reading below): the spell tab finding was re-verified byte-for-byte
+  and found to be PARTLY WRONG in its details.** The user's own description is two independent, simpler
+  behaviours: (1) one button toggles JUST the clicked spell's own charge/pause state, with no effect on any
+  other spell; (2) the other button arms the spell for casting, needing a follow-up map-location click to
+  invoke it (matching `open-populous3`'s own already-implemented `SelectedSpell`/range-ring flow in
+  `crates/game-client/src/hud/spells.rs`). **Re-reading `tribe_cmd 0x74`/`0x75`'s own handlers (`0x4411BF`/
+  `0x441222`) instruction-by-instruction a second time**: `tribe_cmd 0x74`'s own mechanics held up completely
+  unchanged - it really does read the clicked spell's own state, invert it, and apply that ONE inverted value
+  to EVERY learned spell at once (confirmed again, not a misread). **`tribe_cmd 0x75`'s own original write-up
+  was NOT accurate, though**: its activate branch does NOT "block every other learned spell" - re-derived
+  correctly, it only RE-AFFIRMS spells that are ALREADY blocked (untouched otherwise) and separately
+  force-unblocks the clicked spell; its release branch, checked twice to be sure, inverts (relative to the
+  activation snapshot) which spells are charging vs paused - neither reading matches "restore to how it was"
+  cleanly, a counter-intuitive result that held up on a second pass and is not obviously a misread, but also
+  isn't confidently explained. See `docs/commands.tsv`'s own `tribe_cmd 0x75` row (corrected in place) for the
+  full mechanics. **Bottom line after the re-check**: this is still a real, confirmed charge/pause-bookkeeping
+  mechanism triggered from a spell-icon click, and `0x74` genuinely does what a "pause-all/resume-all" toggle
+  would do - but **neither `0x74` nor `0x75` matches the user's "simple independent per-spell toggle" description
+  (both provably write blocked-state for multiple spell ids, confirmed twice, not a one-off misread)**, and
+  **`tribe+0xC25` (the field `0x75` uses to remember the "current" spell) has no OTHER reader anywhere in the
+  exe** - so it is NOT the "armed spell awaiting a target click" flag, and the actual select-spell-to-cast
+  mechanism the user described (and `open-populous3` already implements) remains genuinely UNLOCATED, distinct
+  from this pair. Whether `0x74`/`0x75` are the mechanism the user remembers at all (vs. a different/lesser-known
+  convenience feature that happens to also live on the spell icon) is unresolved from static analysis -
+  **a live session watching `tribe+0x9E9`/`+0xC25`/the per-spell blocked bitmask while clicking a spell icon
+  with each mouse button is the concrete next step, not another static re-read.**
+- **Clarified, not confirmed: the building tab's `ui_cmd 0x77`/`0x78` (already a "candidate" from the prior
+  session) is a building/construction-TYPE validity check, NOT the user's described Shift+click worker-dispatch
+  action.** Read both of its branches fully: the non-17 branch validates whether the clicked cell is either an
+  existing matching occupant or an empty site already marked by a construction-placeholder object (`0x4BA640`);
+  the type-17 branch (`0x4BA6B0`) checks for a valid existing building of a specific type/state near the click.
+  Neither branch touches the unit-selection list, the `+0x7A` selection flag, or any "assign as worker" write -
+  **this case is building-placement/type-selection validation, and the Shift+click-to-assign-workers mechanism
+  the user described is still genuinely unlocated.** Strong working hypothesis, by analogy with the idle-select
+  and spell-tab findings above (both turned out to be standalone widget callbacks, not `process_cmd` switch
+  cases): it's a THIRD standalone callback cluster, gated on a Shift-key read the same way the spell tab's own
+  click handler gates on its still-unidentified flag pairs - worth searching for a Shift-equivalent of
+  `0x895DAA` (the still-unconfirmed Ctrl-bit candidate from the prior session) the same way.
+- **Checked again, still not found: the per-tribe disguise-icon HUD button array.** The user clarified this is
+  an ARRAY (one icon per other tribe), which would explain why a single-callback search kept failing - but this
+  session's own two targeted checks still turned up nothing: (1) `0x4DE760` (apply-disguise primitive) has
+  exactly the same 2 callers as every prior session found (both already-documented AI paths) - no new direct
+  caller anywhere; (2) no `set_tribe_command` call site anywhere in the exe pushes a literal `0x10`(16) as its
+  opcode argument (checked every one of its ~73 call sites) - consistent with the existing finding that the real
+  disguise-issuing opcode, if reached this way, is register-computed, not literal. **Both of `process_cmd`'s own
+  switches and the Population-tab (`0x450F30`) and spell-tab (`0x49E650`) widget-callback clusters are now
+  exhausted for this specific lead** - the per-tribe icon row, if it exists as described, is likely a FOURTH,
+  still entirely unlocated standalone callback cluster (indexed by tribe rather than unit-type or spell-slot),
+  feeding kind-16 into the shared `0x444F60` tribe_cmd range via a register-computed opcode/arg this session
+  could not locate by pattern-matching known shapes.
+- **Not reached this session, deprioritized for budget**: the Population tab's "Ctrl/Shift+click to select 1
+  vs 5 vs all" count modifier (checked only the TOP of `0x450F30`'s own preamble for a key-state read before its
+  jump table - found none there; the modifier, if real, most likely lives inside the individual widget callbacks
+  at `0x4A0F00`-`0x4A1400` or inside `tribe_cmd 0x53`/`0x7D`/`0x54`/`0x55`'s own still-partially-unread handler
+  bodies - `tribe_cmd 0x53`'s own row notes its list-walk has no visible count cap, so if a cap exists it's
+  likely passed as the count argument `0x450F30` already reads from `tribe+0xC22`, meaning the modifier key
+  would need to be read even earlier, by whatever UI code maintains that cached count - not chased) and the
+  radius-selection camera-vs-global framing for `tribe_cmd 0x72`/`0x451720` (the user says it toggles between a
+  camera-relative radius and a whole-level sweep - `0x451720`'s own row already names its loop bound `0x5AA598`
+  as "not identified, plausibly a map-wide or radius-derived cell count," exactly the toggle this would need to
+  explain - not re-read this session).
