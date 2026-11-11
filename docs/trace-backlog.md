@@ -907,12 +907,25 @@ static pass with `game/constant.dat` present - **not done this session, left ope
     case (own `commands.tsv` row, "plausibly 'ctrl held'"); its only 2 readers in the whole exe are both inside
     that one case, and no literal-address WRITER of this byte was found anywhere in `dis.txt` - meaning (by the
     same reasoning `0xD0595C`/`mouse_device`'s own row already established for the cursor position) it's almost
-    certainly written through a pointer into a DirectInput keyboard-device object's own buffered-state, not a
-    literal global address grep can find - **the natural next step is finding that keyboard-device object the
-    same way `mouse_device` was found** (follow a `GetAsyncKeyState`-free, DirectInput-only keyboard import/vtable
-    call the way `mouse_device`'s own row followed `SetCursorPos`/`DirectInputCreateA`), then checking whether
-    ANY tribe_cmd-queuing case (as opposed to this one select/track case) reads the same bit before calling
-    `set_tribe_command` with an opcode in the kind-15/arson-capable range.
+    certainly written through a pointer into a device object's own buffered-state, not a literal global address
+    grep can find. **Chased, a later session: found the exe's only OTHER `DirectInputCreateA` call (`0xd05e58`,
+    own new `functions.tsv` row) - but it reads as a JOYSTICK, not a keyboard** (its ctor sets up DIPROPRANGE-shaped
+    axis-range properties, and its runtime accessor is queried with small enumerated button indices 2/3/5/8, not a
+    256-entry scancode table a keyboard's `GetDeviceState` buffer would need), so this does NOT resolve the lead.
+    Also checked and ruled out the simpler alternative: `backup.xml` has no actual import of `GetKeyState`/
+    `GetAsyncKeyState`/`GetKeyboardState` anywhere (all three are unused type-library declarations only, zero
+    `EXT_LIBRARY_REFERENCE` entries) - this exe does not poll Win32 keyboard state directly either. **Net,
+    reframed: the Ctrl/Shift read is most likely inline `WM_KEYDOWN`/`WM_KEYUP` window-message handling into a
+    custom bit array** - invisible to both the DirectInput-device and import-symbol searches tried so far, since
+    it would just be a `cmp`/`je` against a literal `0x100`/`0x101` message constant inside the window procedure,
+    writing straight into a bit of `0x895DAA`'s own byte (or a sibling one) rather than through any named API or
+    device vtable call. **Next concrete step**: find the window procedure itself (the `WndProc` registered via
+    `RegisterClass`/`CreateWindow`, or whatever dispatches `PeekMessage`/`GetMessage` results - a Win32-imports
+    grep the same way the DirectInput chase worked, looking for `DispatchMessage`/`RegisterClassA`/`CreateWindowA`
+    in `backup.xml`'s own `EXT_LIBRARY_REFERENCE` entries) and read its own message-switch for `WM_KEYDOWN`
+    (`0x100`)/`WM_KEYUP`(`0x101`)/`WM_SYSKEYDOWN`(`0x104`) cases with `wParam` compared against `VK_CONTROL`(`0x11`)
+    or `VK_SHIFT`(`0x10`) - that should lead straight to whatever byte(s) get toggled, then cross-check against
+    `0x895DAA` and every tribe_cmd-queuing case in the kind-15/arson-capable range the same way originally planned.
   - **Also checked this same later session, a negative result worth recording**: swept every one of the shaman
     resolver's (`0x4F25A0`, own new functions.tsv row) 23 call sites exe-wide looking for a dedicated "select the
     shaman" HUD button - all 23 are AI-task/AI-script code, none in `process_cmd`'s own two switches (now fully
