@@ -504,6 +504,14 @@ drive it end-to-end for a new investigation:
   `/tmp/.X99-lock` left in its writable layer from a prior run ending uncleanly; `docker compose rm
   -f pop3 && docker compose up -d` clears it (safe - the Wine prefix and this repo are both
   separately bind-mounted, nothing is lost).
+- **Mouse-cursor relative-mode drift (the game's own rendered cursor position silently decoupling from the
+  real X11 pointer position `xdotool` controls, making precision clicks on small HUD icons unreliable or
+  impossible) is a known, GENERAL issue with this game/engine - not specific to this Docker rig, Xvfb, or
+  headless setups.** It happens outside Docker too, on Wayland or with multiple displays. **The reliable fix
+  is a game restart** (kill wine, relaunch), not trying to re-calibrate an already-drifted session via more
+  mouse moves - confirmed after two separate live sessions each burned significant budget fighting this
+  before learning the fix. Restart BEFORE attempting any precision click, not after the drift is already
+  causing problems.
 - `scripts/docker/launch_game.sh` / `start_level1.sh` launch the exe. **The main menu's
   highlighted/default item is NOT reliably "NOUVELLE PARTIE"** even on a cold wine process - it
   persists the last-used item across full process restarts (some menu-state file in the shared,
@@ -511,10 +519,26 @@ drive it end-to-end for a new investigation:
   Don't assume the documented key sequence's defaults still hold; screenshot
   (`docker compose exec pop3 bash -c "import -display :99 -window root /tmp/x.png"` then
   `docker cp` it out) to check the actual highlighted item before pressing Return.
-- **`xdotool key Down`/`Up` sent in a tight loop (even with 0.3-0.4s between presses) silently
-  drops roughly a third to half of the presses** - repeated short bursts moved the highlight by
-  fewer steps than keys sent, inconsistently. Single presses with >=0.6-1s between them and a
-  screenshot to confirm landed reliably; don't trust a multi-press batch without verifying after.
+- **"Tight-loop key presses drop a third to half of them" (this doc's own earlier claim) could not
+  be reproduced in a later, much more rigorous session** - ~10 trials of `xdotool key Up`/`Down`
+  against the in-level pause menu's 7-item list, varying delay from 1.5s down to 1ms between
+  presses (individual `docker compose exec` calls, a single `bash -c` shell `for` loop, and
+  `xdotool key --repeat N --delay D` with no process-spawn overhead at all) all landed on the
+  exact expected item, every time but one. **Found instead: this menu's Up/Down focus cycle is
+  CIRCULAR over 8 stops** (the 7 visible items plus "RETOUR" below them - wraps from the last
+  item to "RETOUR" to the first item and back, confirmed with a 5-press batch landing exactly at
+  `(start - 5) mod 8`) - a prior session assuming simple clamping at the list's ends would
+  misread a wrapped result as "missing" presses, which may explain some or all of the originally
+  reported drops without any real input-reliability problem. **One anomaly did occur once** (3
+  `Up` presses at 1.5s from "OPTIONS" landed 2 steps in the WRONG direction instead of 3 steps
+  up) and was never reproduced despite many follow-up attempts with the same timing - possibly
+  specific to the first keypress right after a menu first opens/gains focus, but a repeat of
+  that exact scenario (close pause menu, reopen, immediately send presses) landed in a different,
+  confounding "NIVEAU RATE" (level failed)/Escape-toggle state instead of a clean reopen, so this
+  was not conclusively isolated. **Net practical guidance, updated**: single presses with a
+  screenshot to confirm are still the safest default, but don't assume a batch's "wrong" landing
+  spot means dropped keys before checking whether the control simply wraps around - and a single
+  unreproduced miss doesn't mean every batch needs re-verifying one key at a time.
 - **Simplest fix, once found this session: the exe takes an undocumented `-LEVEL N` command-line
   switch** (confirmed via `strings D3DPOPTB.EXE`, alongside the already-known `-allres` etc.) -
   `wine D3DPOPTB.EXE -allres -LEVEL 1` skips straight to the level-select star map with that level
@@ -623,6 +647,91 @@ detach looked. Generalizes: any future live session setting a software breakpoin
 keep a same-recipe restore script on hand and run it unconditionally, and should expect an occasional
 hard crash requiring a full level reload even when nothing looks wrong.
 
+## Continued digging on the keyboard/input-reliability question (later session) - a non-interactive GDB automation recipe, a real crash-on-resume, and the mystery narrowed but not closed
+
+Picked up this file's and `docs/trace-backlog.md`'s open "input reliability" thread with two angles:
+pure menu-navigation timing experiments (see `docs/trace-backlog.md`'s own write-up of those - net
+result: the in-level pause menu's Up/Down turned out to be a CIRCULAR 8-stop cycle, which fully
+explains at least some of the "dropped keys" reports as unaccounted wraparound, not real drops), and
+redoing this section's own `process_cmd`-breakpoint method headlessly (no interactive terminal) to get
+real ground truth on single gameplay hotkeys rather than screenshot-inferred guesses.
+
+**A working non-interactive automation recipe for this method, worked out the hard way**: run
+`gdb -q -nx` as root with its stdin attached to a named FIFO (`mkfifo /tmp/gdbin; gdb -q -nx
+< /tmp/gdbin > /tmp/gdbout 2>&1 &`), then feed it commands with `cat > /tmp/gdbin <<'EOF' ... EOF`
+from separate `docker compose exec` calls. **Critical gotcha**: GDB treats EOF on stdin (which happens
+the instant a `cat`/`echo` writer closes, if no other writer is currently connected) as "quit", with any
+confirmation prompt auto-answered yes since input isn't a terminal - so a batch of commands that ends
+WITHOUT a `continue` (i.e. one that returns to an idle prompt waiting for the next line) will
+immediately self-quit the instant that write call's file descriptor closes. **Fix**: always end a batch
+with `continue` (or any command that puts the inferior back in a running, non-prompt-waiting state)
+before letting the writer close - confirmed this works across several batches (`attach` + `break` +
+`commands` block + `continue` all sent as one write processed cleanly, inferior kept running after the
+writer closed). A separate, STANDALONE one-line batch like `info breakpoints` with no trailing
+`continue` reproduced the EOF-quit immediately, confirming the mechanism. **Reassuring follow-on
+finding**: this EOF-triggered quit is NOT the same hazard as this section's own documented
+`SIGKILL`-on-timeout warning above - `kill -INT <gdb_pid>` (used to interrupt a running inferior, the
+documented way to get back to a prompt) successfully stopped the inferior as intended, and the
+breakpoint byte at `0x4aaba1` was confirmed still `0x8d` (the correct original byte, not the `0xCC`
+software-breakpoint marker) immediately afterward even though gdb's own process had already exited by
+the time the next command was sent - i.e. the EOF-quit that followed the interrupt was a CLEAN quit
+(detaches and un-patches breakpoints like a normal `quit` would), not an orphaning one. Only a hard
+`SIGKILL` (e.g. from a timeout) skips this cleanup, per the existing warning above - worth keeping
+both cases straight for next time, and still worth running the file-offset-byte restore script as cheap
+insurance regardless, exactly as already recommended.
+
+**A real, reproducible crash found this session**: with the breakpoint armed and the inferior
+`continue`-d, a single mouse click (`xdotool mousemove ... click 1`) cleanly hit the breakpoint -
+`HIT ebx=0x66` (already-catalogued `commands.tsv` row: packed cursor-coordinate dispatch, i.e. this
+really was the click, not a stray keyboard event accidentally in the same combined `xdotool` call) -
+but the very next `continue` crashed the process outright: GDB reported `SIGSEGV` at a corrupted
+address (`0xffff800f004aaba1` - note the garbage high bits glued onto the real `0x004aaba1`, looking
+exactly like a sign-extension bug in resuming a 32-bit breakpoint under this process's reported
+architecture), and Wine's own "Program Error" dialog appeared for `D3DPOPTB.EXE`. This happened on the
+FIRST hit of a fresh session, not after many hits or a long run, and every `attach` this session printed
+a slightly different architecture-mismatch warning (`i386:x86-64 is not compatible with reported target
+architecture i386` one run, `...i386:x64-32` another) - consistent with GDB's own WoW64/target-arch
+detection being unstable in this specific Wine build/container combination, and a very plausible
+root cause for BOTH the occasional crashes this file already warned about AND at least some of the
+previously-reported "a key worked once but then nothing" flakiness: if resuming from a hit has a real
+chance of corrupting execution, every session using this method should expect it and treat a sudden
+unresponsive game (screenshot stops changing, no further hits) as "probably crashed," check for the
+Wine error dialog before assuming input itself is being dropped.
+
+**Still unresolved**: a second, fresh session (clean relaunch, breakpoint re-armed, confirmed set via
+`info breakpoints`) produced ZERO hits across several individual `Escape` and one `Return` press while a
+tutorial modal dialog ("J'ai créé mon haut lieu de réincarnation...") was up on screen, each checked
+individually with the game screenshot confirming it was alive and rendering the whole time (not
+crashed, not stuck) - a real non-crash, non-EOF-quit case of keyboard input simply not reaching this
+breakpoint, differing from the EARLIER documented session where Escape hit reliably "both inside the
+tutorial's own modal OK dialog and in plain gameplay." Not root-caused this session - candidates worth
+checking next time: (a) the window-focus hazard this file already documents (many intervening
+`docker compose exec`/screenshot calls happened between presses, exactly the pattern previously blamed
+for dropped input), (b) modal dialogs specifically may route Escape/Return through a DIFFERENT code
+path than `process_cmd`'s main argument-load point entirely (plausible - never confirmed either way),
+or (c) a residual effect of the architecture-mismatch warning making this build's breakpoint
+unreliable in ways beyond just the resume-crash already found. A concrete next step: re-run the exact
+same single-key test immediately after a confirmed-good input moment (e.g. right after the mouse click
+that DID hit, in the same session, before any other X11 calls) rather than after a fresh attach with no
+prior confirmed-good interaction.
+
+**Resolved immediately after, by elimination**: with GDB fully detached (confirmed via `pgrep`, no
+`gdb -q` process left) and nothing else changed, the SAME `Return` keypress that had just failed
+silently several times in a row dismissed the still-open tutorial dialog on the very first try. This
+points at GDB's mere presence - ptrace-attached to this ~40-thread Wine process, independent of whether
+the armed breakpoint ever fires - as the actual cause of that session's input not arriving, rather than
+focus loss or a dialog-specific code path (both still-plausible alternatives from the paragraph above,
+but this is a cleaner, simpler explanation that fits everything observed: the one click that DID hit
+happened right after attaching, before the inferior had been continuously running+ptraced for long, and
+every later keypress in that same attached session failed). **Practical takeaway for next time**: treat
+any `process_cmd`-breakpoint GDB session as actively degrading input delivery for its ENTIRE duration,
+not just something to worry about around the breakpoint hit/resume itself - keep such sessions as short
+as possible (attach, get the one data point needed, detach immediately), and don't trust a run of
+"no hits" from a long-attached session as evidence about the GAME's own input handling at all; it may
+just be evidence that GDB itself is in the way. This also reframes the EARLIER documented
+"1-in-4-to-5 hit rate even with good focus" finding from the very first session that used this method -
+worth re-measuring that with much shorter attach windows per keypress, now that this confound is known.
+
 ## The RC intro's "shaman fires a beam at the stone" visual, traced end to end - and a static mis-read caught by a read-only live poll (later session, 2026-11-08)
 
 Prompted by a user question: "the shaman faces the stone that goes up and there's an animation
@@ -680,6 +789,81 @@ produces a mechanically-plausible-but-narratively-odd conclusion (here: "the pro
 teleports to its target," which would be a strange thing for this engine to actually do given the
 many OTHER shot types that visibly fly).
 
+## Reproducible mouse-click recipe for loading a specific save, and the real root cause of the cursor-drift bug (later session, 2026-11-11)
+
+**Root cause, refined across the session (an earlier draft of this section blamed a
+DirectInput-exclusive MOUSE - wrong)**: `WINEDEBUG=+dinput` shows the exe acquiring two DirectInput
+devices (`DISCL_FOREGROUND|DISCL_NONEXCLUSIVE` and `DISCL_EXCLUSIVE|DISCL_FOREGROUND`), but
+**neither is the mouse** - a prior session already identified the second device (`0xd05e58`) as the
+joystick, and the mouse is handled through ordinary win32 events. The key fact: **the game keeps
+its OWN internal cursor position (an accumulator fed by mouse events), and its menu hit-testing,
+hover highlighting and cursor sprite all follow that internal position, not the live X11 pointer.**
+A large pointer warp (one big `xdotool mousemove`, or a fresh VNC connection's first pointer event)
+desyncs this accumulator from the real pointer; small continuous deltas (real mouse motion, small
+`mousemove_relative` steps) track fine. Confirmed from a `WINEDEBUG=+cursor,+win,+message` capture:
+a click was delivered as `WM_LBUTTONDOWN` at the exact intended window-local coordinate
+(`X11DRV_ButtonPress ... pos (320,220)`) **and the menu still did not react**, because the game
+hit-tested against its own (shifted) internal cursor, not the message coordinate. The
+`MouseWarpOverride=disable` / `Managed=N` registry keys under `HKCU\Software\Wine\X11 Driver` did
+NOT fix this (reverted; not part of the recipe).
+
+**The internal cursor position was found by live memory scan (scan for (x,y) dword pairs, nudge the
+pointer by a known delta via small relative steps, keep pairs that moved exactly that delta) - five
+dword-pair globals, all holding the same window-local (x,y), plus two related neighbours:**
+
+| Address | Holds |
+|---|---|
+| `0xD0597C` | internal cursor (x,y) - in the same region as the DirectInput device structs (`0xd05e58` joystick), likely the primary accumulator |
+| `0xA69030`, `0xA69070` | same value - game-side copies (`0xA69078`, right after, is the offset pair `0x4AA1C0` subtracts in its 0x200/0x180 mode) |
+| `0x749C90`, `0x749DF4` | same value - further copies |
+| `0xA69038` | cursor + a small constant offset (~26,27) - hotspot or previous-position |
+| (heap, e.g. `0x364fe7c`) | wine's X11-side position - tracks the REAL pointer, useful as ground truth |
+
+**The instant fix (no game restart needed): write the real pointer's window-local position into
+those five dwords** - `scripts/cursor_resync.py` (committed) does exactly that, run inside the
+container as root with the mouse held still:
+
+```
+docker compose exec -u root pop3 python3 /repo/scripts/cursor_resync.py
+```
+
+Live-confirmed: the rendered cursor snaps to the real pointer immediately (hover highlight updates
+too) and STAYS in sync through subsequent small-step movement. Re-run it whenever drift reappears
+(after any big warp - including right after connecting over VNC: connect, put the mouse inside the
+game window, hold still, resync, then move normally).
+
+**If writing memory is not an option, the workaround is: never send one large absolute `xdotool
+mousemove`; move in small `xdotool mousemove_relative -- dx dy` steps (≈±10 to ±40 px per step,
+short `sleep` between steps).** This tracked 1:1 across an entire menu→load-list→row-select→load
+sequence. A single large relative jump also desyncs - break big moves into several small steps.
+Watch the window edges: the real pointer can exit the 640x480 window while the rendered cursor
+appears stuck inside (motion stops being delivered once the pointer leaves the window rect), and
+cursor-at-edge also triggers in-game camera scrolling.
+
+**Reproducible click/step recipe to load a specific save from the main menu**, captured this
+session at window position `728,455`, size `640x480` (confirmed via `xdotool getwindowgeometry`;
+re-check if the window ever opens at a different position/resolution). The main menu's highlighted
+item persists across restarts (see "Docker headless rig" above) so the exact first move needed
+varies; the shape of the recipe is: small relative steps toward the target, screenshot to confirm
+the right item is highlighted, click (explicit `mousedown 1`/sleep ~0.15s/`mouseup 1`, not plain
+`xdotool click 1` - that was observed to silently no-op at least once this session), screenshot to
+confirm the click landed, repeat for the next target:
+
+| Step | Target | Approx. local offset (x,y) from window top-left |
+|---|---|---|
+| 1 | Main menu "CHARGER PARTIE" | `(320, 220)` |
+| 2 | Load-list row 1 (default-highlighted save) | `(90, 174)` |
+| 3 | Load-list row spacing | `+18` per row down (row *N* ≈ `(90, 174 + 18*(N-1))`) |
+| 3b | 2nd-last row in this save list (row 7 of 8) | `(90, 290)` |
+| 4 | "CHARGER" button (under the list) | `(320, 410)` |
+
+Selecting a specific list row sometimes still lands one row off on the first click (the list box's
+clickable text also starts a little right of its left border - click inside the text, e.g. local
+x≈90, not right at the border edge x≈60, which visually hovers but doesn't select) - nudge with one
+more small relative step (`±18` in y) and re-click if the highlighted row isn't the intended one
+yet. This off-by-one-row hiccup persisted even with the small-step technique and is a separate,
+minor issue from the large-jump desync above.
+
 ## RC shot trail corrected: it's a small sparkle, NOT a lightning bolt (later session, 2026-11-08)
 
 The previous session's own "it's a chain of lightning-bolt segments" conclusion was wrong - caught by
@@ -724,3 +908,67 @@ inferring it from a type NAME in `docs/unit_types` (itself unverified) rather th
 draw-class data. Tight-window screenshot timing (poll `simulation_turn` in-process, fire `import` only
 while in the target range) is the fix for the earlier sessions' own "screenshots landed outside the
 window" problem - worth reusing for any future "what does X actually look like" question.
+
+## Spy disguise player path, cracked end to end live - and the breakpoint methodology that finally worked (session 2026-11-11)
+
+**The question** (open across many sessions): what actually happens when the player, with a spy
+selected, clicks the per-tribe HUD square (the red/yellow/green stack above the spy's population
+icon, one square per other tribe - its own hover/click tooltip is "Icône tribale <name> : voir
+l'encyclopédie...") to order a disguise. Static analysis had the application primitive
+(`0x4DE760`) and a suspected order kind (16) but never the player-facing trigger.
+
+**The answer, live-confirmed** (the user drove the game over VNC; all three captures agree):
+
+1. HUD tribe-square click (spy selected) arms a per-tribe action byte (`0x89da88` table, values
+   5-7 observed) + pending flag `0x895e9b`, and lands as **`ui_cmd 0x7e`** in `process_cmd`.
+2. `ui_cmd 0x7e` calls **`0x4AA8B0`**, which queues
+   `set_tribe_command(player_tribe, (0x37|0x57)+idx, cached_click_pos)` ->
+   **`tribe_cmd 0x5c/0x5d/0x5e`** (flagged variants of bases 0x3c-0x3e).
+3. `process_tribe_cmd`'s shared case (`0x43EDEA`) -> second-level dispatcher **`0x444F60`**
+   (opcodes 0x1E-0x5E) -> stages `tribe+0x8C1` (`0x435780`) -> `0x435C40`+**`0x435CB0`** builds
+   ONE command group (**order kind 0x10**, target tribe in `group+0x6`) and assigns it to every
+   selected unit's **secondary** order slot `+0x8B[0]` via `group_assign 0x436d00` (slot write
+   live-captured at `0x436d4e`; ordering 4 spies at once produced one shared group id in all four).
+4. Next sim turn: `order_execute` kind-16 inline case (`0x43281b`) calls
+   **`0x4DE760(spy, tribe)`** -> `+0xB2 = tribe<<6 | 63` and the familiar countdown. Captured
+   mid-write at `0x4de799` (`+0xB2` read back `0x3F` with the game frozen between the two write
+   steps, `0xFF` after resume, `0xC0` once the countdown elapsed).
+
+Catalog rows: `commands.tsv` `tribe_cmd 0x5c/0x5d/0x5e`, `ui_cmd 0x7e/0x7f`; `functions.tsv`
+`0x4aa8b0`, `0x444f60`, `0x435780`, `0x435cb0`, plus updated `0x4de760`/`0x432d18`. Open ends in
+`trace-backlog.md`: the ARM half (the square click's own handler - `0x895e9b` setters cluster
+around `0x438100`-`0x4382xx`), the exact idx->kind-0x10 mapping, the 0x37-vs-0x57 base variant
+meaning, which of 0x5c/0x5d/0x5e maps to which tribe/action, and `ui_cmd 0x7f`'s own role.
+
+**Methodology - what finally made live capture reliable (and what didn't):**
+
+- **The resume-after-hit crash is NOT avoided by `hbreak` or by `set architecture i386`** - a
+  hardware breakpoint at `0x4de760` with an auto-`continue` commands block still SIGSEGV'd the
+  game on the first resume, exactly like the software-breakpoint sessions. BUT the hit's own
+  `printf` lands in the log BEFORE the crash, so "arm, let it hit once, read the log, restart the
+  game" yields one clean data point per run even when every resume dies. Two of this session's
+  captures were exactly that.
+- **The pattern that avoids the crash entirely: a hardware WATCHPOINT with NO `continue` in its
+  commands block.** The game freezes at the faulting write; read everything calmly (`info
+  registers`, `x/80xw $esp` - raw return addresses in the 0x4xxxxx range give the full call chain,
+  since `bt` stays broken under the architecture mismatch); resume manually only when ready, or
+  `delete` + `detach` without ever resuming past a trap. No crash occurred in any of this
+  session's watchpoint stops, across several fire/resume cycles.
+- **Watch the data, not the code**: watching the spy's own `+0xB2` (disguise byte) and `+0x8B`
+  (secondary order slot) caught both halves of the mechanism with zero noise, where breakpoints on
+  shared code (`0x4de760`, `process_cmd`) caught mostly background/AI hits. A first watchpoint on
+  `+0x9B` (primary slot) that NEVER fired while the disguise still applied is itself what proved
+  player orders land in the secondary slots.
+- **Expect one false fire per order lifetime**: the order's own completion CLEARS the watched slot
+  (write at `0x43668a`, from `order_execute`'s shared tail) - resume past it before the real test.
+- **FIFO-gdb improvements over the documented recipe**: keep a persistent dummy writer
+  (`exec sleep 100000 > /tmp/gdbin &`) holding the FIFO open, so each command batch's writer
+  closing no longer EOF-quits gdb - this made multi-phase sessions (re-arm, resume, re-read)
+  practical. `kill -INT <gdb pid>` remains the way to get a prompt while the inferior runs.
+- **`winedbg --auto` from a prior crash dialog holds ptrace on the game** and blocks `/proc/mem`
+  writes (EIO) until killed. Separately, even with NO tracer attached, direct `/proc/<pid>/mem`
+  WRITES returned EIO on a page that mapped `rwxp` and read fine (cause not identified - reads
+  never failed); `gdb -batch -p <pid> -ex 'set {int}ADDR = VAL' -ex detach` is the reliable
+  fallback writer, used for cursor resyncs while investigating.
+- The cursor-desync fix (own section above) held up as the enabler for the user's VNC driving:
+  resync after connecting, and after any big warp.

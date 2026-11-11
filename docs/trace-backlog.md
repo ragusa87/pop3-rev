@@ -835,6 +835,23 @@ what's already known from level 1 and reusable as a starting point - `scripts/wa
 
 ## Spy disguise and infiltration
 
+**MAJOR RESOLUTION (live session 2026-11-11, user-driven over VNC + gdb hardware watchpoints): the
+long-missing PLAYER-FACING disguise path is found end to end** - HUD tribe-square click (spy
+selected) -> `ui_cmd 0x7e` -> `0x4AA8B0` (queue armed pointer-action) -> `tribe_cmd 0x5c/0x5d/0x5e`
+-> `0x444F60` second-level dispatcher -> one shared command group (order kind 0x10, target tribe in
+`group+0x6`) assigned to every selected unit's SECONDARY slot `+0x8B[0]` -> next turn
+`order_execute` kind-16 inline (`0x43281b`) -> `0x4DE760(spy, tribe)`. Full write-up and the
+watchpoint methodology that made it capturable: `docs/cheat.md` "Spy disguise player path";
+catalog rows `commands.tsv` (`tribe_cmd 0x5c-0x5e`, `ui_cmd 0x7e/0x7f`) and `functions.tsv`
+(`0x4aa8b0`/`0x444f60`/`0x435780`/`0x435cb0`, updated `0x4de760`/`0x432d18`). **New open leads
+from it, for a next session**: (a) the ARM half - what the tribe-square click itself runs to set
+the per-tribe action byte (`0x89da88` table) and pending flag `0x895e9b` (setters cluster in a
+flag-writer around `0x438100`-`0x4382xx` - trace that function and its callers); (b) the exact
+idx->order-kind-0x10 mapping inside `0x435780`/`0x435CB0`; (c) the 0x37-vs-0x57 opcode-base
+variant's meaning (a modifier? queue-vs-replace?); (d) which of `0x5c/0x5d/0x5e` encodes which
+tribe/action (the watchpoint fired downstream of the opcode, so the exact id wasn't logged); (e)
+`ui_cmd 0x7f`'s own distinct role and both ids' real input bindings.
+
 Traced this session purely from a static `D3DPOPTB.EXE` (a cloud session - no `game/constant.dat`, no Wine, no
 `livemem.py`, no way to run the game at all, only the disassembly/consts.txt route): the disguise-application
 primitive (`0x4DE760`, writes the apparent-tribe byte + the exe's own named constant `SPY_DISGUISE_DELAY`=63) and
@@ -885,7 +902,17 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   tribe is the one it currently counts as (real tribe while transitioning, disguise tribe once settled), and ALSO
   sets a trio of globals (`0x8922DC`/`0x89C6A5`/`0x89C6A1`) that read as the backing state for an on-screen
   marker, plausibly the spy-indicator UI - not confirmed which element consumes them. Both are genuinely new
-  mechanisms, not the countdown's own decrementer - that remains unfound after two dedicated searches.
+  mechanisms, not the countdown's own decrementer.
+  **RESOLVED, later session (third dedicated search): found it.** `unit_processing_class_1_person`/0x4D32B0
+  (the per-person per-turn entry point itself, own `functions.tsv` row) has a spy-only (`+0x2B==5`) check at
+  0x4D3346-0x4D3368, a few hundred bytes before the big per-state dispatch - decrements `+0xB2`'s bottom 6 bits
+  by 1 (floored at 0), leaving the top 2 bits (apparent tribe) untouched. Both earlier searches focused on
+  `0x4D42A0` (the OTHER, type-table-gated per-tick tail, firewarrior-only) and its callees; this check lives one
+  level up, inside `0x4D32B0` itself, which is why a `grep "0xb2"`-driven pass found it among the ~55 raw hits
+  but a function-by-function "what calls 0x4D42A0" trace didn't. Runs once per living person per turn
+  (0x4D32B0's own single caller is `maybe_unit_state_processing_1`), so the 63-to-0 transition is exactly 63
+  turns - cross-referenced against `docs/cheat.md`'s own `simulation_turn` rate (~12/s) for a ~5.25s real-time
+  estimate, not independently re-confirmed live this session that this function's "turn" is that same counter.
 - **The player-facing UI path to order kind 15 (arson) and kind 16 (disguise) still was not found. One
   caller family is confirmed AI-only, but - important correction, a later session, see the "RETRACTED" bullet
   further down - the underlying PRIMITIVE itself is NOT AI-exclusive, only this one entry point into it was.**
@@ -1082,6 +1109,125 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   queues straight into `0x435780`/`0x435CB0`, the shared template-apply pair), rather than continuing to sweep
   `process_cmd`'s own switches (now exhausted for this purpose).
 
+## Live-session attempt at the disguise-icon click, stalled on GUI automation friction (later session, no new static ground covered)
+
+Picked up the "a live session is the concrete next step" recommendation repeated throughout the section above,
+specifically to catch `0x4DE760` (the disguise-apply primitive) with a GDB breakpoint while actually performing
+the left-click-a-tribe-icon action in the Docker/Xvfb/openbox rig (`docker compose up -d`, same container as
+`docs/cheat.md`'s own "Docker headless rig" section). Got as far as confirming the rig still works end to end
+(container starts clean, `-allres` launch reaches the main menu, `xdotool mousemove`+`click` DOES reach the game
+now that openbox is running - confirmed by successfully navigating "Nouvelle Partie" by mouse click alone) but
+**did not reach an actual disguise-icon click attempt this session** - burned the whole session's budget on
+menu-navigation friction instead: the main menu's default-highlighted item persists across restarts and changes
+based on the LAST item a session clicked (confirmed: clicking "Nouvelle Partie" once made it the new default,
+confirming `docs/cheat.md`'s existing warning about this); keyboard `Down`/`Return` navigation works but drops
+keys often enough that a 2-keypress sequence landed one row short more than once; a later in-tutorial dialog's
+own "OK" button resisted several `xdotool mousemove`+`click` attempts at computed coordinates (window geometry
+read correctly via `xdotool getwindowgeometry`, 728,455/640x480, scale math checked against the screenshot
+several times) without ever landing - not root-caused, possibly a coordinate rounding issue specific to small
+UI widgets vs. the large main-menu text rows that DID click reliably.
+
+**Found via the host filesystem while looking for a shortcut past the campaign's own level-unlock gating**:
+`~/.wine/drive_c/Program Files (x86)/Bullfrog/.../SAVE/` already holds several save games from prior real play,
+including `SAVGAM06.HDR`+`.L23`, `SAVGAM07.HDR`+`.L24` (levels 23/24) - likely a much faster route to a
+multi-tribe, already-developed game (possibly with a spy already trained) than grinding a fresh level - worth
+loading one of these via "CHARGER PARTIE" first thing next session instead of "NOUVELLE PARTIE", once past the
+main menu's own click/highlight quirks above.
+
+**Concrete recommendation for whoever continues this**: either (a) retry the live click, now forewarned about
+the menu-default/key-drop/small-button-click issues above, loading a SAVE directly to skip straight to a
+developed multi-tribe game - or (b) the OTHER still-open static lead from the same investigation thread above is
+arguably more promising and doesn't need any of this GUI fighting: find the window procedure
+(`RegisterClassA`/`CreateWindowA`/`DispatchMessage` in `backup.xml`'s own `EXT_LIBRARY_REFERENCE` entries) and
+read its `WM_KEYDOWN`/`WM_LBUTTONDOWN`-equivalent message switch directly - this was already identified as the
+likely real location of both the Ctrl-modifier read AND, plausibly, the HUD click dispatch itself, entirely from
+the executable alone, no live session required.
+
+**Lead (b) chased, a later session: found the real `WndProc` and read its full message switch - rules out both
+halves of the hypothesis above.** `create_window`/`0x4B0D10` is the actual `RegisterClassA` call site (own new
+`functions.tsv` row), registering `lpfnWndProc = 0x4B0840` (`wnd_callback`, thin stdcall-to-fastcall shim) which
+tail-calls into the real dispatcher at `0x4B0870`. Its full `msg` (`edi`) switch, read byte-by-byte, handles
+exactly: `WM_DESTROY`(2), `WM_ACTIVATE`(6), `WM_PAINT`(0xF), `WM_CLOSE`(0x10, calls `0x500A20`),
+`WM_ACTIVATEAPP`(0x1C), `WM_KEYDOWN`/`WM_KEYUP`(0x100/0x101, see below), `WM_SETCURSOR`(0x20),
+`WM_MOUSEACTIVATE`(0x21), `WM_POWERBROADCAST`(0x218, returns `BROADCAST_QUERY_DENY`=`0x424D5144` unconditionally)
+- everything else (the default arm) goes straight to a `DefWindowProc`-equivalent call (`ds:0xd0c8d0`). **There is
+no `WM_LBUTTONDOWN`/`WM_MOUSEMOVE`/any mouse-message case at all** - mouse input is definitively NOT handled via
+window messages anywhere in this exe, confirming (rather than just assuming, as every prior session's HUD-click
+search implicitly did) that the per-frame-poll architecture already being chased (`0x4A0F00`-`0x4A1400` etc.) is
+the ONLY path for clicks; **this static lead for the HUD click dispatch is now closed, not just deprioritized**.
+
+The `WM_KEYDOWN`/`WM_KEYUP` case (`0x4B0A72`-`0x4B0AB1`) is also a dead end for the Ctrl-modifier read, but a
+more interesting one: it does NOT compare `wParam` against `VK_CONTROL`/`VK_SHIFT` at all (the hypothesized
+`cmp`/`je` against `0x11`/`0x10` that was the whole reason to look here) - instead it generically indexes a
+256-byte "key held" table at `0x98F140` by the raw VK code (`bl`, the low byte of `wParam`) on every key, plus a
+sibling 256-byte "just pressed this frame" edge-latch table immediately after it at `0x98F240` (set once, on the
+0-to-1 transition only, presumably consumed/cleared elsewhere each frame - that consumer not chased). **Exhaustively
+grepped and found NO other reference to `0x98F140` anywhere in the whole executable** except these two writers and
+one `rep stos`-based clear (`0x4B1DF0`, zeroes all 256 bytes, likely on focus-loss/window-create) - meaning either
+this table is genuinely dead/unread code (plausible: it has exactly the shape of a leftover raw-text-entry or
+cheat-code-listener input path, not the game's real control-reading mechanism), or it IS read but only through a
+register-indirect pointer whose value `0x98F140` was never written as a literal immediate anywhere traceable by
+static grep (e.g. stored once into a device/struct field as runtime data, not as an instruction operand) - would
+need a live memory watch on `0x98F140`/`0x98F240` (or on `0x895DAA` itself, the actual modifier-bit byte this
+whole chase is after) to settle which. **Net: all three independent static hypotheses for the Ctrl-modifier read
+are now exhausted** (DirectInput device buffer - ruled out, only other `DirectInputCreateA` site is a joystick;
+Win32 `GetKeyState`-family - ruled out, unused/unimported; inline `WM_KEYDOWN` bit toggle - ruled out just now,
+real handler is a generic VK table with no confirmed reader) - a live watchpoint on `0x895DAA` during an actual
+Ctrl+click in the Docker rig is now the only lead left for this sub-thread, same rig/same recommendation as the
+disguise-icon click attempt above, worth doing in the same live session rather than as a separate one.
+
+**Live attempt resumed, same later session, got substantially further than the previous attempt above but still
+short of an actual disguise click.** Picked up this section's own "load a SAVE directly" recommendation: relaunched
+the Docker rig (`docker compose up -d` already running from before; `wine D3DPOPTB.EXE -allres`, run as the
+container's actual non-root user - **note for next time: the Wine prefix lives under `~laurent/.wine`, not
+`~root/.wine`; `cd ~root/...` silently fails/launches nothing**), dismissed the legal splash, used "CHARGER
+PARTIE" and loaded a save (landed on level 25, "A l'aube de la création", via the save list's default-highlighted
+entry - mouse-clicking a specific OTHER row in that list, e.g. the more promising-sounding "CHEATING" save,
+**never visibly worked**: neither a plain click nor `Up`/`Down` arrow-key navigation changed which row was
+selected, only the big 3-way CHARGER/list/RETOUR focus cycle moved - this list's actual row-selection input
+method is still unknown, worth a fresh approach next time, e.g. double-click or `PageUp`/`PageDown`), then
+`Return` through the star-map to actually enter the level, then `Return` again to dismiss the level's own
+intro-dialog. Ended up in real, live gameplay on a developed-looking tribe (firewarrior hut tooltip visible,
+several worshippers wandering) - **furthest this investigation has ever reached live**.
+
+**Mouse-click calibration, worked out the hard way, worth recording precisely so a future session doesn't
+re-derive it**: the game's own rendered/software cursor position is NOT the same thing as the X11 pointer position
+`xdotool` reports/controls, and the two are not resynced by an absolute `xdotool mousemove` - confirms this is a
+DirectInput RELATIVE-mode cursor (consistent with `docs/trace-backlog.md`'s own earlier `0xD0595C`/`mouse_device`
+reasoning for the Ctrl-modifier byte). The two positions only stay coupled via the DELTA of each individual X11
+pointer move, and **only while the X11 pointer's start and end points both stay inside the actual game window's
+pixel rectangle** (`xdotool search --name Populous getwindowgeometry`, e.g. `728,455`/`640x480` this session) -
+step outside that rectangle even once (easy to do with one large `mousemove_relative`, since the window is only
+640px wide) and that motion silently stops being delivered to the game at all (confirmed via `xdotool
+getmouselocation`'s own `window:` field changing to a different, non-game window id when this happens), with NO
+error and no visible symptom other than "the cursor stopped moving in screenshots." **Working method**: (1)
+screenshot, locate the rendered cursor pixel in the image (remember the screenshot is the FULL 2256x1504 Xvfb
+root downscaled for display - multiply the on-screen preview's coordinates by roughly 1.128 to get real pixels,
+or just crop+upscale a region with `convert -crop ... -resize 400%` for a precise read instead of eyeballing the
+downscaled preview); (2) compute the pixel delta to the target and check it's small enough that
+current-X11-pos+delta stays inside the window rectangle (near window-center, roughly ±300px horizontally /
+±200px vertically is safe; a bigger single jump needs splitting into two or more smaller `mousemove_relative`
+calls, each re-verified); (3) send exactly ONE `xdotool mousemove_relative -- dx dy` (the `--` is required for
+negative values) and re-screenshot before sending another - chaining several relative moves without checking
+in between was the single biggest source of wasted attempts this session, since a move that silently failed
+(pointer already near/past the edge) gives no feedback and every subsequent delta compounds the same wrong
+base. An absolute `xdotool mousemove` is safe to use freely to GUARANTEE the X11 pointer is back inside the
+window before starting this process (e.g. jump to the window's center) - it does change the game's internal
+cursor position too (by whatever delta it implies), but that's fine since the next step re-measures from a
+screenshot rather than assuming where the cursor ended up.
+
+**Did not get as far as finding a spy or the disguise icon this session** - spent the remaining budget
+re-deriving the above calibration method live (the person/building sprites are small enough that the early,
+uncalibrated attempts kept missing). Concrete next step for whoever continues: with the method above in hand,
+pan the camera (arrow keys, or edge-scrolling - not tried yet) to find a spy-class unit or a spy-training hut,
+select it, and watch for a disguise-icon widget in the left-hand HUD column (visible in this session's
+screenshots as a vertical stack of ~16 icon buttons, none yet identified) - then click it with a GDB breakpoint
+on `0x4DE760` (the disguise-apply primitive) armed per `docs/cheat.md`'s own breakpoint methodology, which should
+finally produce a real call stack / caller address for the still-unlocated `ui_cmd` case. The save loaded this
+session (whichever one the "CHARGER PARTIE" list's default first row is - not confirmed which named save that
+corresponds to on disk, since the row-selection problem above was never solved) is still active in the running
+container if resumed before the next container restart.
+
 ## HUD widget dispatch: idle-unit selection, panel toggle, building-type candidate (later session)
 
 Chased a parallel user-reported lead (HUD actions: dispatching units to buildings/vehicles, spell selection, a
@@ -1175,6 +1321,189 @@ disguise icon row) one at a time. Full detail: `docs/commands.tsv` (`tribe_cmd` 
   cases): it's a THIRD standalone callback cluster, gated on a Shift-key read the same way the spell tab's own
   click handler gates on its still-unidentified flag pairs - worth searching for a Shift-equivalent of
   `0x895DAA` (the still-unconfirmed Ctrl-bit candidate from the prior session) the same way.
+
+**Chased further, a later session (user clarified the "different behaviour on the same icon" report is about
+BUILDING icons specifically, not spells): found a real, previously-uncatalogued candidate, but NOT via a
+standalone widget callback as hypothesized above - it's a THIRD `process_cmd` switch case, sitting right next to
+`0x77`/`0x78` in the same switch.** Read linearly past `0x77`/`0x78`'s own case body (own `commands.tsv` row) into
+whatever came immediately after it in the binary and found a genuine new case start, confirmed via `backup.xml`'s
+own `SYMBOL` entries as `caseD_79` of the SAME `switchD_004abc0e` - **`ui_cmd 0x79`, never catalogued before** (own
+new `commands.tsv` row). Its body issues `tribe_cmd` kind `0x11` (17, `order_building_approach` - "target a cell
+position rounded to a building-corner-style grid," already documented, shared with kinds 31/32) using a cached
+position global (`0x87CABA`). This is a strong candidate for "send the selected unit(s) to/into a building" - very
+plausibly the user's actual remembered action - but **two things are NOT yet confirmed**: (1) whether this really
+is the user's described feature (vs. some other building-approach use, e.g. an AI/native path reaching the same
+`ui_cmd` case is implausible since `ui_cmd` is player-input-only, but the exact PLAYER ACTION it corresponds to
+in play was not verified), and (2) **its own trigger** - unlike the hoped-for "Shift-key read inside the handler"
+hypothesis above, `0x87CABA` and its sibling flag byte `0x87CABC` turned out, after checking a representative
+sample of their several dozen OTHER readers/writers across the exe, to be a generic, widely-shared "last-clicked/
+hovered cell" cache used pervasively by the UI layer for completely unrelated purposes - NOT a modifier-key
+candidate, and no Shift-shaped bit test was found anywhere near this case's own body. **So the Shift-key hypothesis
+for how `0x77`/`0x78` vs `0x79` gets selected did not pan out - `process_cmd` just dispatches whichever raw `ui_cmd`
+id it's given, the same as every other case; the real remaining question is purely "what HUD click sends raw id
+`0x79` instead of `0x77`/`0x78`,"** which could still be a Shift-modified click on the SAME building icon, or -
+more likely by analogy with the spell tab's own just-found 3-callback-per-icon structure (own `functions.tsv` row,
+`0x5ca23d`) - a WIDGET TABLE for the building tab's own icons with multiple callback slots per entry, one of which
+is reached via a different mouse button rather than a key modifier at all. **Next step: find the building tab's
+own equivalent of the spell tab's `0x5ca23d` table** (same technique: search the raw exe for a building-tab
+callback's address embedded as literal data - candidates to use as the search anchor weren't identified this
+session, since `0x4BA640`/`0x4BA6B0`/`0x4ACDC1` all turned out to be plain `process_cmd`-internal code with no
+embedded-pointer references of their own, meaning none of them are themselves a widget-table entry; the real
+per-icon callbacks that eventually ISSUE `ui_cmd 0x77`/`0x78`/`0x79` from a HUD click, rather than process_cmd's
+own case bodies that HANDLE those ids once issued, are what still needs finding).
+
+**Chased this one level deeper, a later session: tried to find `process_cmd` itself being CALLED with a real,
+player-driven id, to shortcut the whole "find each widget's own table" effort - ran into a wall worth recording
+precisely so nobody re-walks it.** Exhaustively grepped the WHOLE disassembly for every literal `call 0x4aab80`
+(`process_cmd`'s own address) - methodology sanity-checked against a known-heavily-called function (`0x48a050`,
+211 hits, as expected) to rule out a tooling bug. **Found exactly 11 call sites in the entire exe, and every
+single one is either a recursive self-call from within `process_cmd`'s own body, or from one of a small, clearly
+special-purpose set of functions**: 3 near-identical ~180-byte tutorial-checkpoint triggers (`0x4904D0`/
+`0x491A90`/`0x491B60`, all pushing literal id `0x15`); the chat-dialog "activate" callback (`0x4AA1C0`, own row,
+pushing `0x66` - likely to force a synthetic cursor-position refresh when the dialog opens, not a real click);
+`0x4A9D90` (the chat/cheat-entry keystroke callback, own row, pushing `0xB0` or `0x9B` depending on which key);
+`FUN_004AF780` (a dialog-adjacent function, 3 internal sites all pushing `0x9B`, i.e. "cancel/close"); and a
+newly-characterised function, **`main_3`/`0x4A4450`** (own new `functions.tsv` row - NOT the per-frame loop
+despite the name's suggestion; a periodic window-focus-recovery routine, most of its body config/language
+re-init and `0x5cd958`/`0x89c661`-flag-gated resync, calling `process_cmd(0x9a)` exactly once, only on a narrow
+"focus just came back" transition). **None of these 11 represents the general "any keypress or HUD click ->
+process_cmd(its real id)" path** - confirmed by also reading `main_loop_outer`'s (`0x4A5590`, own row) own
+previously-"unread" per-frame call sequence (`0x43DD30`/`0x43E890`/`0x47AAC0`/`0x43E320`/`0x47AC30`): these
+resolve to `netcam_rec`, the already-documented `process_tribes_cmd` queue-drain, and two more `tribe_cmd`-QUEUE
+bookkeeping helpers (`inc_tribes_commands`, `clear_temp_tribe_command_buffer`) - i.e. this whole sequence is
+`tribe_cmd` (the QUEUED, post-translation layer) bookkeeping, confirmed to never touch raw `ui_cmd`/`process_cmd`
+at all. Also checked for an indirect-jump bypass (a caller jumping straight into `process_cmd`'s own switch,
+skipping its prologue, which would dodge the `call 0x4aab80` grep) by searching for any reference to the
+switch's own address (`0x4ABC0E`) or the breakpoint-proven `ebx`-load point (`0x4AABA1`/`0x4AAB9A`) - none found
+either. **Net: the real mechanism that calls `process_cmd` with an actual player-driven raw id (confirmed to
+exist and work, per this file's own earlier live-GDB session catching `b`->`0xBF` and an interleaved hit ->
+`0x59`, NEITHER of which matches any of these 11 literal ids) could not be found by this session's static
+methods** - it must be a genuinely indirect/computed call whose target address is never written anywhere as a
+literal immediate or data pointer, the same wall this whole investigation keeps hitting (the `0x98F140` keystate
+table, the `0x5d6684`/`0x5ca23d` widget tables' own readers, and now `process_cmd` itself). **This is now the
+single most load-bearing open question in the whole HUD-dispatch thread** - resolving it would likely also
+resolve the disguise-icon, Ctrl/Shift-modifier, and building-icon dispatch questions all at once, since they all
+reduce to "what code decides which raw id to hand to `process_cmd`." Given this session's own earlier, hard-won
+lesson about GDB attachment itself suppressing/crashing input delivery (this file's own entry above), the
+concrete next step is a DELIBERATELY SHORT live session: arm the breakpoint, send exactly ONE real building-icon
+click, capture the backtrace/call-stack at the hit (not just `ebx`), and detach immediately - a full call stack
+at the moment of the hit would show the REAL caller directly, sidestepping the need to find it by static
+address-literal search at all.
+
+**Attempted the live half of this same session, got blocked on mouse precision before ever arming GDB - a
+cheaper, narrower mouse-calibration data point worth recording before the next attempt.** With the Docker rig
+still up from earlier (`docs/cheat.md`'s own "Docker headless rig"), tried to click the HUD's building-tab icon
+(top-left of the three tab icons) to even get the building-icon grid on screen before thinking about a
+breakpoint at all. The relative-mode cursor drift this file's own earlier entries already describe (the game's
+own rendered cursor position and the X11 pointer position only stay in sync while the X11 pointer's start AND
+end point are both inside the game window's rectangle) turned out to be WORSE than previously characterised:
+even carefully bounds-checked single relative moves (confirmed via `xdotool getmouselocation` before and after,
+always landing inside `728,455`/`640x480`) sometimes produced NO visible cursor movement at all, and the
+apparent "rendered position vs. X11 position" offset drifted between attempts rather than staying fixed - never
+got a reliable fix on the exact small (~28x28px) home-tab icon despite ~10 iterative nudge-and-screenshot
+rounds. **Burned this session's remaining live-attempt budget here, never reached arming the breakpoint.**
+Worth trying a fundamentally different input method next time rather than more of the same nudging - e.g.
+`xdotool` with `--clearmodifiers`, a genuinely held `keydown`+`mousemove`+`mouseup` sequence instead of the
+single `click` verb, or checking whether the game's own cursor speed/acceleration setting (if exposed in its
+`OPTIONS` menu) can be turned down to make the relative-mode mapping less sensitive and easier to calibrate -
+or simply accept more rounds of trial and error are needed and budget for them explicitly up front, rather than
+expecting the same calibration to transfer session to session (it hasn't, twice now). **User-provided fix,
+same day**: this drift is a known, GENERAL issue with this game/engine (not specific to this Docker rig,
+Xvfb, or this investigation) - it happens outside Docker too, on Wayland or with multiple displays, and **the
+reliable fix is a game restart**, not trying to re-calibrate the existing session's drifted mapping. Next live
+session should restart the game (not just re-attach/re-navigate) BEFORE attempting any precision click, rather
+than spending budget fighting an already-drifted cursor.
+
+## BREAKTHROUGH, same session: the real `process_cmd` dispatch mechanism found at last - restarting the game fixed the mouse calibration, which unblocked everything else
+
+Restarted the game as recommended (above) and the mouse precision problem genuinely vanished - every click
+landed where intended on the first or second try, instead of the ~10-round nudge fights from before. With that
+unblocked, armed `process_cmd`'s own breakpoint (`docs/cheat.md`'s "process_cmd breakpoint method", `break
+*0x4AABA1`) with a `commands` block that captures `ebx` AND the real return address (`x/1xw $esp+0x34c` - NOT
+`bt`, which produced garbage frames under the architecture-mismatch warning; `$esp+0x34c` is the exact offset
+past `process_cmd`'s own `sub esp,0x33c`+4-register-push prologue, landing on the actual return address), then
+clicked the 3D viewport with a worshipper selected. **It worked, and did not crash**: `ebx=0x6E`, return address
+`0x004AA4C8`.
+
+That return address resolves to a REAL, non-hardcoded, player-driven call to `process_cmd` - the first one ever
+found in this whole investigation (`process_cmd`'s own 11 static call sites, found and exhaustively ruled out two
+sessions ago, all push literal immediates). Read the caller (`0x4AA1C0`, own `functions.tsv` row - previously
+catalogued only as "the chat-dialog activate callback," now confirmed to ALSO serve as a generic click-resolver)
+and found it calls a THIRD function, `0x489470` (own new row), three times with different category arguments.
+**`0x489470` is the missing piece**: a generic widget-list walker - `ecx`=a table of (at least) 4 linked-list
+heads, one per "page/category," each node holding a packed 3-bit grid x/y position, a type/category filter, a
+validator callback pointer (`[+6]`), and - critically - **its own raw `ui_cmd` id as its very first field
+(`[+0]`)**. The function finds the first node whose category and grid position match the click, calls its
+validator, and returns `[+0]` straight up the call chain to become `process_cmd`'s own argument. **This is almost
+certainly how EVERY real HUD/viewport click in the whole game resolves to a raw id** - each clickable icon
+(spell, building, population, disguise, everything) is one node in one of these category lists, not a flat array
+like the front-end (`0x5d6684`) or spell-tab (`0x5ca23d`) tables found in earlier sessions - those must be a
+DIFFERENT, simpler widget system used only by those specific screens, with this linked-list one being the more
+general in-game mechanism.
+
+**Decoded `ui_cmd 0x6e`/`0x6f` itself along the way** (own new `functions.tsv` row, `0x4AC5A7`) since that's what
+my test click happened to land on: it's "select my own unit under the cursor" (resolves a class-1 person at the
+clicked position, requires local-tribe ownership, stashes its position, plays sound `0x6A`, fires a per-player
+notification) - not a building or disguise handler. But two things in its body matter a lot for the OTHER still-
+open threads: (1) it reads `0x895DAA`&`0x1` (the Ctrl-bit candidate) as a real gate on its own Ctrl-click variant
+- a THIRD confirmed reader of this bit beyond `ui_cmd 0x71`'s own 2, making the "it's a real Ctrl-held flag"
+reading noticeably more solid than before; (2) its Ctrl-held branch gates on the EXACT SAME tribe-indexed byte
+pairs (`0x9845AE`/`0x9846AE`/`0x98462E`/`0x98472E`) the spell tab's own click handler (`0x49E650`'s own row)
+reads - strong, independent cross-confirmation that these bytes really are a generic "is this tribe
+busy/not-ready" gate shared across multiple, unrelated click handlers, not something spell-specific, reinforcing
+(without fully proving) the earlier "hot-seat tribe-focus" reading over a mouse-button/modifier discriminator.
+
+**Concrete next steps, now that the real mechanism is understood**: (1) the 4 list-head pointers live at a fixed
+base (`0x98CE6C` in the one confirmed call) - these are runtime-populated (zero in the static file), so finding
+the building-tab icons' own list (and the exact node holding raw id `0x77`/`0x78`/`0x79`) needs a LIVE memory
+walk of this table, not another static search - and now that a working, non-crashing live methodology exists
+(restart first; `break *0x4AABA1`; capture `ebx`+`x/1xw $esp+0x34c`, not `bt`; a `continue` in the commands block
+is safe AS LONG AS the hit itself didn't come from the same crash-prone resume path two sessions ago flagged -
+not fully reconciled, but worked cleanly 3 times in a row this session), walking that table directly (`x/40xw
+0x98ce6c` style) while a building icon is selected and the mouse hovers a buildable cell should read off the
+building-tab's own list head and its nodes' raw ids directly, without needing a lucky click at all. (2) `0x4AA1C0`
+is itself reached indirectly too (embedded as data at `0x5CC59C`, in a struct alongside `0x4A9D90`/`0x4A9C30`) -
+finding ITS OWN reader would reveal the true top-level per-frame click-dispatch loop, closing the loop
+completely.
+
+**Did the live memory walk immediately, same session (read-only, no breakpoint - much lower risk than the
+click-capture above).** Confirmed the node layout byte-for-byte (own `functions.tsv` row,
+`0x489470-widgetlist`) and read real nodes out of all 4 categories. Category 1 held a handful of already-
+catalogued, general-purpose ids (`0xB9`/`0x46`/`0x9B`/`0x9D`/`0x6C`) sharing a "position `0x00`, category byte
+`0x09`" shape - reads like a position-independent, keyboard-shortcut-equivalent category rather than on-screen
+icons. Categories 2/3/4 each turned out to be short, PARALLEL chains with identical shapes: `0x84`/`0x85`/`0x86`
+(shared case body) then `0x8A`/`0x8B`/`0x8C` (own new `commands.tsv` row - traced their shared handler too: gates
+on the same tribe-busy bytes `ui_cmd 0x6e`/`0x6f` and the spell tab read, then computes `raw_id + 0x77` wrapped
+mod-256 as an argument to an untraced `0x47C350` - momentarily looked like it might resolve to our target ids
+directly, but the arithmetic actually wraps to `0x01`/`0x02`/`0x03`, not `0x77`/`0x78`/`0x79` - false alarm, caught
+before writing it up wrong). **`0x77`/`0x78`/`0x79` themselves were not found in any of the 4 categories sampled**
+- either a 5th+ category exists that `0x4AA1C0`'s own 3 call sites (observed range 1-4 only) never reaches, or the
+building panel's own list only populates while that panel is the active one (this walk was done with the
+building panel open and a type already selected, so this is the less likely explanation, but not ruled out).
+**Concrete next step, cheap and low-risk since it needs no breakpoint**: redo this exact walk fresh, from a clean
+game restart, with the building panel open and freshly re-clicking the hut icon right before reading
+`0x98CE6C`'s table, and/or check whether `0x489470` is ever called with an `eax` outside the 1-4 range from
+somewhere other than `0x4AA1C0` (a 5th/6th category would need a different caller entirely, not found this
+session).
+
+**Done immediately, same session (asked to "rewalk the table").** First read `0x4AA1C0` in FULL, start to end
+(only fragments had been read before) to understand exactly which `esi` "event type" values take which path,
+rather than keep guessing from live hits alone. Found the complete picture: `esi`∈{`0xF0`,`0xF1`,`0xF2`} are
+position-STAGING events (cache a position into one of 3 global slot-pairs for later consumption elsewhere, never
+touch `process_cmd`); `esi==0x39` with specific mode-flag gates pushes literal `0x63`; anything else falls to a
+DEFAULT path gated by two untraced validity checks (`0x431140`, `0x47B460` - the former walks an unrelated
+world-bounds list at `0x683B70`, nothing to do with HUD rectangles as first guessed) before finally computing a
+1-4 category (via `cmp ebx,1; sbb al,al` - NOT the event type) and calling `0x489470` - this is the exact path my
+own test clicks hit both times. **Then re-did the live walk properly, with a GDB `while`-loop script instead of
+manual hops, to exhaustion** (own `functions.tsv` row, `0x489470-widgetlist`, now carries the complete,
+null-terminated catalogue of all 4 chains: category 1 has 7 nodes, categories 2/3/4 have exactly 3 each, lining
+up by position byte into 3 clean triplets `0x84-86`/`0x8a-8c`/`0x90-92`). **`0x77`/`0x78`/`0x79` are definitively,
+exhaustively NOT in this table** - not a sampling gap, every chain was walked to its own null terminator. **This
+closes `0x98CE6C`'s table as a lead for the building icons entirely.** Given `0x4AA1C0` itself is one of several
+sibling callbacks in a shared "registered handler" struct (`0x5CC59C`, alongside `0x4A9D90`/`0x4A9C30`), the
+building-tab's own click dispatch almost certainly lives behind a DIFFERENT sibling handler with its OWN,
+separate `0x489470`-shaped table (different `ecx` base) - finding that OTHER handler (and what calls it) is the
+real remaining next step, not further walks of this specific table.
 - **Checked again, still not found: the per-tribe disguise-icon HUD button array.** The user clarified this is
   an ARRAY (one icon per other tribe), which would explain why a single-callback search kept failing - but this
   session's own two targeted checks still turned up nothing: (1) `0x4DE760` (apply-disguise primitive) has
@@ -1198,3 +1527,79 @@ disguise icon row) one at a time. Full detail: `docs/commands.tsv` (`tribe_cmd` 
   camera-relative radius and a whole-level sweep - `0x451720`'s own row already names its loop bound `0x5AA598`
   as "not identified, plausibly a map-wide or radius-derived cell count," exactly the toggle this would need to
   explain - not re-read this session).
+
+## Found a second reader of the Ctrl-candidate byte `0x895DAA`, but it unravels into front-end/new-game code, not an in-game HUD panel (later session)
+
+Went looking for a sibling "Shift" bit alongside `ui_cmd 0x71`'s own confirmed bit-`0x1` reader of `0x895DAA`
+(this file's own "Multiple Burns" thread, and the building-tab Shift+click hypothesis two sections above) by
+re-grepping the WHOLE disassembly for every access to that exact byte, rather than trusting the earlier "only 2
+readers" count. **Found a genuine third reader, testing a DIFFERENT bit of the same byte**: a small standalone
+function (`0x4C3520`, own new `functions.tsv` row) does `test byte ptr [0x895DAA],0x40` and branches on it - the
+first confirmed second-bit use of this global in the whole exe. Chased where `0x4C3520`'s own address came from
+(not called directly anywhere - found by searching the raw exe bytes for its address as a literal 4-byte pointer,
+the same method that cracked the spell/HUD dialog descriptor structs in earlier sessions) and it turned up
+embedded in entry 0 of a previously uncatalogued **39-entry, 44-byte-stride widget/button table** at `0x5D6684`
+(own new `functions.tsv` row) - each entry has its own callback-function-pointer field, `0x4C3520` being entry 0's.
+
+**Chased several of the OTHER entries' callbacks too, and they unravel the hoped-for connection**: `0x4C3520`'s
+own two branches (`0x45A3C0`/`0x4C3340`, own new rows) and several sibling table entries' own callbacks
+(`0x40D140`/`0x40EA50`/etc., several of which turned out to just be thin wrappers around `0x45A3C0` itself) read
+overwhelmingly as **new-game/level-start/front-end-screen code**, not in-game HUD panel logic: `0x4C3340`'s own
+cases each push one of 3 recurring struct literals that resolve, through a chain of pointers, to literal
+`data\fenew\fe*.dat` asset path strings (fade/palette/background/"ghost" transition art - **"ghost" here is a
+front-end transition graphic name, unrelated to the Ghost Army spell**, confirmed by reading the actual path
+string, not guessed), and the shared tail both branches eventually reach (`0x49CC80`) zeroes a ~2KB block
+shaped exactly like a full tribe/level-state reset and resets several "game mode" flag words - the unmistakable
+shape of "begin loading a specific game/level variant." **Net: this table is most likely the star-map or
+main-menu's own button array, not an in-game spell/building/population HUD panel** - still a genuinely new,
+previously-uncatalogued find (and the first concrete SECOND bit of `0x895DAA` ever found, worth re-examining if
+the Ctrl/Shift search ever needs a live check of that byte anyway, since a modifier-click on the MAIN MENU or
+star map, e.g. "hold Ctrl to skip the flyby/briefing," is itself a plausible, checkable behaviour), but it does
+**not** resolve the in-game spell-tab/building-tab/population-tab modifier questions this section was chasing -
+those remain exactly where the sections above left them.
+
+**Two concrete leads left for whoever continues this**: (1) the table's own reader (what code actually iterates
+these 39 entries and dispatches clicks to them) was not found - exhaustively grepped for a literal reference to
+the table's base address and for an immediate multiply-by-stride (`0x2c`=44) indexing pattern, found neither;
+confirming the "star-map/main-menu" guess needs finding this reader, or a live check (watch `0x895DAA`/call
+`0x4C3520` while clicking around the star map and main menu with Ctrl held). (2) the ~30 OTHER entries' callback
+addresses in the same table are still unopened (listed in `0x5d6684`'s own `functions.tsv` row) - worth a pass
+to see if ANY of them turn out to be in-game after all (the table could plausibly mix front-end AND in-game
+entries if it's actually a more generic "all top-level screens' primary button" array rather than one screen's
+own private table) before fully writing off this thread for the in-game HUD questions. **Checked, same session:
+sampled 6 more of the ~30 ("0x40d140"/"0x40ea50"/"0x4c4c10"/"0x4584f0"/"0x42cf90"/"0x4c5a40") - every one of them
+also ties back to the same new-game/level-start subsystem** (`0x4c5a40` directly calls `0x4b1e10`, the already-
+documented main-menu reset routine, then touches the same per-tribe `0x59DF10` table `0x4C3340`'s own row uses;
+`0x42cf90`/`0x4584f0` share an identical guard preamble and both touch `0x5fc9f4`/`0x5fc9f5`, the exact flag
+`0x4C3340`'s own shared tail sets to `1` on a successful load) - **no in-game entry found in this second sample
+either, raising confidence this whole table really is the pre-game flow's own, not a mixed table.**
+
+**Also chased the writer side of `0x49E650`'s own "two disjoint pairs" discriminator bytes this session (the
+concrete next step that function's own `functions.tsv` row already named) - still unresolved, but reframed.**
+An exhaustive grep (both absolute-address and `[reg+literal]` forms) found all 8 bytes read 14-18 times each,
+written literally NOWHERE - the same "indirection defeats literal-address grep" wall this whole investigation
+keeps hitting. **More importantly: the exact same 4-byte check (`0x9845BB`/`0x9846BB`/`0x9845C7`/`0x9846C7` then
+`0x9845AE`/`0x9846AE`/`0x98462E`/`0x98472E`) appears, in the SAME shape, at the START of essentially every one of
+the ~14 individual widget-click-handlers in the whole `0x4A0F00`-`0x4A1400` cluster** - not just the spell tab's
+own handler. A check performed identically by every unrelated HUD button (unit-select, spell, building, ...) is
+much more consistent with a GENERIC "is tribe 0 or tribe 1 currently UI-focused" gate (matching this catalog's
+existing "plausibly hot-seat/local-multiplayer tribe-focus state" guess) than with a per-feature mouse-button or
+modifier-key discriminator - **the spell tab's own `tribe_cmd 0x74`-vs-`0x75` branch is likely "which tribe am I
+acting on," not "which button/modifier was used," reframing rather than answering the user's original "two
+different behaviours on the same icon" report.** If that reframing is right, the actual left-click-vs-other-
+button distinction the user described must live somewhere else entirely - the most likely remaining shape, by
+analogy with the `0x5d6684` front-end table's own simple per-entry-hardcoded-opcode design, is that the spell
+icon has TWO SEPARATE entries in ITS OWN widget table (one per mouse button, each with its own hardcoded
+opcode/handler), not a single callback branching internally on a runtime-read modifier - worth looking for the
+spell tab's own equivalent of the `0x5d6684` table (same "find a callback's address embedded as literal data"
+technique) rather than continuing to stare at `0x49E650`'s own body.
+
+**Separately, a genuinely new fact about `0x895DAA` itself, found while re-reading `0x49E650`'s own prologue**:
+this function does `or dword ptr [0x895DA8],0x800000` (sets bit `0x80` of `0x895DAA`, read as bytes) as a side
+effect of a valid spell-icon click - a WRITE, by a completely unrelated subsystem, to the same byte `ui_cmd 0x71`
+reads bit `0x1` of and `0x4C3520` reads bit `0x40` of. **`0x895DAA` is now confirmed to be a generic, shared
+multi-bit scratch/event-flag byte used independently by at least 3 unrelated pieces of code, not a byte
+dedicated to keyboard-modifier state** - this doesn't disprove the bit-`0x1`-is-Ctrl reading, but it does mean
+"some other bit of this byte does something Ctrl/Shift-unrelated" is no longer a surprising result if a future
+session finds it, and a live watch of this byte should expect to see MULTIPLE, unrelated bits moving for
+unrelated reasons, not just the one being tested for.
