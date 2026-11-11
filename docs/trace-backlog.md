@@ -894,7 +894,14 @@ static pass with `game/constant.dat` present - **not done this session, left ope
     behaviour. A Ctrl-click (no Alt) multi-burn queue could plausibly be either the SAME mechanism with a
     different modifier-key gate, or a sibling one built the same way; not traced, a concrete next lead (check
     `0x4BA9B0`'s own modifier-key read, and whether `process_cmd`/`process_tribe_cmd` has a second, Ctrl-only
-    entry point near it using the same slot-counter pattern but issuing kind 15 instead of kind 6/0xB).
+    entry point near it using the same slot-counter pattern but issuing kind 15 instead of kind 6/0xB). **User
+    clarification**: this is a CHAINING queue, not simultaneous multi-target arson - the spy finishes (or
+    abandons) the current burn, goes idle, THEN advances to the next queued Hut, one at a time. This is exactly
+    the user-visible behaviour `order_advance`'s own already-documented round-robin slot scan produces for patrol
+    points (advance to the next non-empty secondary slot once the current one's order ends) - strong support for
+    "same slot-queue mechanism, Ctrl-only modifier, kind 15 instead of kind 6/0xB" over a sibling/parallel
+    mechanism. Next step unchanged: find the modifier-key read and the (still-unlocated) `process_cmd`/
+    `process_tribe_cmd` entry point that queues kind 15 into these slots.
   - Also mentions a spy is weak in melee (reportedly ~3 spies needed to kill 1 brave) and a minor "attacking a
     damaged building mid-repair" glitch - both consistent with/orthogonal to this session's own findings, not
     independently chased (the combat-weakness number would need `game/constant.dat`'s own per-type stat table,
