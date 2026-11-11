@@ -933,3 +933,63 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   call site (or a `ui_cmd` case feeding one) in `process_cmd`'s own body where the pushed opcode is one of
   {0x1E,0x26,0x27,0x37,0x38,0x39,0x3A,0x3B,0x3C} (or any other alias not yet enumerated from `backup.xml`) and the
   arg1 push is register-sourced rather than a literal `0`.
+- **New lead, later session (chasing the HUD dispatch question from a different angle - see the new "HUD widget
+  dispatch" section below): not every player action goes through `process_cmd`'s own two switches at all.** Found
+  a cluster of ~14 small, standalone widget-click-handler functions (`0x4A0F00-0x4A1400`) that call straight into
+  a shared dispatcher (`0x450F30`, own `functions.tsv` row) and from there `set_tribe_command` directly - entirely
+  bypassing the catalogued `ui_cmd` numbering space. This is a plausible explanation for why multiple sessions'
+  exhaustive sweeps of `process_cmd`'s own switches (`switchD_004aabca`/`switchD_004abc0e`, ~150 case ids between
+  them, now both fully catalogued - see `docs/commands.tsv`) never turned up a literal disguise(kind 16)/arson
+  (kind 15) click handler: **the tribe-colour HUD icon the user described (left-click, near the shaman shortcut)
+  may well be one of these same standalone widget callbacks, not a numbered `ui_cmd` case at all** - worth
+  checking the SAME `0x4A0Fxx`-`0x4A14xx`-shaped address range (or wherever else similar small per-widget
+  callback clusters exist) for one that computes `arg1=0x10` before calling `0x444F60`'s own tribe_cmd range (or
+  queues straight into `0x435780`/`0x435CB0`, the shared template-apply pair), rather than continuing to sweep
+  `process_cmd`'s own switches (now exhausted for this purpose).
+
+## HUD widget dispatch: idle-unit selection, panel toggle, building-type candidate (later session)
+
+Chased a parallel user-reported lead (HUD actions: dispatching units to buildings/vehicles, spell selection, a
+stats-panel "add idle units of a type to selection" button, HUD tab-switching, a dedicated select-the-shaman
+control) by pulling `process_cmd`'s own two internal switch statements wholesale via Ghidra's own switch analysis
+(`switchD_004aabca` and `switchD_004abc0e`, ~150 raw `ui_cmd` case ids between them, neither previously
+extracted by any session - see `docs/functions.tsv`'s own note on `process_cmd`, `0x4AAB80-0x4AD5C3`) and tracing
+the previously-uncatalogued contiguous `0x6e-0x96` id block plus its downstream `tribe_cmd` targets. Full detail
+in `docs/commands.tsv` (`ui_cmd` rows `0x6e`/`0x6f`, `0x71`-`0x78`; `tribe_cmd` rows `0x2a`, `0x2b`, `0x53`-`0x55`,
+`0x60`, `0x67`, `0x7b`, `0x7d`) and `docs/functions.tsv` (`0x450F30`, `0x4DE610`). Headline results:
+
+- **RESOLVED: the stats-panel "select all idle units of a type" button is now fully traced**, from the HUD click
+  (a cluster of standalone widget callbacks at `0x4A0F00-0x4A1400`, calling a shared dispatcher `0x450F30`) down
+  to the actual selection mechanism (`tribe_cmd 0x53`, `0x43FD62`: walks the tribe's own `person_units` list,
+  filters by type, claims and sets the selection flag `+0x7A` bit `0x80` on each match - the same selection bit
+  `0x4BA9B0`'s own patrol-point row already established). Three sibling ids (`0x54`/`0x55`/`0x7D`) are confirmed
+  queued from the same dispatcher's other jump-table slots but their own handler bodies weren't read this session
+  - a quick follow-up (read their own `switchD_0043e922` case bodies, confirm they're structurally identical to
+    0x53 with a different type filter) would close this out completely, along with the 2 further jump-table slots
+    (indices 4/5) `0x450F30`'s own body wasn't fully read for.
+- **Candidate, not confirmed: `ui_cmd 0x72`/`0x73` as a HUD-panel-open/close (tab-switch) pair** - `0x72` sets two
+  UI-mode bits together, `0x73` clears one of them alone, with no unit/position resolution at all in either case
+  - structurally exactly what a panel-open/tab-switch control should look like, but not checked against a live
+  keybind or specific panel this session.
+- **Candidate, NOT confirmed: `ui_cmd 0x77`/`0x78` as building/construction-type selection** - reads a
+  "currently selected type" byte into a per-type property table and branches on whether that type is literal
+  `0x11`(17); the shared cell-occupant gate `0x4B98F0` (already known from patrol points) is also called here.
+  Plausibly related to the user's "dispatch to building/vehicle" HUD description, but the branch actually
+  reached when type==17 (and what type ids even mean here) wasn't read - **this is the single most promising
+  unfinished thread for the vehicle/building dispatch question**, picking up from `0x4ACBAD`/`0x4BA640`.
+- **Not found this session despite a direct, targeted search: a dedicated "select the shaman" HUD button.**
+  Grepped for direct calls to the shaman resolver (`0x4F25A0`) and for reads of `tribe+0x89D` (the shaman
+  reference other commands use) anywhere inside `process_cmd`'s own two switches - zero hits in either. Combined
+  with the idle-selection finding above (reached via a STANDALONE widget callback, not a `ui_cmd` case at all),
+  the shaman-select button is more likely to be a similar standalone callback than a numbered `ui_cmd` case -
+  worth searching the same way (grep for `call 0x4f25a0` or a `tribe+0x89d` read ANYWHERE in the exe, then
+  checking which of those call sites sit in a small, HUD-shaped function rather than AI/scripted code).
+- **Spell-selection UI: not found, not chased this session** - no case in either switch was seen writing an
+  obvious "currently selected spell id" field or reading a spell-cost table directly; given the pattern above
+  (stats-panel and, plausibly, shaman-select both live OUTSIDE `process_cmd`'s switches), this is also a
+  candidate for a standalone widget-callback cluster rather than a `ui_cmd` case - not yet searched that way.
+- Two new, incidentally-found primitives worth a future session's attention: `0x4DE610` (functions.tsv row -
+  "is a preacher mid-sermon on this cell", a selection/re-targeting guard, sitting suspiciously close in address
+  space to the already-documented spy-disguise cluster `0x4DE700-0x4DE7F0` but NOT itself spy-related - a
+  coincidence worth remembering before assuming anything near that address range is disguise-related) and its
+  unread neighbour `0x4DE680`.
