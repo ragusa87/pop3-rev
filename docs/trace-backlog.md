@@ -1021,3 +1021,61 @@ in `docs/commands.tsv` (`ui_cmd` rows `0x6e`/`0x6f`, `0x71`-`0x78`; `tribe_cmd` 
   space to the already-documented spy-disguise cluster `0x4DE700-0x4DE7F0` but NOT itself spy-related - a
   coincidence worth remembering before assuming anything near that address range is disguise-related) and its
   unread neighbour `0x4DE680`.
+
+## HUD widget dispatch, round 2: spell tab resolved, building tab clarified, disguise icon still not found (later session)
+
+Chased the user's own detailed, first-hand HUD descriptions (Population tab unit-count modifier, Shift+click
+building-tab worker dispatch, spell tab's two-mouse-button split, camera-relative radius selection, a per-tribe
+disguise icon row) one at a time. Full detail: `docs/commands.tsv` (`tribe_cmd` rows `0x74`/`0x75`, `ui_cmd 0x77`/
+`0x78` deepened) and `docs/functions.tsv` (`0x49E650`, `0x4BA640`, `0x4BA6B0`, `0x4B9D50`).
+
+- **RESOLVED: the spell tab's "left-click selects/casts, the other mouse button toggles charge-pause" shape is
+  confirmed mechanically, from a single click handler (`0x49E650`, sits immediately after the spellbook's own
+  draw routine `0x49DAF0`).** It issues ONE of two different commands depending on which of two disjoint
+  tribe-indexed flag-pairs is set: **`tribe_cmd 0x75`** - make the clicked spell the sole one accumulating
+  charge, blocking every other learned spell (and remembering which ones it blocked, so clicking the SAME spell
+  again undoes it and resumes everyone) - matches "left-click selects a spell, focusing mana on it" exactly, a
+  sensible Populous mechanic; and **`tribe_cmd 0x74`** - read the clicked spell's OWN current charge-blocked
+  state, invert it, and apply that single inverted value to EVERY learned spell at once (pause-all or
+  resume-all) - matches "the other button toggles charge/pause" in effect, though it affects every spell
+  together rather than just the one clicked. **Not nailed down: the literal mouse-button bit.** No raw
+  button-code read was found anywhere in `0x49E650`'s own body - the two flag-pairs it tests (`0x9845AE`/
+  `0x9846AE`+`0x98462E`/`0x98472E` for 0x75 vs `0x9845BB`/`0x9846BB`+`0x9845C7`/`0x9846C7` for 0x74) read the
+  same shape as other per-tribe UI-focus flags elsewhere in this catalog (plausibly hot-seat/split-tribe state,
+  not a button mask) - their WRITER side wasn't traced. A live session clicking a spell with each mouse button
+  while watching which flag flips would close this out completely.
+- **Clarified, not confirmed: the building tab's `ui_cmd 0x77`/`0x78` (already a "candidate" from the prior
+  session) is a building/construction-TYPE validity check, NOT the user's described Shift+click worker-dispatch
+  action.** Read both of its branches fully: the non-17 branch validates whether the clicked cell is either an
+  existing matching occupant or an empty site already marked by a construction-placeholder object (`0x4BA640`);
+  the type-17 branch (`0x4BA6B0`) checks for a valid existing building of a specific type/state near the click.
+  Neither branch touches the unit-selection list, the `+0x7A` selection flag, or any "assign as worker" write -
+  **this case is building-placement/type-selection validation, and the Shift+click-to-assign-workers mechanism
+  the user described is still genuinely unlocated.** Strong working hypothesis, by analogy with the idle-select
+  and spell-tab findings above (both turned out to be standalone widget callbacks, not `process_cmd` switch
+  cases): it's a THIRD standalone callback cluster, gated on a Shift-key read the same way the spell tab's own
+  click handler gates on its still-unidentified flag pairs - worth searching for a Shift-equivalent of
+  `0x895DAA` (the still-unconfirmed Ctrl-bit candidate from the prior session) the same way.
+- **Checked again, still not found: the per-tribe disguise-icon HUD button array.** The user clarified this is
+  an ARRAY (one icon per other tribe), which would explain why a single-callback search kept failing - but this
+  session's own two targeted checks still turned up nothing: (1) `0x4DE760` (apply-disguise primitive) has
+  exactly the same 2 callers as every prior session found (both already-documented AI paths) - no new direct
+  caller anywhere; (2) no `set_tribe_command` call site anywhere in the exe pushes a literal `0x10`(16) as its
+  opcode argument (checked every one of its ~73 call sites) - consistent with the existing finding that the real
+  disguise-issuing opcode, if reached this way, is register-computed, not literal. **Both of `process_cmd`'s own
+  switches and the Population-tab (`0x450F30`) and spell-tab (`0x49E650`) widget-callback clusters are now
+  exhausted for this specific lead** - the per-tribe icon row, if it exists as described, is likely a FOURTH,
+  still entirely unlocated standalone callback cluster (indexed by tribe rather than unit-type or spell-slot),
+  feeding kind-16 into the shared `0x444F60` tribe_cmd range via a register-computed opcode/arg this session
+  could not locate by pattern-matching known shapes.
+- **Not reached this session, deprioritized for budget**: the Population tab's "Ctrl/Shift+click to select 1
+  vs 5 vs all" count modifier (checked only the TOP of `0x450F30`'s own preamble for a key-state read before its
+  jump table - found none there; the modifier, if real, most likely lives inside the individual widget callbacks
+  at `0x4A0F00`-`0x4A1400` or inside `tribe_cmd 0x53`/`0x7D`/`0x54`/`0x55`'s own still-partially-unread handler
+  bodies - `tribe_cmd 0x53`'s own row notes its list-walk has no visible count cap, so if a cap exists it's
+  likely passed as the count argument `0x450F30` already reads from `tribe+0xC22`, meaning the modifier key
+  would need to be read even earlier, by whatever UI code maintains that cached count - not chased) and the
+  radius-selection camera-vs-global framing for `tribe_cmd 0x72`/`0x451720` (the user says it toggles between a
+  camera-relative radius and a whole-level sweep - `0x451720`'s own row already names its loop bound `0x5AA598`
+  as "not identified, plausibly a map-wide or radius-derived cell count," exactly the toggle this would need to
+  explain - not re-read this session).
