@@ -872,7 +872,19 @@ static pass with `game/constant.dat` present - **not done this session, left ope
     This reframes the still-open "player-facing UI path to order kind 15" item just above: the likely entry point
     is not a separate UI case at all, but a **spy+building-target special case inside the generic attack-order
     path** (`attack_order_handler`/`0x51A2A0`, `attack_target_eligibility`/`0x51C3C0`) - see the new bullet below
-    for where this was chased.
+    for where this was chased. **RULED OUT, later same session**: fully swept `0x51A2A0`'s own two previously
+    untraced `[reg+0x2a],0x2` checks (`0x51B84E`, `0x51C81D`) and every read of the attacker's own type byte inside
+    `0x51C4C0` (`attack_target_eligibility`'s generic fallthrough, where a spy/type-5 attacker lands) - **no
+    type-5+building special case exists anywhere in the order-execution/eligibility layer** (own updated
+    `functions.tsv` rows `0x51a2a0`/`0x51c4c0`). One genuinely new, narrower finding turned up along the way:
+    ordering a spy to attack a class-9 ("shape") target unconditionally reveals it (`0x51B682`, calls `0x4DE7F0`
+    whenever the attacker's type is 5, regardless of disguise state) - a fourth, narrower reveal trigger, distinct
+    from the three already catalogued above. **Conclusion: the wiki's "arson uses the same procedure as attacking"
+    must describe the PLAYER-FACING click (select spy, left-click target), not a shared underlying order kind** -
+    whatever decides kind 15 vs. kind 19 for that click has to happen in `process_cmd` itself, before an order is
+    ever queued/executed - pushing the open "player-facing UI path to kind 15" question fully back onto the
+    already-recommended, still-not-attempted static pass through `process_cmd`'s own dispatch tables (next
+    bullet), now with higher confidence there's no shortcut through the execution layer instead.
   - **"Multiple Burns"**: a spy can set fire to several Huts in one go by holding Ctrl and left-clicking each Hut
     in turn (not confirmed whether this extends to other building types). Not chased this session but worth
     connecting to the ALREADY-confirmed Ctrl+Alt+click patrol-point mechanism (`0x4BA9B0`'s own row,
