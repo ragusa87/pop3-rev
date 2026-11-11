@@ -1,5 +1,29 @@
 # Trace backlog
 
+## Ghost Army, two items left open after this session's full trace (2026-11-11)
+
+`process_ghost_army`/`0x50D1A0` is now fully traced and live-verified (`docs/functions.tsv` row, `docs/effect_states.csv`
+row 13, `open-populous` `docs/specs/pop3-rev-analysis.md` "Ghost Army mechanics"/TODO.md). Two concrete items came up
+answering an `open-populous` implementation session's own open-question list that weren't resolved this session:
+
+- **`CAST_RELEASE` (cast-to-effect delay) for this spell specifically.** Every other ground-targeted spell already
+  documented in `pop3-rev-analysis.md` is released "6 turns into the cast jump" - plausible Ghost Army matches since
+  it's cast the same way (aimed on the ground, no shot), but not independently confirmed for THIS spell. Needs tracing
+  the generic spell-cast class-11 controller's own state machine (`0x4C1940`/`0x4C1D10`/`0x4C23E0`, functions.tsv) for
+  spell type 9 specifically - which state/tick actually calls `alloc_unit` for the class-7/type-0xc effect.
+- **Auto-attack TARGET scoring for a ghost** - does anything give a ghost a different priority/weight when some OTHER
+  unit's auto-attack scan is picking which nearby enemy to engage? This is distinct from the already-traced "what a
+  ghost itself may attack" (`0x51EE10`, ghosts/enemy shamans only) - it's about whether a ghost is scored the SAME as
+  an ordinary unit from the ATTACKER's side. The generic eligibility/scoring functions worth checking first:
+  `0x51C3C0`/`attack_target_eligibility`, `0x51D0B0`, `0x43ABF0`'s own caller chain - none of these were found in an
+  exe-wide grep for the ghost-flag test idiom (`test byte [reg+0x11],0x8`) this session, which is itself suggestive
+  (no special-casing found yet) but not a full read of any of them with this specific question in mind.
+
+Also worth a spot-check if a future session is in this area anyway: `init_tribe_struct`/`0x4ECAC0`'s own per-object
+recount pass (functions.tsv row, extended this session with its class-1/ghost-exclusion branch) still has several
+unopened class/type cases in the same outer dispatch (`0x4ED4CC`) - the class-1 branch read this session only
+covers what was needed to answer the headcount/mana-income/shaman-pointer questions above, not the whole function.
+
 Concrete exe-tracing targets queued up for a future session, found by reading `open-populous`'s own
 `TODO.md`/`docs/specs/*.md` (as of `open-populous3@main` commit `fe0d8c9`) for exactly which open questions
 an implementation session left behind after building on this repo's Angel of Death and native-AI findings.
@@ -9,6 +33,32 @@ disassembly - not implementation work (that's `open-populous`'s own job, per AGE
 Re-check the open-populous source before starting any of these: an implementation session may have resolved
 one with a different approach, or a later pop3-rev session may already have traced it - grep `docs/functions.tsv`/
 `docs/person_states.tsv`/`docs/effect_states.csv` first the way the skills already instruct.
+
+## Reincarnation Centre animation, full live timing pass on level 7 (user request, 2026-11-09)
+
+Live-measure the Reincarnation Centre's own build/intro animation on **level 7** specifically (not level 1 -
+the user wants this level in particular, presumably a different RC setup/timing than level 1's already-traced
+one, see `docs/cheat.md`'s "RESOLVED (live session...)" pillar section and `docs/functions.tsv` rows `0x41c140`/
+`0x50c690`/`0x432d18`/`0x4bb290`/`0x48dc26`/`0x44ff80`/`0x450610`/`0x419790`/`0x419810`/`0x419880`/`0x433a10` for
+what's already known from level 1 and reusable as a starting point - `scripts/watch_pillars.py`/
+`scripts/watch_rc_flags.py` are the existing tools, extend rather than rewrite). Specifically:
+- Each step's own timing: the ground-flatten phase, then each of the 8 pillars' own rise - confirm whether level
+  7 shows the same staggered 37/40/41/44/45/48/49/52-turn spawn pattern level 1 did, or a different one.
+- How long each pillar's own rise animation takes and at what speed (level 1's static trace said "+16/turn for
+  16 turns" - verify live on level 7, don't assume it's identical).
+- Confirm the RC's own full animation (flatten + all 8 pillars risen and settled) is COMPLETE by the time the
+  level's own intro flyby starts - i.e. the flyby never overlaps a still-rising pillar.
+- **A circle of sparkle effects around the RC, not yet traced at all** - identify which class-7 effect type(s)
+  these are (own init/per-turn handler, state catalog row), when they start/stop relative to the pillar rise,
+  and their own placement (ring around the circle? one per pillar slot?).
+- **Savage -> brave conversion timing for people placed on/near the RC**: the user's own observation is that
+  this conversion is NOT instant and looks like it roughly matches the sparkle effect's own timing/duration -
+  find the actual trigger/state that performs this conversion (probably a person-state transition, check
+  `person_states.tsv` for an existing "conversion" row before assuming one doesn't exist) and confirm or refute
+  the correlation with the sparkle live, turn-synced.
+- **How the sparkle is actually rendered**: sprite/hfx id or 3D object-bank mesh (same "draw class" dispatch
+  mechanism as the "Ground fire / flame visual scale" item above - `0x4EE700`/table `0x5A6AF8` renderer-kind
+  byte), its own per-tick animation (frame cycling? particle count/spread?).
 
 ## Angel of Death
 
@@ -738,3 +788,47 @@ one with a different approach, or a later pop3-rev session may already have trac
   ever report an Angel of Death - its real value almost certainly comes from result `3` (the `0x4BAAB0`
   alternate-slot hit instead, which bypasses that matrix). Full write-up: `docs/functions.tsv` rows
   `0x51f470`/`0x5028b0`/`0x5027e0`/`0x432df0` (all re-corrected/extended).
+
+## Ground fire / flame visual scale (new, 2026-11-09) - RESOLVED same day, live memory
+
+- **RESOLVED via `scripts/scan_ground_fire.py` in the Docker headless rig (real Blast cast, see `docs/cheat.md`
+  "Docker headless rig"): a live ground-fire object's own `self+0x3A`/`self+0x33` are `draw_class=2`/`model_id=5`
+  - NOT `draw_class=5` as the static trace below guessed (that trace had a real error in its stack-offset
+  bookkeeping, as suspected).** Table `0x5A6AF8` row 2 (`03 00 00 02 00 00 00 f0 00 22 00`) byte0=`0x03` (3D
+  object-bank mesh, confirmed) and its own previously-undecoded byte3 (`0x02`) turns out to be an
+  `OBJS0`/`PNTS0`/`FACS0` **bank selector**: model id 5 is empty in bank 0 but real in bank 2, and - cross-checked
+  byte-for-byte against `docs/specs/objects.md`'s own banks-2-7-to-bank-0 index table (`0-5 -> 7-12`) - is
+  identical to bank 0's own object 12, a camp-fire sibling ("same with logs of tile 136, a third see-through").
+  Its 8 `FLAME_TILE` faces give the exact same `x -80..80, y 0..160, z -80..80` bbox as the ordinary camp fire -
+  **160x160 units = 0.3125 cells, matching `campfire::SIZE`=0.31 exactly**. Net: the ground-fire's standing flame
+  (and the tree-ignition/burning-building companion fire, which spawn this same object) is the SAME SIZE as a
+  camp fire, not bigger. Full write-up: `docs/functions.tsv` row `0x4a66c0` (type-0xA follow-up, corrected),
+  `open-populous`'s `TODO.md`/`pop3-rev-analysis.md` "Flame billboard size" (updated to RESOLVED). The original
+  static trace is left below as the record of what was guessed and why it was wrong, not because it's still open.
+
+- **The ground-fire scenery object's (class 5, type 0xA) own real draw-class/model id, live-memory check needed.**
+  A user question about `open-populous`'s guessed `fire_flame::SIZE`/`ground_fire::SIZE` constants (both "[ours]")
+  prompted a static trace of `0x4A66C0`'s own per-type dispatch (`docs/functions.tsv` row, already traced for
+  type 9/"head" statue) for type `0xA` ("fire") instead. Per-type table `0x5A79B0+type*24`: the word at `+0` is
+  confirmed DEAD (never read, per the existing `0x4A66C0` row); the word at `+0xA` is used as BOTH the `0x4EE700`
+  "index" arg (`self+0x33`, an `OBJS0-0.DAT` model id when the resolved draw class's renderer-kind byte is `0x03`)
+  AND, via the type's own selector-byte branch (`0x4A67BC`+(type-9), value `4` for type 0xA -> jump-table entry
+  `0x4A6721`, the plain "pass through unchanged" case), the `draw_class` arg into table `0x5A6AF8`. For type 0xA
+  this word read directly from the shipped exe (`game/D3DPOPTB.EXE`, `.data` at file offset for VA
+  `0x5A79BA+0xA*24`) is **5**: table `0x5A6AF8` row 5 (`03 00 00 00 00 00 00 f0 00 a2 00`) byte0 = `0x03` ("3D
+  object-bank mesh" renderer, per `0x4708D0`'s own row), meaning model id = **5** into `OBJS0-0.DAT`. **Problem**:
+  object index 5 in the shipped `objects/OBJS0-0.DAT` (bank 0) is an EMPTY record (0 faces, 0 points, zero bbox,
+  confirmed by direct file read) - cannot be the mesh for a fire that is clearly visible in play, so either this
+  static trace has an error somewhere in the stack-offset/arg-order bookkeeping (plausible - this parameter
+  passing was re-derived by hand across two functions, `0x4A6B20`'s caller and `0x4A66C0`'s own branches,
+  without a live cross-check), or type 0xA's own ground-fire object doesn't actually reach this draw path at
+  runtime at all (e.g. a different code path overrides `self+0x33`/`self+0x3A` again afterward, elsewhere).
+  **Next step**: spawn a ground-fire (cast Lightning or Firestorm at bare ground) and read `self+0x33` (word) and
+  `self+0x3A` (byte) live off the allocated class-5/type-0xA object via `scripts/livemem.py`, then re-derive which
+  `OBJS0-0.DAT` object (if any) and which `0x5A6AF8` row actually apply - a 10-minute live check that would settle
+  this far faster than more static re-reading. If it turns out to be a real 3D `OBJS0` mesh object (not a
+  `hfx0-0.dat` billboard, contrary to this analysis.md's earlier "hfx 90-93 is the ground-fire's own sprite,
+  confirmed by eye" framing - worth re-checking which draw path actually produced the sprite seen on screen when
+  that visual ID was made), its own real point bounding box gives an exact world-unit flame size directly, the
+  same way `catalog::CAMP_FIRE`'s own flame boards did (160x160 units = 0.3125 cells, see
+  `pop3-rev-analysis.md` "Ground fire, ignited trees, and a burning building's flame").
