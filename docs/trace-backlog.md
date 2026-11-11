@@ -1042,21 +1042,33 @@ building-tab worker dispatch, spell tab's two-mouse-button split, camera-relativ
 disguise icon row) one at a time. Full detail: `docs/commands.tsv` (`tribe_cmd` rows `0x74`/`0x75`, `ui_cmd 0x77`/
 `0x78` deepened) and `docs/functions.tsv` (`0x49E650`, `0x4BA640`, `0x4BA6B0`, `0x4B9D50`).
 
-- **RESOLVED: the spell tab's "left-click selects/casts, the other mouse button toggles charge-pause" shape is
-  confirmed mechanically, from a single click handler (`0x49E650`, sits immediately after the spellbook's own
-  draw routine `0x49DAF0`).** It issues ONE of two different commands depending on which of two disjoint
-  tribe-indexed flag-pairs is set: **`tribe_cmd 0x75`** - make the clicked spell the sole one accumulating
-  charge, blocking every other learned spell (and remembering which ones it blocked, so clicking the SAME spell
-  again undoes it and resumes everyone) - matches "left-click selects a spell, focusing mana on it" exactly, a
-  sensible Populous mechanic; and **`tribe_cmd 0x74`** - read the clicked spell's OWN current charge-blocked
-  state, invert it, and apply that single inverted value to EVERY learned spell at once (pause-all or
-  resume-all) - matches "the other button toggles charge/pause" in effect, though it affects every spell
-  together rather than just the one clicked. **Not nailed down: the literal mouse-button bit.** No raw
-  button-code read was found anywhere in `0x49E650`'s own body - the two flag-pairs it tests (`0x9845AE`/
-  `0x9846AE`+`0x98462E`/`0x98472E` for 0x75 vs `0x9845BB`/`0x9846BB`+`0x9845C7`/`0x9846C7` for 0x74) read the
-  same shape as other per-tribe UI-focus flags elsewhere in this catalog (plausibly hot-seat/split-tribe state,
-  not a button mask) - their WRITER side wasn't traced. A live session clicking a spell with each mouse button
-  while watching which flag flips would close this out completely.
+- **CORRECTED, same day, a coordinator-relayed user correction (the user played the original game and
+  disagreed with the "exclusive solo-charge" reading below): the spell tab finding was re-verified byte-for-byte
+  and found to be PARTLY WRONG in its details.** The user's own description is two independent, simpler
+  behaviours: (1) one button toggles JUST the clicked spell's own charge/pause state, with no effect on any
+  other spell; (2) the other button arms the spell for casting, needing a follow-up map-location click to
+  invoke it (matching `open-populous3`'s own already-implemented `SelectedSpell`/range-ring flow in
+  `crates/game-client/src/hud/spells.rs`). **Re-reading `tribe_cmd 0x74`/`0x75`'s own handlers (`0x4411BF`/
+  `0x441222`) instruction-by-instruction a second time**: `tribe_cmd 0x74`'s own mechanics held up completely
+  unchanged - it really does read the clicked spell's own state, invert it, and apply that ONE inverted value
+  to EVERY learned spell at once (confirmed again, not a misread). **`tribe_cmd 0x75`'s own original write-up
+  was NOT accurate, though**: its activate branch does NOT "block every other learned spell" - re-derived
+  correctly, it only RE-AFFIRMS spells that are ALREADY blocked (untouched otherwise) and separately
+  force-unblocks the clicked spell; its release branch, checked twice to be sure, inverts (relative to the
+  activation snapshot) which spells are charging vs paused - neither reading matches "restore to how it was"
+  cleanly, a counter-intuitive result that held up on a second pass and is not obviously a misread, but also
+  isn't confidently explained. See `docs/commands.tsv`'s own `tribe_cmd 0x75` row (corrected in place) for the
+  full mechanics. **Bottom line after the re-check**: this is still a real, confirmed charge/pause-bookkeeping
+  mechanism triggered from a spell-icon click, and `0x74` genuinely does what a "pause-all/resume-all" toggle
+  would do - but **neither `0x74` nor `0x75` matches the user's "simple independent per-spell toggle" description
+  (both provably write blocked-state for multiple spell ids, confirmed twice, not a one-off misread)**, and
+  **`tribe+0xC25` (the field `0x75` uses to remember the "current" spell) has no OTHER reader anywhere in the
+  exe** - so it is NOT the "armed spell awaiting a target click" flag, and the actual select-spell-to-cast
+  mechanism the user described (and `open-populous3` already implements) remains genuinely UNLOCATED, distinct
+  from this pair. Whether `0x74`/`0x75` are the mechanism the user remembers at all (vs. a different/lesser-known
+  convenience feature that happens to also live on the spell icon) is unresolved from static analysis -
+  **a live session watching `tribe+0x9E9`/`+0xC25`/the per-spell blocked bitmask while clicking a spell icon
+  with each mouse button is the concrete next step, not another static re-read.**
 - **Clarified, not confirmed: the building tab's `ui_cmd 0x77`/`0x78` (already a "candidate" from the prior
   session) is a building/construction-TYPE validity check, NOT the user's described Shift+click worker-dispatch
   action.** Read both of its branches fully: the non-17 branch validates whether the clicked cell is either an
