@@ -901,7 +901,35 @@ static pass with `game/constant.dat` present - **not done this session, left ope
     points (advance to the next non-empty secondary slot once the current one's order ends) - strong support for
     "same slot-queue mechanism, Ctrl-only modifier, kind 15 instead of kind 6/0xB" over a sibling/parallel
     mechanism. Next step unchanged: find the modifier-key read and the (still-unlocated) `process_cmd`/
-    `process_tribe_cmd` entry point that queues kind 15 into these slots.
+    `process_tribe_cmd` entry point that queues kind 15 into these slots. **Checked, a later session: the
+    modifier-key read itself is still unlocated, but a plausible candidate surfaced and is worth chasing first.**
+    `0x895DAA` bit `0x1` already gates a runtime fork between `tribe_cmd 0x7B` vs `0x2A` inside `ui_cmd 0x71`'s own
+    case (own `commands.tsv` row, "plausibly 'ctrl held'"); its only 2 readers in the whole exe are both inside
+    that one case, and no literal-address WRITER of this byte was found anywhere in `dis.txt` - meaning (by the
+    same reasoning `0xD0595C`/`mouse_device`'s own row already established for the cursor position) it's almost
+    certainly written through a pointer into a DirectInput keyboard-device object's own buffered-state, not a
+    literal global address grep can find - **the natural next step is finding that keyboard-device object the
+    same way `mouse_device` was found** (follow a `GetAsyncKeyState`-free, DirectInput-only keyboard import/vtable
+    call the way `mouse_device`'s own row followed `SetCursorPos`/`DirectInputCreateA`), then checking whether
+    ANY tribe_cmd-queuing case (as opposed to this one select/track case) reads the same bit before calling
+    `set_tribe_command` with an opcode in the kind-15/arson-capable range.
+  - **Also checked this same later session, a negative result worth recording**: swept every one of the shaman
+    resolver's (`0x4F25A0`, own new functions.tsv row) 23 call sites exe-wide looking for a dedicated "select the
+    shaman" HUD button - all 23 are AI-task/AI-script code, none in `process_cmd`'s own two switches (now fully
+    catalogued, see the function's own row for that sweep) or the `0x4A0F00-0x4A1400` stats-panel widget-callback
+    cluster (`0x450F30`'s own row - its 6-entry jump table is now FULLY resolved: indices 0/1/2/3 are the
+    type-filtered idle-select siblings already documented, **index 4 is `tribe_cmd 0x48`, "select all units
+    excluding the shaman" - own new commands.tsv row, found while chasing this very question**, index 5 is
+    `tribe_cmd 0x72`, "select units near a position", own new row). So there is likely no dedicated select-shaman
+    primitive at all - a player probably reaches her through the same generic single-unit-select path
+    (`tribe_cmd 0x2A`/`0x7B`) as any other unit, though that generic path's own UI click entry point was not
+    independently traced to confirm it. The spell-selection UI and the disguise-icon click were also not found in
+    this same cluster or either `process_cmd` switch - **both now look likely to be ANOTHER small standalone
+    widget-callback cluster analogous to `0x450F30`'s own, not yet located** (this exe's HUD evidently splits
+    "panel button clicks" across several small per-panel dispatcher functions like this one, rather than one
+    central table) - worth a targeted search for a sibling dispatcher with the same "6ish-entry jump table of
+    `set_tribe_command` tail blocks" shape, called from a DIFFERENT small cluster of standalone callbacks, nearer
+    whatever code already handles the spell-bar/tribe-colour HUD region (not identified this session).
   - Also mentions a spy is weak in melee (reportedly ~3 spies needed to kill 1 brave) and a minor "attacking a
     damaged building mid-repair" glitch - both consistent with/orthogonal to this session's own findings, not
     independently chased (the combat-weakness number would need `game/constant.dat`'s own per-type stat table,
