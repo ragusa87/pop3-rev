@@ -792,16 +792,18 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   sets a trio of globals (`0x8922DC`/`0x89C6A5`/`0x89C6A1`) that read as the backing state for an on-screen
   marker, plausibly the spy-indicator UI - not confirmed which element consumes them. Both are genuinely new
   mechanisms, not the countdown's own decrementer - that remains unfound after two dedicated searches.
-- **The player-facing UI path to order kind 15 (arson) and kind 16 (disguise) still was not found, and one whole
-  avenue is now confirmed ruled out, later session.** Chased the AI's own "queue a UI-style order template, apply
-  it to a type-filtered selection" mechanism (`0x435730`/`0x435780`/`0x4359B0`/`0x435CB0`, own new rows) all the
-  way through - every one of its 62 call sites sits inside the native AI's own task-handler address range
-  (0x4C6000-0x4D08000), none in `process_cmd`/`process_tribe_cmd` - so despite LOOKING exactly like a generic
-  "selection + command template" mechanism a player click could plausibly reuse, it's AI-internal, not a player
-  path, and in fact issues kind 16 (disguise) itself at least twice more (`0x4C9340`'s task-13 alert, `0x4CE0A0`),
-  on top of the already-known inline `0x4DE760` call in `0x4CE2C0` - **the AI disguises its own spies via at
-  least three independent code paths, strengthening the case that disguise may be AI-exclusive in the exe**
-  the same way arson already looked. A dedicated static pass through `process_cmd`'s own dispatch tables
+- **The player-facing UI path to order kind 15 (arson) and kind 16 (disguise) still was not found. One
+  caller family is confirmed AI-only, but - important correction, a later session, see the "RETRACTED" bullet
+  further down - the underlying PRIMITIVE itself is NOT AI-exclusive, only this one entry point into it was.**
+  Chased the AI's own "queue a UI-style order template, apply it to a type-filtered selection" mechanism
+  (`0x435730`/`0x435780`/`0x4359B0`/`0x435CB0`, own new rows) all the way through - every one of `0x435730`'s own
+  62 call sites sits inside the native AI's own task-handler address range (0x4C6000-0x4D08000), none in
+  `process_cmd`/`process_tribe_cmd` - so `0x435730` ITSELF is AI-internal, and it issues kind 16 (disguise) at
+  least twice more this way (`0x4C9340`'s task-13 alert, `0x4CE0A0`), on top of the already-known inline
+  `0x4DE760` call in `0x4CE2C0` - three independent AI-side disguise paths through this one entry point. **This
+  session did NOT also check for other, non-`0x435730` callers of the shared primitives it wraps
+  (`0x435780`/`0x435CB0`) - a later session did, and found one, directly from `process_tribe_cmd` - see below.**
+  A dedicated static pass through `process_cmd`'s own dispatch tables
   (`commands.tsv`'s own method) was still not attempted this session (ran out of time chasing the AI avenue
   instead) - still the recommended next static step, or a live session watching `0x438730`'s own order_set call
   stack while performing the click in a debugger.
@@ -844,12 +846,25 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   `0x4AFFF0` (own new, un-traced rows) are this same function's own generic "is this pickable"/"commit the pick"
   tail, not the consumer of the opcode-0x4E record itself. A live session changing the mouse cursor while
   hovering a disguised enemy spy mid-transition, cross-checked against this opcode, would settle it.
-- **Open: whether a player-controlled spy can reach kind 15 (arson) at all is now a notch more likely "no".**
-  Every disguise issuer found across two sessions (the inline `0x4DE760` call in `0x4CE2C0`, `0x4C9340`'s task-13
-  alert, `0x4CE0A0`) and the only arson issuer (`0x43B8E0`, from `0x4CE2C0`'s own spy branch) are ALL native-AI
-  code, reached only through `maybe_ai_func_1`'s own task scheduler - three independent disguise paths and the
-  one arson path, all AI-only, found so far. Still not proof a player path doesn't exist elsewhere (`process_cmd`
-  itself was not exhaustively searched this session - see the UI-path bullet above), but the balance of evidence
-  across two sessions now leans toward "arson, and possibly disguise too, may simply be AI-exclusive in this
-  build" rather than a missed player command - worth stating as the working hypothesis for a spec write-up,
-  flagged as unconfirmed.
+- **RETRACTED, later session: the "arson/disguise may be AI-exclusive" working hypothesis just above does NOT
+  hold up - there IS a player-reachable path into the exact same underlying primitive, found by re-checking the
+  user's own hypothesis that this was a shared subroutine/controller, not an AI-only script.** `0x444F60` (own
+  new row) is `process_tribe_cmd`'s own shared handler for a whole RUN of tribe_cmd opcodes (0x1E-0x5E, 65 ids,
+  Ghidra-folded onto one address because the per-case code is byte-identical) - reached directly from the
+  player's queued tribe commands (`set_tribe_command`/`0x479CF0`, fed by `ui_cmd` clicks via `commands.tsv`'s own
+  already-documented chain), and it calls the EXACT SAME `0x435780`(write a template)/`0x435CB0`(apply to
+  selection by type) pair the earlier session's own AI-task callers (`0x435730`) use - **with the order KIND read
+  directly from the player's own command argument** (`arg1`, masked to 16 bits - verified against the call
+  site's own stack cleanup), not hardcoded. So a tribe_cmd in this range carrying `arg1=0x10`(16, disguise) or
+  `0xF`(15, arson) WOULD issue exactly those orders to the player's current selection through this path - the
+  mechanism is generic/shared, not AI-exclusive; the earlier conclusion only reflected that the ONE caller family
+  checked (`0x435730`) happened to be AI-only, not that the underlying primitive was. **Still not found: which
+  SPECIFIC one of the ~9 aliased opcodes, queued from which `ui_cmd` case, actually carries `arg1=16` for the
+  real disguise click.** Every literal-opcode `set_tribe_command` call site in this range (4 found, opcodes
+  0x1E/0x27) passes `arg1=arg2=0` and reads as an unrelated population-milestone-notification feature (a sound/
+  flag write and a population-threshold check nearby, no spy context) - so the real disguise-issuing call, if it
+  uses this exact path, passes `arg1` via a register computed from UI state (which tribe icon was clicked),
+  not a literal int - a concrete, much narrower next step than the earlier blind sweep: find a `set_tribe_command`
+  call site (or a `ui_cmd` case feeding one) in `process_cmd`'s own body where the pushed opcode is one of
+  {0x1E,0x26,0x27,0x37,0x38,0x39,0x3A,0x3B,0x3C} (or any other alias not yet enumerated from `backup.xml`) and the
+  arg1 push is register-sourced rather than a literal `0`.
