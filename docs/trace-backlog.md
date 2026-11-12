@@ -843,14 +843,19 @@ selected) -> `ui_cmd 0x7e` -> `0x4AA8B0` (queue armed pointer-action) -> `tribe_
 `order_execute` kind-16 inline (`0x43281b`) -> `0x4DE760(spy, tribe)`. Full write-up and the
 watchpoint methodology that made it capturable: `docs/cheat.md` "Spy disguise player path";
 catalog rows `commands.tsv` (`tribe_cmd 0x5c-0x5e`, `ui_cmd 0x7e/0x7f`) and `functions.tsv`
-(`0x4aa8b0`/`0x444f60`/`0x435780`/`0x435cb0`, updated `0x4de760`/`0x432d18`). **New open leads
-from it, for a next session**: (a) the ARM half - what the tribe-square click itself runs to set
-the per-tribe action byte (`0x89da88` table) and pending flag `0x895e9b` (setters cluster in a
-flag-writer around `0x438100`-`0x4382xx` - trace that function and its callers); (b) the exact
-idx->order-kind-0x10 mapping inside `0x435780`/`0x435CB0`; (c) the 0x37-vs-0x57 opcode-base
-variant's meaning (a modifier? queue-vs-replace?); (d) which of `0x5c/0x5d/0x5e` encodes which
-tribe/action (the watchpoint fired downstream of the opcode, so the exact id wasn't logged); (e)
-`ui_cmd 0x7f`'s own distinct role and both ids' real input bindings.
+(`0x4aa8b0`/`0x444f60`/`0x435780`/`0x435cb0`, updated `0x4de760`/`0x432d18`). **Follow-up session
+(2026-11-12, static) resolved the leads this left open** - see `docs/cheat.md`'s own "Follow-up,
+2026-11-12" subsection and the rewritten catalog rows: (a) ARM half traced (`0x49D5F0` square hover
+-> `0x5cae80` -> `0x437010` context bit 0x2000 + `tribe+0xC23` selected-type bitmask -> `0x437750`
+arms kind 0x10 iff a spy is selected, compat mask `0x5a7dc4+kind*22` = 0x20 = type 5 only ->
+`0x4380F0` validates into `0x895e9b`); (b) there is NO idx->kind mapping - the kind travels in the
+command's own arg word, the opcode only names a staging-ring slot (`tribe+0x8C0` cursor); (c)/(e)
+0x37-vs-0x57 = the `ui_cmd 0x7f`-vs-`0x7e` variant pair, modifier-state-driven, 0x57 family
+suppresses staged-flags bit 0x80 (plausibly queue-vs-replace) - which real button/modifier maps to
+which is the one piece still unconfirmed; (d) 0x5c/0x5d/0x5e are ring slots 5-7, nothing more.
+**Still genuinely open**: the 0x7e/0x7f input binding above; `0x4380F0`'s per-code jump table
+(armed codes 1-0x22, each with its own validation case - a map of every pointer-action the HUD can
+arm, worth a dedicated sweep); and the player arson path (below, unchanged).
 
 Traced this session purely from a static `D3DPOPTB.EXE` (a cloud session - no `game/constant.dat`, no Wine, no
 `livemem.py`, no way to run the game at all, only the disassembly/consts.txt route): the disguise-application

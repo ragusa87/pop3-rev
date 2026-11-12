@@ -972,3 +972,33 @@ meaning, which of 0x5c/0x5d/0x5e maps to which tribe/action, and `ui_cmd 0x7f`'s
   fallback writer, used for cursor resyncs while investigating.
 - The cursor-desync fix (own section above) held up as the enabler for the user's VNC driving:
   resync after connecting, and after any big warp.
+
+### Follow-up, 2026-11-12 (static): the ARM half and every remaining detail of the disguise chain
+
+All five open leads from the session above are now resolved or sharply narrowed, statically (no live
+session needed - the capture data was enough to anchor the reads):
+
+- **The opcode trio 0x5c/0x5d/0x5e does NOT encode the action or the tribe** (corrects the first
+  write-up): the commit opcode is `base + slot` where slot = the tribe's pending-order staging-ring
+  cursor (`tribe+0x8C0`, count `tribe+0x8BF`, records `tribe+0x8C1`+slot*10, advance fn `0x4358F0`).
+  The ORDER KIND (0x10) and the target tribe id travel in the tribe_cmd's own argument fields.
+- **The ARM half**: hovering a HUD tribe square runs widget callback `0x49D5F0` - square ordinal
+  (`widget+0x63`) -> the Nth NON-player tribe id (own tribe skipped) -> global `0x5cae80` (0xFF =
+  none). Per frame, `0x437010` rebuilds the cursor-context bitmask `0x895e7a` (`0x5cae80 != 0xFF`
+  -> bit 0x2000) and `tribe+0xC23` = bitmask of SELECTED person types (`1 << type(+0x2B)` for every
+  person with selected-flag `+0x7A` bit 0x80). `0x437750` then picks the armed action: candidate
+  kind 0x10 (disguise) requires context bit 0x2000 AND a selected type matching the kind's
+  compat mask (`0x5a7dc4 + kind*22`) - **kind 0x10's mask is 0x20 = 1<<5: spy (type 5) only**.
+  `0x4380F0` validates it against the context each frame into `0x895e9b` ("a click would act").
+- **ui_cmd 0x7e vs 0x7f**: a variant pair (0x7e -> opcode base 0x57, 0x7f -> 0x37), driven by
+  input-modifier state bits (`0x98e908/9`); the 0x57 family suppresses staged-flags bit 0x80
+  downstream - plausibly queue-vs-replace. Which real button/modifier maps to which: unconfirmed.
+- **Pitfall worth remembering**: reading .data-section constants from the exe with the .text
+  formula (`VMA - 0x401000 + 0x400`) silently returns wrong bytes - kind 0x10's compat mask first
+  read as 0x100 (nonsense) instead of 0x20 (spy). Use the PE section table to map VMAs to file
+  offsets for anything outside .text.
+
+Full rows: functions.tsv `0x437010`/`0x437750`/`0x4380f0`/`0x4358f0`/`0x49d5f0` (new),
+`0x4aa8b0`/`0x444f60`/`0x435780`/`0x435cb0` (corrected/extended); commands.tsv `tribe_cmd
+0x5c-0x5e`, `ui_cmd 0x7e/0x7f` (rewritten). Still open: which input maps to 0x7e vs 0x7f, the
+per-code jump table inside `0x4380F0` (armed codes 1-0x22), and the player arson path (unchanged).
