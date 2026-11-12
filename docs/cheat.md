@@ -1042,3 +1042,19 @@ turns later while idling at the scene.
 **Correction made the same day**: both class-7 dispatch tables (`0x50A59C` init by type, `0x50AFD4` per
 turn by state) are indexed **value-1**. Reading them as value-indexed made the firebrand look like it
 shared lightning's strike-point state - the live object's state 29 is what exposed the off-by-one.
+
+### Follow-up: what actually un-disguised the spy (watchpoint capture, same day)
+
+The first arson run's spy lost its disguise ~160 turns after the fire while idle, unhurt and with no
+order, which left two candidates open. A second run (save reloaded, same disguise, same target) with a
+freezing hardware watchpoint on the spy's `+0xB2` caught the reveal in the act: the call chain on the
+frozen stack was `main_loop_outer -> process_tribe_1 -> process_tribe_2 -> maybe_ai_func_1 (tribe 3's AI
+goal tick) -> 0x4C5CF0 (AI task branch dispatcher) -> 0x4F8E10 (spy discovery roll) -> 0x4F35B0 (area
+reveal sweep) -> 0x4DE7F0 (reveal)`, with tribe 3's record as the argument. **It is the imitated tribe's
+computer AI running a discovery check - not combat, not an enemy spy, not an order.** This time it struck
+mid-windup: the unmasked spy was attacked, knocked back to the start of its order, retried twice and was
+killed, and the hut never caught fire. The roll is random and can fire any time the spy is in that
+tribe's area (here before ignition, in run 1 ~13 s after it).
+Reusable pattern: `watch *(unsigned char*)(spy+0xB2)` with a commands block that prints `$pc` and
+`x/96xw $esp` but does NOT `continue` - the game freezes at the write, read the return addresses, then
+`delete`/`detach`. No crash across all of today's watchpoint stops.
