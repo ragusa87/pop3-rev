@@ -1002,3 +1002,43 @@ Full rows: functions.tsv `0x437010`/`0x437750`/`0x4380f0`/`0x4358f0`/`0x49d5f0` 
 `0x4aa8b0`/`0x444f60`/`0x435780`/`0x435cb0` (corrected/extended); commands.tsv `tribe_cmd
 0x5c-0x5e`, `ui_cmd 0x7e/0x7f` (rewritten). Still open: which input maps to 0x7e vs 0x7f, the
 per-code jump table inside `0x4380F0` (armed codes 1-0x22), and the player arson path (unchanged).
+
+## Spy arson, live (2026-11-12): injecting an order the player cannot give, and what the fire really does
+
+**Question** (user): how exactly does a spy set a building on fire - where it stands, the match, the
+effect, the duration, the damage, and whether it gets revealed. Arson (order kind 15) is provably not
+player-armable (see the disguise sections above), so the live trace had to **inject the order into
+memory**: `scripts/inject_order.py` (committed). `auto X Z TRIBE SECONDS` mode finds the nearest live
+building of TRIBE to (X,Z) and the nearest live tribe-0 spy (wrap-aware distances - the map wraps at
+65536), asserts both records are what they should be, disguises the spy as TRIBE (settled), writes a
+kind-15 group and assigns it, then logs every turn: the spy's state/substate/disguise, a byte-level diff
+of the building record, and every new class-5/7/8 object within 3000 units.
+
+**Order injection recipe** (what made it work after two failed tries):
+- group record (`0x938830 + id*10`): `+0` kind, `+1` flags, **`+2` reference count (u16) - set it to 1
+  and increment the live-group counter `0x96AA7A`**; a refcount of 0 underflows when the order is
+  released (the most likely cause of the first attempt's crash). `+6/+8` = target, encoded per the kind's
+  record (kind 15: a cell-centered position, `(x & 0xFE00) | 0x100`).
+- unit: `+0x9B` = group id, `+0x2C` = 10 (carrying out an order), `+0x2D` = 0, **and set `+0xC` bit
+  `0x40000000` (the "order (re)starting" flag the handlers test on entry) - without it the unit sits in
+  state 10 forever**, doing nothing.
+- re-validate the target unit right before writing: in an active war, spies die and their slots get
+  reused within minutes (one attempt wrote onto a tribe-3 preacher that had taken a dead spy's slot -
+  reverted). The script now asserts class/type/tribe first.
+- pick a target the spy can reach without crossing a third tribe: a first run disguised as tribe 2
+  walked the long way round through tribe 3's village, got attacked (disguise dropped to the real tribe
+  the moment the fight began) and died.
+
+**Results** (all now in `functions.tsv` `0x439d30`/`0x408ab0`/`0x498140`/`0x40a6b0`, `effect_states.csv`
+29, `sound.tsv` 0x36/0x53, and pop3-rev-analysis.md "Spy disguise and infiltration"/"Burning building"):
+spy stands on a flagged wall cell of the footprint (~830 units from the hut's center), aims 10 turns,
+winds up 24 turns holding the firebrand prop, throws (sound 0x36, a cosmetic ember with a 64-turn life),
+8 turns later the order ignites the hut (attacker = the spy's REAL tribe), 24-turn withdrawal. The hut:
+4 flame objects, occupants out at T+7, smoke and embers, ONE -100 wood hit at T+47 (a stock companion is
+created at full cost first: big hut 300 -> 200, build stage 4 -> 2), burn ends T+126 in "needs wood"
+state - damaged, not destroyed. The spy kept its disguise through the whole order; it was revealed ~160
+turns later while idling at the scene.
+
+**Correction made the same day**: both class-7 dispatch tables (`0x50A59C` init by type, `0x50AFD4` per
+turn by state) are indexed **value-1**. Reading them as value-indexed made the firebrand look like it
+shared lightning's strike-point state - the live object's state 29 is what exposed the off-by-one.
