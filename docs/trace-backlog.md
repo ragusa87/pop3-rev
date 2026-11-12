@@ -864,6 +864,18 @@ own functions.tsv row) have NO issuer anywhere: designed as armable spy actions,
 The masks double as a full per-kind "who can receive this pointer order" table (work orders
 brave-only, strike-scan family preacher-only, RC rebuild shaman-only, attack/move all-types).
 
+**Reveal map completed (same 2026-11-12 session)**: every `0x4DE7F0` call site in the exe checked -
+new finds: ordering any unit at a spy reveals it at order activation (inside `0x432DF0`, own row);
+the attack handler (`0x51b689`), two settle/snap helpers (`0x518480`/`0x5184E0`, own row) and
+`process_insect_plague` all reveal a type-5 victim on contact; and the "spotted in the enemy
+settlement" rule is an ENEMY-AI TASK (`0x4F8E10` discovery roll -> `0x4F35B0` area sweep, own rows)
+rolled from the task dispatcher `0x4C5CF0`, using the same `0x960812` percent table as arson's
+outing roll. **Remaining spy leads**: which AI task id drives `0x4F8E10` and its cadence; the
+meaning of the `0x960802` vs `unit+0x87` duration gate (and what increments `+0x87` on a spy);
+`0x518480`/`0x5184E0`'s exact combat trigger contexts; the `0x4DE720`-vs-`0x4DE7B0` framing
+discrepancy (still unreconciled); live values for the `0x960812` percent table (needs
+constant.dat or a live read).
+
 Traced this session purely from a static `D3DPOPTB.EXE` (a cloud session - no `game/constant.dat`, no Wine, no
 `livemem.py`, no way to run the game at all, only the disassembly/consts.txt route): the disguise-application
 primitive (`0x4DE760`, writes the apparent-tribe byte + the exe's own named constant `SPY_DISGUISE_DELAY`=63) and
