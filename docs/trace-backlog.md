@@ -855,7 +855,14 @@ suppresses staged-flags bit 0x80 (plausibly queue-vs-replace) - which real butto
 which is the one piece still unconfirmed; (d) 0x5c/0x5d/0x5e are ring slots 5-7, nothing more.
 **Still genuinely open**: the 0x7e/0x7f input binding above; `0x4380F0`'s per-code jump table
 (armed codes 1-0x22, each with its own validation case - a map of every pointer-action the HUD can
-arm, worth a dedicated sweep); and the player arson path (below, unchanged).
+arm, worth a dedicated sweep). **The player arson question is now SETTLED (same 2026-11-12 session)
+as "not player-reachable"**: the order-kind flags table's per-kind selected-type masks
+(`0x5a7dc4 + kind*22`, `1 << person type`) mark kinds 0xD/0xE/0xF/0x10 as a spy-only block, but
+`0x437750`'s hardcoded candidate list only ever offers 0x10 (disguise) - 0xF (building arson) and
+0xD (a previously-unknown, fully-implemented "spy ignites a WOOD PILE" order, handler `0x439A00`,
+own functions.tsv row) have NO issuer anywhere: designed as armable spy actions, never wired in.
+The masks double as a full per-kind "who can receive this pointer order" table (work orders
+brave-only, strike-scan family preacher-only, RC rebuild shaman-only, attack/move all-types).
 
 Traced this session purely from a static `D3DPOPTB.EXE` (a cloud session - no `game/constant.dat`, no Wine, no
 `livemem.py`, no way to run the game at all, only the disassembly/consts.txt route): the disguise-application
