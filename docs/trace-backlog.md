@@ -871,9 +871,9 @@ the attack handler (`0x51b689`), two settle/snap helpers (`0x518480`/`0x5184E0`,
 settlement" rule is an ENEMY-AI TASK (`0x4F8E10` discovery roll -> `0x4F35B0` area sweep, own rows)
 rolled from the task dispatcher `0x4C5CF0`, using the same `0x960812` percent table as arson's
 outing roll. **Remaining spy leads**: which AI task id drives `0x4F8E10` and its cadence; the
-~~`0x960802` vs `unit+0x87` gate~~ (resolved same session: `+0x87` is the generic per-person
-ticks-in-current-state counter, so the gate is a per-tribe discovery GRACE PERIOD - the spy must
-have been in its current behaviour longer than the threshold before discovery can fire);
+~~`0x960802` vs `unit+0x87` gate~~ (resolved: 45% roll per check, else a guaranteed catch once the
+spy has spent more than 255 ticks in its current state - an anti-loitering rule, NOT a grace period
+as first written; live values tribes 1-3 = 45/255);
 `0x518480`/`0x5184E0`'s exact combat trigger contexts; the `0x4DE720`-vs-`0x4DE7B0` framing
 discrepancy (still unreconciled); live values for the `0x960812` percent table (needs
 constant.dat or a live read).
