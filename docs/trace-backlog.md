@@ -187,6 +187,17 @@ what's already known from level 1 and reusable as a starting point - `scripts/wa
   flying body. Whatever drove the user's original "looks flat" report, it isn't this. Full write-up:
   `docs/functions.tsv` rows `0x46ec80`/`0x4708d0`/`0x471c40`/`0x42a070`/`0x47f930`/`0x47fa30`/`0x47f9b0`,
   `docs/person_states.tsv` row 28.
+- **RESOLVED (user report "wings not moving, no dive, transitions not working"): the wing beat is a vertex
+  morph, the pose labels were swapped, and the angel does dive.** `0x4DE440`'s "blend poses 76-78" are object ids
+  (bank-2 numbering, bank-0 114-116) fed to a one-shot morph (`0x40CC30`), and each pose is a morph base
+  (`objects/morph0-N.dat`, rebuilt at load by `process_morph0`/`0x40CE30`) looping 12 frames over 6 key frames per
+  drawn frame (`update_unit_animation`/`0x4EE7B0` from `draw_main`, `animate_3d_morph`/`0x40C9F0`, point lerp
+  `0x40CC60`). 0x3E (bank-0 100) = wing-beating, used while closing in / carrying; 0x45 (107) = glide, default.
+  The caseD_a "third pose" is the glide frozen on key frame 74 (bank-0 112). Closing in sets the target height to
+  the victim's height every turn, with a vertical speed timed to arrive with it and a bare-terrain floor. Still
+  open: the original's draw frame rate (wing beat in seconds), whether it interpolates positions between turns,
+  and the victim's `+0x1C` offset. Full write-up: open-populous pop3-rev-analysis.md "Angel of Death flight pose,
+  wing beat and dive"; the earlier entries below keep their old "dive"/"cruise" wording.
 - **RESOLVED this session (prompted by a user request to catalog the spell's visual effects): cruise/dive
   crossfade timing, and the third "launching" pose.** `0x4DE440` was fully read: the transition is a genuine
   discrete multi-pose blend, not a linear interpolation or a hard cut - a 0..5 counter (`+0x7C`) steps by 1 per
