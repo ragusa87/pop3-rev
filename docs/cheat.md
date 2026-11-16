@@ -1058,3 +1058,33 @@ tribe's area (here before ignition, in run 1 ~13 s after it).
 Reusable pattern: `watch *(unsigned char*)(spy+0xB2)` with a commands block that prints `$pc` and
 `x/96xw $esp` but does NOT `continue` - the game freezes at the write, read the return addresses, then
 `delete`/`detach`. No crash across all of today's watchpoint stops.
+
+## Drowning splash, live (2026-11-16): pushing a person into the sea by memory, and a Ghidra case-label trap
+
+**Question** (user): how is the drowning splash done. Static trace first (person state 2's ENTER
+case `0x4D295F` spawns one class-7 type-0x41 effect plus sound 0x11), then a live check on save
+"25bis" (load-list row 7) in the Docker rig.
+
+**Push recipe (no spell cast needed)**: Blast's own per-person push (`0x50B740`, plain non-scorching
+path) only ORs `+0xC |= 0x2000 | 0x80000` and adds a velocity; writing the same into a live person
+(`+0x49/+0x4B/+0x4D` = horizontal ~190 toward the nearest water cell, +100 up) reproduced a real blow.
+Water cells: map cell `0x8A03F0 + (cz*128 + cx)*16`, byte+0 low nibble indexes table `0x5AA328`
+(stride 14), bit 0x2 = water, bit 0x1 = land. The camera can be moved by writing the local tribe's
+`tribe_struct+0x24` (focus x,z) and `+0x32` (yaw); yaw 1024 put the sea in the foreground there.
+Script: scratchpad `blast.py` (logs the person and every class-7 type-0x41 object per turn).
+
+**Result**: the person (tribe 0 firewarrior) flew 6 turns, landed in the sea, went to person state 2;
+**that same turn** one type-0x41 effect appeared at its exact x/z, height 0, owner tribe 0, **state
+52**, lifetime 16, counting down 16..1 and gone exactly 16 turns later (the person drowned in the same
+16 turns, -16 height/turn to -256). Screenshots show orange droplets around the unit at impact, then
+thin vertical streaks on the water, then the spirit rising.
+
+**Trap caught by the live check**: the live state 52 contradicted the static write-up (state 53).
+For the class-7 switches (`switchD_00509c2e` init-by-type, `switchD_0050a769` per-turn-by-state),
+Ghidra's `caseD_N` labels are the decremented INDEX (value-1), while for the person ENTER switch
+(`switchD_004d290b`) they are the VALUE - confirmed by reading the raw jump tables. Always read the
+raw table entry (`table + (value-1)*4`) for class-7 types/states rather than trusting `caseD_N`.
+
+**Side note**: `scripts/cursor_resync.py` attached to pid 100, wine's `start.exe` launcher, not the game
+(pid 107 - the process whose cmdline ends in `D3DPOPTB.EXE -allres`); the game-side cursor did not
+actually resync. Pick the process without `start.exe` in its cmdline.
