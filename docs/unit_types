@@ -168,7 +168,7 @@ unit_class|unit_type|description
 7|0x3e|explosion 3
 7|0x3f|rock explosion
 7|0x40|lava gloop
-7|0x41|splash
+7|0x41|splash (effect state 53: 16-turn stationary billboard sprite, draw class 0x2C/sprite 1224; spawned on drowning entry and by things landing in water - see functions.tsv 0x50a31d)
 7|0x42|smoke cloud
 7|0x43|smoke cloud constant
 7|0x44|fireball 2
