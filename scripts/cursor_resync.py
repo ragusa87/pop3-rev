@@ -12,7 +12,7 @@ docs/cheat.md "cursor drift" sections):
   0xa69030, 0xa69070, 0x749c90, 0x749df4  game-side copies (same value)
 
 Run INSIDE the container as root (needs ptrace + DISPLAY):
-  docker compose exec -u root pop3 python3 /repo/scripts/cursor_resync.py
+  docker compose exec -u root pop3 python3 /work/scripts/cursor_resync.py
 Keep the mouse still while it runs. Pass x y window-local coords explicitly
 to skip the xdotool query:  cursor_resync.py 320 240
 """
@@ -24,11 +24,16 @@ WIN_NAME = "Populous, The Beginning"
 
 def game_pid():
     out = subprocess.run(["pgrep", "-f", r"D3DPOPTB\.EXE"], capture_output=True, text=True)
-    pids = [int(p) for p in out.stdout.split()]
-    for pid in pids:
+    for pid in (int(p) for p in out.stdout.split()):
         try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                if b"START.EXE" in f.read().upper():
+                    continue
             with open(f"/proc/{pid}/stat") as f:
-                if "Z" not in f.read().split(")")[1].split()[0]:
+                if "Z" in f.read().split(")")[1].split()[0]:
+                    continue
+            with open(f"/proc/{pid}/maps") as f:
+                if "d3dpoptb.exe" in f.read().lower():
                     return pid
         except OSError:
             pass

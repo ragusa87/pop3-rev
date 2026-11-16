@@ -1085,6 +1085,6 @@ Ghidra's `caseD_N` labels are the decremented INDEX (value-1), while for the per
 (`switchD_004d290b`) they are the VALUE - confirmed by reading the raw jump tables. Always read the
 raw table entry (`table + (value-1)*4`) for class-7 types/states rather than trusting `caseD_N`.
 
-**Side note**: `scripts/cursor_resync.py` attached to pid 100, wine's `start.exe` launcher, not the game
-(pid 107 - the process whose cmdline ends in `D3DPOPTB.EXE -allres`); the game-side cursor did not
-actually resync. Pick the process without `start.exe` in its cmdline.
+**Side note**: `scripts/cursor_resync.py` used to attach to wine's `start.exe` launcher (its cmdline also
+contains `D3DPOPTB.EXE`), so it reported success without touching the game. Fixed: it now skips `start.exe` and
+requires the exe to be mapped in the process; live-checked (drifted cursor snapped onto the real pointer).
