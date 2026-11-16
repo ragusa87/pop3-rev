@@ -169,7 +169,7 @@ unit_class|unit_type|description
 7|0x3f|rock explosion
 7|0x40|lava gloop
 7|0x41|splash (effect state 52: 16-turn stationary billboard sprite, draw class 0x2C/sprite 1304, sound 0x2C; spawned on drowning entry and by things landing in water - see functions.tsv 0x513830)
-7|0x42|smoke cloud
+7|0x42|smoke cloud (effect state 53: sprites 1224-1239, a cream puff growing then fading; the big volcano fireball's trail and landing puff - see effect_states.csv)
 7|0x43|smoke cloud constant
 7|0x44|fireball 2
 7|0x45|ground shockwave
