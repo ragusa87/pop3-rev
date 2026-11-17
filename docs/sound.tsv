@@ -1,33 +1,230 @@
 sound_id	name	feature_area	status	trigger	role
-0x9	-	units	traced	0x4E6D00 (0x4E73D1)	Landing scream: played on touchdown for a BLOWN person whose vel.y <= -100 at the moment of landing, type is not shaman (7) and not wildman (1) - "Person physics".
-0xB	-	units	traced	0x4D73E0 (0x4D787C), 0x4D83B0 (0x4D8BFE)	Small debris/effect-burst tick sound: once per class-5 type-0xB visual-effect object spawned. Two known contexts, same pattern both times: state 19's ground-recovery settling (spawns one per 100 carried wood dropped, see person_states.tsv row 19) and preacher-conversion's roll-failure sub-state 4 ("being preached to" listening-effect burst, person_states.tsv row 23) - plausibly the same underlying "shedding/spawning small objects" primitive in both.
-0xD	-	combat	traced	0x518FB0 (0x5189BE)	Melee: fighter stance 2 or 4's "done" sound, played on the fighter itself when its per-type stance timer expires - no opponent-type branching (combat.md "Melee").
-0xE	-	combat	traced	0x518FB0 (0x519714)	Melee: fighter stance 3 ("Striking")'s own blow sound against a NON-warrior opponent - sibling of 0x27 (the warrior-vs-warrior case).
-0x11	-	units	traced	0x4D298A	Drowning start: played once by person state 2's ENTER case (0x4D295F) the turn a person goes under, together with the class-7 type-0x41 splash. Only call site with this id found.
-0x13	-	buildings	traced	0x502660	Flying mesh-shatter debris piece's own dust-puff thud: plays every tick the piece's current position is over non-water terrain (table 0x5AA328 bit 0x2 clear), right alongside spawning its class-7/type-3 puff effect, shortly before the piece's own 50%-chance/settle-counter self-delete - see controller_states.csv state 7 and functions.tsv 0x407860/0x502660.
-0x16	-	units	traced	0x4D60D0	Wildman-only ambient idle sound, ~1/256 chance per turn while in state 8 ("wildman idle tick").
-0x1A	-	units	traced	0x4E6D00 (0x4E75F3)	Take-off scream for the PLAYER's own shaman (current/local tribe, 0x89C6F0, matches self+0x2F) when it first goes BLOWN - "Person physics".
-0x1B	-	units	traced	0x4E6D00 (0x4E73C7)	Landing scream: played on touchdown for a BLOWN shaman (type 7) whose vel.y <= -100 at the moment of landing - "Person physics". Sibling of 0x9 (the non-shaman case).
-0x27	-	combat	traced	0x518FB0 (0x5196FC)	Melee: Striking blow sound, warrior attacker (+0x2B==3) against a non-warrior opponent.
-0x2B	-	combat	traced	0x518FB0 (0x519700)	Melee: Striking blow sound, warrior attacker against a warrior opponent - the "weapon clang" case.
-0x2C	-	objects	traced	0x51386C	Splash (class-7 type 0x41) creation: played once by its init 0x513830, so it plays wherever a splash is spawned (a person starting to drown, alongside that state's own 0x11; debris or a death spirit hitting water).
-0x32	-	combat	traced	0x518FB0 (0x51970F)	Melee: Striking, played on the OPPONENT (not the striker) every time a warrior lands a blow, regardless of the opponent's own type - layered on top of 0x27/0x2B.
-0x34	-	buildings	named	0x408ED0	"Building under attack" siren: played on an ALERTED building (`+0x9C` bit `0x10`, set by `0x40BAE0` whenever any unit lands a melee hit on it - functions.tsv "Watchtower sentry scan and alarm"/trace-backlog.md "Combat") on a double-gated roll - every 4th tick (`+0x2E` class_counter rhythm) AND a 1-in-4 hit of a SECOND, separate LCG (`0x89BC72`) - so roughly once every ~16 ticks on average while the alert stays active, not every tick. Not yet confirmed by ear; no other call site found for this id.
-0x36	-	units	traced	0x43A0D0 (0x439D30, order kind 15 substate 2)	Spy arson: plays once, on the spy, at the moment its windup ends and it launches the firebrand (same instant as the class-7/type-29 firebrand spawn at speed 80) - the "lights/throws the match" sound. Live-confirmed timing 2026-11-12 (firebrand spawned turn 21825, 24 turns into substate 2). Callers outside the arson handler not enumerated.
-0x51	-	units	traced	0x4D3832 (state 26), 0x4D9080 (state 31)	Ambient crackle, every qualifying tick: played by both the cosmetic "scorched by a blast" state (26) and ordinary "on fire" (31, burn-damage) - a scorched-but-not-burning person sounds identical to one actually burning.
-0x53	-	buildings	traced	0x408B65 / 0x408B80 (0x408AB0, burning-building per-turn)	Burning building: the crackle loop - plays every turn while the burn countdown `+0xA7` is above 79 (first ~47 turns of the 127-turn burn), then once more as a positional sound (`0x48A770`) on the single damage turn (countdown == 79). Silent for the remaining ~79 turns of the burn. Live-confirmed timeline 2026-11-12.
-0x55	-	spells	traced	0x511800	Firestorm/Volcano fireball impact on a WATER cell: plays with the unnamed splash effect (class 7 type 0x2B, hfx 1152) - "Fireball impact".
-0x89	-	units	traced	0x4E6D00 (0x4E73F7)	Take-off scream for an OTHER tribe's shaman (type 7, tribe != current/local 0x89C6F0) when it first goes BLOWN - "Person physics". Sibling of 0x1A (the player's-own-shaman case).
-0x9F	-	units	traced	0x43C7A0 (0x43CD77)	Played on the preach TARGET (not the preacher) when the preach order's substate reaches 8, the moment its state is set to 5 and its animation-sequence kinds get rewritten - the "being preached to" sermon payoff.
-0xA1	-	spells	traced	0x50b630	Simple blast's own cast sound, played once by the shared DEFAULT (no-parameters) init - covers Blast's own "spell blast" component (type 0x4e) and any other blast-like effect that uses this same default init rather than the parametrized one.
-0xA4	-	spells	traced	0x510120	Insect Plague's invisible cloud: ambient sound played every turn while the effect is alive - its only audible trace.
-0xAC	-	spells	traced	0x5121C0	Played once on `effect_aod_init` (the Angel of Death spell's own controller effect init, confirmed invisible) - the cast's own "spell landing" cue, the moment the spell takes effect, before anything (even the meteor) is spawned.
-0xB2	-	spells	traced	0x479890	**The Angel of Death's own confirmed self-despawn cue** (also cross-referenced, by name only, in the angel's own graceful/violent death tail inside `0x4DB980`, `person_states.tsv` row 28 - no literal push address pinned down there). Here: played once by effect state 76's own "statue to AoD" sequence (`functions.tsv` 0x479890) on ENTERING its own sub-state 3 (a fixed 24-tick hold), the same tick its spawned angel-typed object's own `+0xA8` field is set to 4 - marking that apparition as being dismissed/despawned.
-0xB2	-	spells	traced	0x509f03	"Explosion 1" (effect type 0x26) and its sibling (type 0x27): played once at init, alongside the burst's own alpha-sprite animation - Blast's own explosion visual, "Blast's own cast chain". Shared with the volcano big-fireball's own "Rock explosion" burst (0x50A278, "Volcano rocks") - the same sound covers more than one burst-type effect, not unique to Blast.
-0xB6	-	spells	traced	0x511800	Firestorm/Volcano fireball impact on LAND: plays when the ground-fire scenery object ignites (0x4A8C60) - "Fireball impact".
-0xBC	-	spells	traced	0x4BC500	Volcano fireball (small or big) launch kick, played once at init alongside the random horizontal/vertical velocity roll - "Volcano fireballs".
-0xC4	-	units	traced	0x4E6D00 (0x4E7607)	Take-off scream for a non-shaman person rising faster than 90 (vel.y > 90) when it first goes BLOWN - "Person physics". A slow/weak push gets no take-off sound at all for non-shamans.
-0xC5	-	buildings	traced	0x479890	Played once by effect state 76's own "statue to AoD" sequence (`functions.tsv` 0x479890), on first finding/claiming its target statue, gated on its own flag byte `+0x2e` bits 0-1 both clear. **Same id as the Reincarnation Centre pillar's own SINK-phase sound** (`0x4A7EB0`'s own row) - a cross-reference, not confirmed to mean anything beyond ordinary shared-asset reuse.
-0xD9	-	spells	traced	0x512240	Played once, on tick 0 of the Angel of Death spell's own controller effect (`effect_aod`), the same tick it spawns the (confirmed invisible) falling-meteor sub-effect - the meteor's own spawn/launch cue, distinct from its later ground-impact sound (`0xDA`, below) 8 ticks on.
-0xDA	-	spells	traced	0x514970	Played once on the Angel of Death meteor's own "ground shockwave" sub-effect init, the instant the (invisible) meteor crosses the ground plane - the actual impact cue, triggering a real expanding terrain-height ripple (effect_states.csv state 56) at the same moment.
-0xDB	-	spells	traced	0x4DB980	Played once (self+0x37 guard) when the Angel of Death's hunting AI (person state 28) allocates its own class-6 type-8 shadow-companion object (re-identified this session, formerly described as a cosmetic marker/trail - see functions.tsv `0x4ddb30`), on first having no live reference yet. Also: a 1-in-64 roar from the engagement-roll sub-state (`0x4DADA0`) and another roar at the carry's countdown-7 wind-up turn (`0x4DB980`'s own release sequence) - not yet confirmed whether either reuses this same id or a separate one (not independently traced this session).
+0x00	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x01	chop1..chop5 [15-19]	units	traced	0x4960EA, 0x496A1E, 0x4342B1, 0x51B39B	Axe chop (flags 0x10, attached to the unit). Brave chopping a tree: one per completed chop-animation cycle (0x495D70). Brave taking wood from a tree on the way to deliver it (0x496750, only if the source's scenery type is a tree, 0x5A79C4 bit 0x10). Construction brave entering 'take wood from target' (order kind 7, 0x4340A0). Unit hacking at an enemy building: one per blow cycle of 8-23 ticks (attack_order_handler 0x51A2A0).
+0x02	Stomp4..stomp [273-276]	buildings	traced	0x4974E9, 0x513478	Stomp. Brave levelling a building foundation: each time one foundation cell is relevelled one step (work sub-state 8, 0x497030). Also the one-tick 'purify land' effect (class 7 type 0x24, effect state 35, 0x5130D0; Ghidra misnames it process_lava_flow), whose spawner is not found.
+0x03	Eat1..eat5 [20-24]	units	named	0x4D6C31	Eating, 50/50 with 0xBE: person state 15 (0x4D6BE0, near its reference unit; most likely a wildman eating), every tick no sound is attached to the unit.
+0x04	drink1..drink7 [26-32]	units	traced	0x4D6F16	Drinking, 50/50 with 0xBF: wildman drinking at the shore (person state 16, 0x4D6E40), every tick while its timer runs, it is not busy and no sound is attached.
+0x05	convert [0]	units	traced	0x4D806F, 0x4D87D8, 0x4D953E	Conversion 'convert' chime, with a class-7 type-0x3A flash on kill-and-replace. A wildman is turned into a brave by the Convert spell (0x51256C) or the Reincarnation Centre ground flatten (0x50CABE), both via 0x4D7FD0. A preacher's conversion roll succeeds (state 23, 0x4D83B0). Person state 32 (0x4D9420) runs out and the unit becomes a brave of another tribe; no writer of state 32 found.
+0x06	Fire_04..Fire_01 [364-367]	objects	traced	0x4A7191	Ground fire crackle loop (flags 0x40) on a burning ground-fire scenery object (0x4A7170).
+0x07	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x08	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x09	v_land01..v_land07 [122-128]	units	traced	0x4E6D00 (0x4E73D6)	Landing grunt: a BLOWN person lands on non-water ground with vel.y <= -100 and survives the fall damage (applied at <= -200). Not shaman (0x1B), not wildman (silent).
+0x0A	chop1..chop5 [15-19]	units	traced	0x434377	Chop while picking up wood: construction brave in 'take wood from target', every tick of the 3-tick pickup cooldown when the target is a wood pile (class 5 type 0xB).
+0x0B	chop1..chop5 [15-19]	units	traced	0x4D5905, 0x4D787D, 0x4D7B8B, 0x4D8CA4, 0x4E0B6C, 0x502C90	Wood drop: one per 100 carried wood dumped as a class-5 type-0xB wood pile. Via 0x4D58C0 (called from 8 order handlers), person state 19 recovery, a person being converted (state 23), forced eviction (state 41), and a dead person's rising spirit once 512 above ground (0x5029D0).
+0x0C	chop1..chop5 [15-19]	units	orphan	-	ORPHAN: chop samples, no call site.
+0x0D	fight:Punch31..Punch1	combat	traced	0x5189C3, 0x51971D	Punch (fight bank Punch*). Challenge shove: the attacker's windup timer (pre_fight_turn sub-state 6) reaches 0. Melee: the stance 2 or 4 timer expires on a fighter (fight_turn).
+0x0E	fight:Punch31..Punch1	combat	traced	0x51971D	Punch (fight bank Punch*): melee stance 3 blow struck by a NON-warrior, whatever the opponent's type.
+0x0F	Sv_die [227]	units	traced	0x4D5CAD	Local player's shaman dies ('Sv_die'): death-enter 0x4D5C70.
+0x10	v_die015..v_die001 [129-143]	units	traced	0x4D5CAD	Death cry of any non-shaman person on entering person state 3 (0x4D5C70, 15 variants). Ghosts are deleted silently instead.
+0x11	V_drwn01..V_drwn03 [10-12]	units	traced	0x4D298A	Drowning: once when a person enters state 2, together with the type-0x41 splash.
+0x12	Wexp2..Wexp1 [93-94]	buildings	traced	0x50F916, 0x50FF10	Wood-structure crack. A whirlwind pulls wood from a building and it loses a construction stage. Earthquake effect type 0xE knocks 100 wood off a building and its stage drops. Both play with the mesh shatter.
+0x13	Shrap01..Shrap03 [4-6]	buildings	traced	0x502745	Flying building-debris piece lands on non-water ground, with its dust puff (controller state 7).
+0x14	build1..build5 [68-72]	buildings	traced	0x495AD1	Hammering (flags 0x10): a brave building a structure, on each completed hammer cycle while the plan is still under construction (work sub-state 2, 0x4958F0). The next swing comes 16-31 ticks later.
+0x15	quake [25]	spells	traced	0x50DBAE	Earthquake: the big 'quake' crack, once at the midpoint (tick 60) of the 120-tick quake effect.
+0x16	oh001..oh014 [255-268]	units	traced	0x4D6117	Wildman idle mutter ('oh'): 1/256 per tick in state 8.
+0x17	oh001 [255]	units	orphan	-	ORPHAN: single quiet 'oh001' (volume 10), no call site.
+0x18	Sv_sel02..Sv_sel01 [41-42]	units	traced	0x489C9C, 0x489D73	Shaman selection voice ('Sv_sel'): the shaman is selected alone (0x489C40 single) or is part of a selected group.
+0x19	Sv_yes2..Sv_yes3 [491-492]	units	traced	0x436366	Shaman 'yes' ('Sv_yes'): the player orders a selection that contains the shaman (0x436330). Played on the tribe's shaman and attenuated only for the local shaman.
+0x1A	Sv_scrm01..Sv_scrm02 [37-38]	units	traced	0x4E6D00 (0x4E760D), 0x50F7AB	Local player's shaman scream ('Sv_scrm'): first tick it is blown (any speed), or sucked into a whirlwind.
+0x1B	Sv_grnt01..Sv_grnt04 [33-36]	units	traced	0x4E6D00 (0x4E73D6)	Shaman landing grunt ('Sv_grnt'): a blown shaman lands with vel.y <= -100.
+0x1C	amb1001..amb1020 [45-64]	objects	traced	0x489963	Ambient wildlife one-shot ('amb10xx', 20 variants), 1/128 per frame while trees are in view; default theme. Suppressed over overlay screens.
+0x1D	amb_m1005..amb_m1001 [150-154]	objects	traced	0x489865 (bed slot 0)	Ambience bed: low land ('amb_m1'), weighted by low-land cells near the camera. See audio.md 'Ambience bed'.
+0x1E	amb2006..amb2001 [161-166]	objects	traced	0x489865 (bed slot 1)	Ambience bed: shoreline ('amb2'), weighted by min(low land, water) in view.
+0x1F	amb_w1006..amb_w1001 [155-160]	objects	traced	0x489865 (bed slot 2)	Ambience bed: high ground ('amb_w1', wind), weighted by cells higher than 0x200.
+0x20	amb_sea01..amb_sea04 [332-335]	objects	traced	0x489865 (bed slot 4)	Ambience bed: open sea ('amb_sea'), weighted by water cells in view. Replaced by 0xD5 in theme 16 and 0xCA in theme 30.
+0x21	spacey10..spacey01 [441-450]	objects	traced	0x489865 (bed slot 3)	Ambience bed: 'spacey', weight 255 only in the special/overlay view (0x89C6C1==2 or 0x89CE36), otherwise 0.
+0x22	ghostdi3..ghostdie [87-89]	spells	traced	0x4D4C0F, 0x4D4D22	Ghost poof ('ghostdie'), with a class-7 type-0x20 spirit puff. A Ghost Army ghost is destroyed (0x4D4B50). Armageddon's start sweep removes every wildman and Angel of Death from the map (0x477B90 -> 0x4D4D10).
+0x23	fgtalarm [73]	combat	traced	0x4F0F2D, 0x4F0F4F	Fight alarm (UI, 'fgtalarm') while a combat-alert record is valid. Cell visible to the local player: 4 pulses per 32 turns (turn%32 = 0, 20, 24, 28). Not visible: once per 32 turns, only if not already playing.
+0x24	bldgstmp [74]	buildings	traced	0x4ACCA1	Place-building click (UI, 'bldgstmp'): valid placement of the selected building plan (ui_cmd 0x77/0x78 -> tribe_cmd 0xE, or 0x62 for a guard post).
+0x25	wrong [75]	other	traced	0x4AC0E5, 0x4AC142, 0x4ACD6A, 0x4ADF88	'Wrong' buzz (UI): building placement rejected (ui_cmd 0x77/0x78). Also raise/lower-land commands (ui_cmd 0x68/0x69, drag mode 0xE) while the land-edit flag 0x89CE43 is 0. That flag is never set non-zero, so those commands always buzz.
+0x26	rotate [110]	buildings	traced	0x4ACE5E	Rotate the building plan (UI, ui_cmd 0x7B): the selected type's orientation cycles 0-3.
+0x27	fight:swords8..swords1	combat	traced	0x51971D	Sword clash (fight bank swords*): melee stance 3 blow, warrior striking a WARRIOR. 0x32 does not play with it.
+0x28	birth_temp1 [351]	buildings	traced	0x404E4C	Birth ('birth_temp1'): a hut of the LOCAL player produces a new brave (0x404C80).
+0x29	l_bridge [76]	spells	traced	0x509E02	Land Bridge cast ('l_bridge'), layered with 0xAB on the same tick.
+0x2A	hypno [77]	spells	traced	0x50EA53	Hypnotism cast, once on effect init.
+0x2B	fight:sw_flsh6..sw_flsh1	combat	traced	0x519703	Sword flash (fight bank sw_flsh*): melee stance 3 blow, warrior striking a NON-warrior. 0x32 plays on the opponent with it.
+0x2C	w_wtr03..w_wtr01 [80-82]	objects	traced	0x51386C, 0x513779	Water splash ('w_wtr'). Splash type 0x41 init (drowning, debris or a spirit hitting water). Splash type 0x2B init over water: fireball into water, whirlwind, lava-flow gloop.
+0x2D	fight:Attk01_c..Attk01_a	combat	traced	0x5202A5, 0x4775B9	Attack yell, 1 attacker (fight bank Attk01). Group battle cry: an attack group closes from >0xA00 to <0x600 of its target, queued at 0xAFC288 and flushed by 0x520250. Armageddon fight: random crowd yell for a tribe with few fighters left (n<6).
+0x2E	fight:Attk02_b,Attk01_c	combat	traced	0x5202A5, 0x4775B9	Attack yell, 2 attackers (Attk02). Same battle-cry queue (group of 2). Armageddon crowd yell, n<18.
+0x2F	fight:Attk03_c..Attk03_a	combat	traced	0x5202A5, 0x4775B9	Attack yell, 3 attackers (Attk03). Same queue (group of 3). Armageddon crowd yell, n>=18.
+0x30	fight:Attk99_a	combat	traced	0x5202A5, 0x41C09A, 0x47761E, 0x4785ED	Crowd cheer (Attk99). Battle cry for a group of 4 or more. Victory: 50% per turn while 0x89C664 bit 2 is set (local tribe won; UI). Armageddon: 50% per tick in sub-state 2, and once per tribe when it is ordered to march into the arena.
+0x31	Invis [83]	spells	traced	0x50A8C8	Invisibility takes effect: the radius sweep made at least one unit invisible (effect state 14).
+0x32	fight:v_hit10..v_hit01	combat	traced	0x51971D	Hit grunt (fight bank v_hit*) on the OPPONENT: only together with 0x2B, i.e. a warrior hitting a non-warrior.
+0x33	v_pre_pre001..v_pre_pre004 [215-218]	units	traced	0x43A896	Local preacher's sermon voice ('v_pre_pre'): in the preach wait, every 16th tick with 50% odds a gesture starts. The voice plays only if the preacher has hit a listener.
+0x34	Wstress3..Wstress1 [90-92]	buildings	traced	0x408F39, 0x4094E4	Building creak ('Wstress', wood stress, not a siren). Alerted building (+0x9C bits 0x10 and 0x2): every 4th tick with a 1-in-4 roll. Wear/decay tick: a 100-wood chunk is lost and the building survives (0x4092A0).
+0x35	Invisoff [117]	spells	traced	0x4D3C26, 0x4DA180	Invisibility off. The invisibility counter (+0xA3) runs out. Or an invisible unit reveals itself by acting (0x4DA170: spy arson, preacher strike, fight start, attacking a building, firewarrior shot).
+0x36	Alight04..Alight01 [118-121]	units	traced	0x43A0D0	Spy arson: the spy throws the firebrand at the end of its windup (live-confirmed 2026-11-12).
+0x37	v_ok005..v_ok001 [191-195]	units	traced	0x4363AD	Order acknowledgement 'ok' ('v_ok'): the player orders a selection containing any brave, warrior or firewarrior (0x436330), on the first ordered unit.
+0x38	v_ok2_001..v_ok2_002 [183-184]	units	orphan	-	ORPHAN: 'v_ok2' (two-voice ok). Jump-table slot at 0x436434 is unreachable: the index is only ever 0 or 1.
+0x39	v_ok3_001..v_ok3_002 [185-186]	units	orphan	-	ORPHAN: 'v_ok3', same unreachable slot.
+0x3A	v_ok3_001..v_ok3_002 [185-186]	units	orphan	-	ORPHAN: 'v_ok3', same unreachable slot (also the default case).
+0x3B	v_spy_ok001..v_spy_ok004 [201-204]	units	traced	0x4363DB	Spy 'ok', 1 spy in the ordered selection.
+0x3C	v_spy_ok2_001..v_spy_ok2_002 [205-206]	units	traced	0x4363DB	Spy 'ok', 2 spies.
+0x3D	v_spy_ok2_001..v_spy_ok2_002 [205-206]	units	traced	0x4363DB	Spy 'ok', 3 spies.
+0x3E	v_spy_ok2_001..v_spy_ok2_002 [205-206]	units	traced	0x4363DB	Spy 'ok', 4+ spies.
+0x3F	v_pre_ok001..v_pre_ok004 [211-214]	units	traced	0x436407	Preacher 'ok', 1 preacher in the ordered selection.
+0x40	v_pre_ok001..v_pre_ok004 [211-214]	units	traced	0x436417	Preacher 'ok', 2 preachers.
+0x41	v_pre_ok001..v_pre_ok004 [211-214]	units	traced	0x436427	Preacher 'ok', 3 preachers.
+0x42	v_pre_ok001..v_pre_ok004 [211-214]	units	traced	0x4363F7	Preacher 'ok', 4+ preachers.
+0x43	v_bow2_001..v_bow2_003 [177-179]	units	traced	0x489DB2	Selection voice, 2 followers selected (not spy/preacher/shaman; 'v_bow2'), 0x489C40.
+0x44	v_bow3_001..v_bow3_003 [180-182]	units	traced	0x489DC4	Selection voice, 3 followers ('v_bow3').
+0x45	v_bow3_001..v_bow3_003 [180-182]	units	traced	0x489D8E	Selection voice, 4+ followers ('v_bow3').
+0x46	v_spy_bow2_001..v_spy_bow2_002 [199-200]	units	traced	0x489D00	Selection voice, 2 spies.
+0x47	v_spy_bow2_001..v_spy_bow2_002 [199-200]	units	traced	0x489D13	Selection voice, 3 spies.
+0x48	v_spy_bow2_001..v_spy_bow2_002 [199-200]	units	traced	0x489CDA	Selection voice, 4+ spies.
+0x49	v_pre_bow001..v_pre_bow004 [207-210]	units	traced	0x489D53	Selection voice, 2 preachers.
+0x4A	v_pre_bow001..v_pre_bow004 [207-210]	units	traced	0x489D53	Selection voice, 3 preachers.
+0x4B	v_pre_bow001..v_pre_bow004 [207-210]	units	traced	0x489D53	Selection voice, 4+ preachers.
+0x4C	bloonpop [189]	vehicles	traced	0x4639BB, 0x463A70, 0x464AC7	Balloon burst ('bloonpop'), with a simple blast. Balloon going down over land (vehicle state 5), carried above 1024 (state 6), or tumbling with its countdown out (state 9).
+0x4D	boatexp [190]	vehicles	traced	0x4639AB, 0x463A63, 0x464AB9	Boat explodes ('boatexp'): same three cases as 0x4C for a boat; in state 9 also when it hits the ground.
+0x4E	bloonrid_4..bloonrid_1 [487-490]	vehicles	traced	0x46445A (stop 0x464375, 0x46371A)	Balloon flight loop (flags 0x40) while flying (vehicle state 4). Stopped on landing, or when it enters any other state.
+0x4F	boatrid_1..boatrid_4 [483-486]	vehicles	traced	0x4641B2 (stop 0x4640DD, 0x4636F8)	Boat rowing loop (flags 0x40) while under way (vehicle state 3). Stopped on beaching, or when it enters any other state.
+0x50	amb_gull001..amb_gull007 [279-285]	objects	traced	0x4898F4	Seagulls (UI): 1/256 per frame when every near cell drawn is water. Not in theme 30.
+0x51	v_onfire01..v_onfire03 [252-254]	units	traced	0x4D383F, 0x4D90FE	On-fire scream ('v_onfire'), every tick no sound is attached: scorched/panicking person (state 26) and burning person (state 31).
+0x52	v_hdprey01..v_hdprey04 [269-272]	worship	named	0x43C21A	Worship prayer chant ('v_hdprey') while praying at a head/totem (order kind 27, 0x43BCC0 sub-state 2), any non-shaman with no sound attached.
+0x53	Bldg_fire04..Bldg_fire01 [368-371]	buildings	traced	0x408B65 (stop 0x408B80)	Burning building crackle loop (flags 0x40): every turn while the burn countdown is above 79 (the first ~48 turns). STOPPED (0x48A770) on the damage turn at countdown 79, so the remaining ~79 turns are silent. Live-confirmed timeline 2026-11-12.
+0x54	amb_spc007..amb_spc001 [325-331]	objects	traced	0x489A15	Space ambience ('amb_spc'), 1/128 per frame, only in the special/overlay view.
+0x55	Bouldersplash01..Bouldersplash03 [336-338]	spells	traced	0x511937	Firestorm/volcano fireball hits a WATER cell ('Bouldersplash'), with the type-0x2B splash (and its own 0x2C).
+0x56	v_spy_bow001..v_spy_bow003 [196-198]	units	traced	0x489C8C, 0x489CED	Spy selection voice: a spy selected alone, or 1 spy in a group.
+0x57	v_pre_bow001..v_pre_bow004 [207-210]	units	traced	0x489C7A, 0x489D53	Preacher selection voice: a preacher selected alone, or 1 preacher in a group.
+0x58	v_bow001..v_bow007 [170-176]	units	traced	0x489C68, 0x489DA0	Follower selection voice ('v_bow', 7 variants): brave/warrior/firewarrior/wildman selected alone, or 1 such follower in a group.
+0x59	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x5A	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x5B	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x5C	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x5D	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x5E	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x5F	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x60	Sel_bldg [146]	other	traced	0x44C430	GUI click 'Sel_bldg': an in-game GUI-dialog widget of kind 2-6 activated (building-panel buttons; meaning named only).
+0x61	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x62	(no sample)	other	traced	0x47A6AB	SILENT (no sample): pointer mode reset to 0xC.
+0x63	Snapshot [9]	other	orphan	-	ORPHAN: 'Snapshot' (camera shutter), no call site.
+0x64	(no sample)	other	traced	0x451319	SILENT (no sample): minimap click. The camera jump it queues plays 0xDE.
+0x65	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x66	selectfe [149]	other	orphan	-	ORPHAN: 'selectfe' (frontend select), no call site in this exe.
+0x67	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x68	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x69	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x6A	confirm [79]	other	traced	29 sites (process_cmd, 0x4AA8B0, 0x47B460, 0x45EA00, 0x45ED10, 0x44BF50, 0x431140, 0x4AF780, 0x4AFFF0)	Generic UI 'confirm' click. Cast the armed spell at a target (ui_cmd 0x6A/6B, 0xC4). Send the shaman to a point (0x6D). Select own person / group move order (0x6E/6F). Track/select commands (0x74-0x76, 0x7D). Building toggle (0xB2, 0xB3). Raise/lower land in the Reincarnation Centre intro (0xC2/0xC3). Commit a queued order target (0x7E/7F). Hover-popup row/header clicks. Message-icon clicks. GUI widget clicks. Info-window list/button/query clicks (flags 0x801, also while paused). Modal dialog buttons.
+0x6B	sham_rtn [85]	units	traced	0x502E4C	Local player's shaman reincarnates (UI, 'sham_rtn').
+0x6C	warloop [84]	combat	traced	0x489F0B	Battle crowd loop ('warloop', 2D): only with 7+ melee fights in the world; volume = summed proximity of the fights past the 6th to the local camera (0x489E50). Stopped when the total is 0.
+0x6D	Pageturn [144]	other	traced	0x44C8C7	Page turn: a GUI page/dialog opens in game mode 0x88F000==2.
+0x6E	Zoom_out [147]	other	traced	0x4A16C6	'Zoom_out' click: UI toggle button (0x4A1680, same logic as ui_cmd 0x97) when tribe+0x93D bit 0x80 is clear; queues tribe_cmd 0x5F(1).
+0x6F	Zoom_in [148]	other	traced	0x4A16A5	'Zoom_in' click: same toggle with the bit set; queues tribe_cmd 0x5F(0).
+0x70	discosky [169]	worship	traced	0x4FAFB4, 0x4FBBB9	Discovery claimed (UI, 'discosky'): a person reaches a discovery (0x4FACF0), or a trigger hands a discovery straight to a tribe (0x4FB270).
+0x71	discopop [168]	worship	traced	0x4815AE, 0x4841BB	Discovery cinematic starts ('discopop'): spell discovery (0x4815A0), or discovery kind 0xB (0x4841B0).
+0x72	discoend [167]	worship	traced	0x48276B (stop 0x483296)	Spell/swirl cinematic reaches its arrival stage ('discoend'); stopped when the cinematic ends.
+0x73	Sel_spel [145]	other	traced	0x44C446	GUI click 'Sel_spel': a GUI-dialog widget of kind 9-0x21 activated (spell-panel buttons).
+0x74	Sv_dance..Sv_dance2 [225-226]	spells	orphan	-	ORPHAN: shout slot for spell type 0 (none) of the local shaman table; never reached.
+0x75	Sv_blast..Sv_blast2 [219-220]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 1 (burn): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x76	Sv_blast..Sv_blast2 [219-220]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 2 (blast): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x77	Sv_bolt..Sv_bolt2 [221-222]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 3 (lightning): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x78	Sv_wind..Sv_wind2 [246-247]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 4 (whirlwind): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x79	Sv_insect..Sv_insect2 [238-239]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 5 (swarm): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x7A	Sv_invis..Sv_invis2 [240-241]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 6 (invisibility): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x7B	Sv_hypno..Sv_hypno2 [236-237]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 7 (hypnotism): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x7C	Sv_fstm..Sv_fstm2 [232-233]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 8 (firestorm): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x7D	Sv_ghost..Sv_ghost2 [234-235]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 9 (ghost army): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x7E	Sv_erode..Sv_erode2 [228-229]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 10 (erosion): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x7F	Sv_swamp..Sv_swamp2 [244-245]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 11 (swamp): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x80	Sv_bridge..Sv_bridge2 [223-224]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 12 (land bridge): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x81	Sv_angel2..Sv_angel [250-251]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 13 (angel of death): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x82	Sv_quake..Sv_quake2 [242-243]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 14 (earthquake): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x83	Sv_flat..Sv_flat2 [230-231]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 15 (flatten): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x84	Sv_volc2..Sv_volc [248-249]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 16 (volcano): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x85	Sv_dance..Sv_dance2 [225-226]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 17 (convert): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x86	Sv_blast..Sv_blast2 [219-220]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 18 (armageddon): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
+0x87	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x88	En_Sv_die [296]	units	traced	0x4D5CAD	Death of another tribe's shaman ('En_Sv_die'), 0x4D5C70. Also the overflow id of the local shaman's cast shout for spell type 20 (bloodlust) if that spell launches through 0x4C1B80 (not live-checked).
+0x89	En_Sv_Scrm01..En_Sv_Scrm02 [317-318]	units	traced	0x4E6D00 (0x4E760D), 0x50F7AB	Another tribe's shaman scream ('En_Sv_Scrm'): first tick blown, or sucked into a whirlwind. Also the overflow shout id for local spell type 21 (teleport).
+0x8A	En_Sv_dance..En_Sv_dance2 [294-295]	spells	orphan	-	ORPHAN: shout slot for spell type 0 (none) of the enemy shaman table; never reached.
+0x8B	En_Sv_blast..En_Sv_blast2 [286-287]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 1 (burn): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x8C	En_Sv_blast..En_Sv_blast2 [286-287]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 2 (blast): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x8D	En_Sv_bolt..En_Sv_bolt2 [290-291]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 3 (lightning): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x8E	En_Sv_wind..En_Sv_wind2 [323-324]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 4 (whirlwind): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x8F	En_Sv_insect..En_Sv_insect2 [311-312]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 5 (swarm): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x90	En_Sv_invis..En_Sv_invis2 [313-314]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 6 (invisibility): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x91	En_Sv_hypno..En_Sv_hypno2 [309-310]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 7 (hypnotism): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x92	En_Sv_fstm..En_Sv_fstm2 [301-302]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 8 (firestorm): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x93	En_Sv_ghost..En_Sv_ghost2 [303-304]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 9 (ghost army): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x94	En_Sv_erode..En_Sv_erode2 [297-298]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 10 (erosion): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x95	En_Sv_swamp..En_Sv_swamp2 [319-320]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 11 (swamp): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x96	En_Sv_bridge..En_Sv_bridge2 [292-293]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 12 (land bridge): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x97	En_Sv_angel2..En_Sv_angel [288-289]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 13 (angel of death): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x98	En_Sv_quake..En_Sv_quake2 [315-316]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 14 (earthquake): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x99	En_Sv_flat..En_Sv_flat2 [299-300]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 15 (flatten): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x9A	En_Sv_volc..En_Sv_volc2 [321-322]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 16 (volcano): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x9B	En_Sv_dance..En_Sv_dance2 [294-295]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 17 (convert): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x9C	En_Sv_blast..En_Sv_blast2 [286-287]	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Enemy shaman cast shout for spell type 18 (armageddon): 0x8A + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set.
+0x9D	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0x9E	sitespel [7]	spells	traced	0x50C7EF	'sitespel': Reincarnation Centre ground prep (0x50C780). Also the overflow shout id for enemy spell type 20.
+0x9F	rokrise..rokrise3 [65-67]	buildings	traced	0x40708B, 0x43CB60, 0x43CDAA, 0x4A7F1F, 0x4A899D	Rock rise ('rokrise'). A building sinking into the ground, every 32 ticks (building state 5). Order kind 33 (0x43C7A0, misnamed preach_order_handler; target is a building) entering sub-states 3 and 8, with a mesh morph. The Reincarnation Centre pillar rising. A burnt-out ground fire (scenery 11/12), every 32 ticks. Also the overflow shout id for enemy spell type 21.
+0xA0	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0xA1	blast5..blast [101-105]	spells	traced	0x50B6D9, 0x4C23C2, 0x4BBEF0	Blast whoosh. Default blast effect init (0x50B630). A spell launches a class-8 type-4 shot (only Blast). Firewarrior fire-bolt launched (shot type 6 init).
+0xA2	Lghtng..Lghtng2 [187-188]	spells	traced	0x509EBC, 0x41B889	Thunder ('Lghtng'). Lightning strike effect created. Also a tribe is eliminated (after turn 32): plays twice (2D) during the 20-turn sky flash.
+0xA3	Wind_01..Wind_04 [352-355]	spells	traced	0x50F4D1 (stop 0x50FA91)	Whirlwind wind loop (flags 0x40), restarted every tick; stopped when fewer than 12 ticks remain.
+0xA4	Swarm_04..Swarm_01 [356-359]	spells	traced	0x510139	Insect Plague swarm loop, every tick while the effect lives.
+0xA5	fire [2]	spells	orphan	-	ORPHAN: 'fire', no call site.
+0xA6	fire [2]	spells	orphan	-	ORPHAN: 'fire', no call site.
+0xA7	fire [2]	spells	orphan	-	ORPHAN: 'fire', no call site.
+0xA8	ghost [43]	spells	traced	0x509D1A	Ghost Army cast, once on effect init.
+0xA9	erode [1]	spells	traced	0x50FF56	Erosion rumble (flags 2), restarted for its 64-tick life.
+0xAA	Swamp06..swamp01 [111-116]	spells	traced	0x511466	Swamp bubbling loop (flags 0x40) while the swamp lives.
+0xAB	Landb2 [480]	spells	traced	0x509DF5	Land Bridge cast ('Landb2'), layered with 0x29.
+0xAC	angel [44]	spells	traced	0x5121F2	Angel of Death cast: the controller effect is created (0x5121C0).
+0xAD	volstart [14]	spells	traced	0x50DA2E	Earthquake rumble ('volstart', flags 2) for the whole 120 ticks, with a screen-shake effect.
+0xAE	sitespel [7]	spells	traced	0x5126EE	Flatten cast ('sitespel'), once on effect init.
+0xAF	volstart [14]	spells	traced	0x50E0F7, 0x47728E, 0x478F69	Deep rumble ('volstart', flags 2, restarted when it ends): the volcano for its whole 160-tick life, Armageddon at init, and the terraforming class-7 effect on list 0x890360 (likely the Armageddon arena shaper).
+0xB0	volrise [13]	spells	traced	0x50E15F, 0x477D82, 0x4796F3	'volrise'. Volcano cone starts rising (tick 80 of 160). Armageddon arena phase starts. The terraforming effect first moves terrain.
+0xB1	fire [2]	spells	orphan	-	ORPHAN: 'fire', no call site.
+0xB2	blastexp..blastexp4 [106-109]	spells	traced	0x509F3F, 0x509F95, 0x50A25E, 0x50A2B4, 0x4BC4B4, 0x4BC4D1, 0x479C53, 0x4DBC19, 0x4DC8C1	Explosion ('blastexp'). Explosion bursts 1/2/3 and the rock explosion at creation (Blast's visual, volcano rocks). Firewarrior fire-bolt impact. Angel of Death appears (sub-state 1). Angel removed (sub-state 8, 2D, heard map-wide). Statue-to-AoD apparition dismissed (0x479890).
+0xB3	skyfire [8]	spells	traced	0x5117D6	Firestorm: 'skyfire' on each falling fireball, one spawned every 4th tick.
+0xB4	Conv_bg [78]	spells	traced	0x512331	Convert cast, once on effect init ('Conv_bg').
+0xB5	Volcfire [86]	spells	traced	0x512A87 (stop 0x512AC0)	Lava flow ('Volcfire', flags 2), restarted through the growing phase; stopped in sub-state 1.
+0xB6	Fireexp [3]	spells	traced	0x51190A	Firestorm/volcano fireball hits LAND: the ground fire ignites ('Fireexp').
+0xB7	sitespel [7]	spells	orphan	-	ORPHAN: 'sitespel', no call site.
+0xB8	sitespel [7]	spells	orphan	-	ORPHAN: 'sitespel', no call site.
+0xB9	sitespel [7]	spells	orphan	-	ORPHAN: 'sitespel', no call site.
+0xBA	sitespel [7]	spells	orphan	-	ORPHAN: 'sitespel', no call site.
+0xBB	sitespel [7]	spells	orphan	-	ORPHAN: 'sitespel', no call site.
+0xBC	Volbrst6..volbrst1 [95-100]	spells	traced	0x4BC646	Volcano fireball launch ('volbrst'), small or big, at init.
+0xBD	En_v_pre_pre001..En_v_pre_pre004 [347-350]	units	traced	0x43A8A6	Sermon voice of a preacher of another tribe ('En_v_pre_pre'); same condition as 0x33.
+0xBE	Wm_eat01..Wm_eat04 [343-346]	units	named	0x4D6C31	Wildman eating ('Wm_eat'), 50/50 with 0x03 (person state 15).
+0xBF	Wm_drink02..Wm_drink01 [339-342]	units	traced	0x4D6F2C	Wildman drinking ('Wm_drink'), 50/50 with 0x04 (person state 16).
+0xC0	Guard_04..Guard_01 [360-363]	buildings	named	0x503006 (stop 0x5030B2, 0x5031E3, 0x50321D)	Guard-post marker loop ('Guard', flags 0x40) while a class-10 type-0x10 guard-post marker exists (controller state 15). Stopped when the marker is deleted, or evicted past the 64-marker cap.
+0xC1	Stonehead..Stonehead5 [398-402]	objects	traced	0x4A8C45	Stone Head talking ('Stonehead'): scenery type 9 while animating, on the key frame of each loop.
+0xC2	amb4020..amb4001 [372-391]	objects	traced	0x489963	Ambient wildlife one-shot ('amb40xx'), theme 22, 1/128 per frame while trees are in view.
+0xC3	Shield [392]	spells	traced	0x48998B	Magical Shield hum ('Shield', looping sample, 2D): while any shielded unit (+0x15 bit 0x80) is drawn near the camera; stopped when none is.
+0xC4	v_intoair01..v_intoair02 [393-394]	units	traced	0x4E6D00 (0x4E760D)	'Into the air' scream: the first tick a non-shaman person is blown, only if vel.y > 90.
+0xC5	roksink..roksink3 [395-397]	buildings	traced	0x4A7FFC, 0x479A45	Rock sink ('roksink'): the Reincarnation Centre pillar sinking; the statue-to-AoD sequence claiming its statue (0x479890).
+0xC6	amb5001..amb5010 [403-412]	objects	traced	0x489963	Ambient one-shot ('amb50xx'), theme 30 (hell), 1/128 per frame while trees are in view.
+0xC7	amb_hellm1001..amb_hellm1005 [430-434]	objects	traced	0x489865 (bed slot 0)	Ambience bed, hell theme 30: low land ('amb_hellm1').
+0xC8	ambhell2001..ambhell2006 [418-423]	objects	traced	0x489865 (bed slot 1)	Ambience bed, hell theme: shoreline ('ambhell2').
+0xC9	amb_hellw1006..amb_hellw1001 [424-429]	objects	traced	0x489865 (bed slot 2)	Ambience bed, hell theme: high ground ('amb_hellw1').
+0xCA	amb_hellsea01..amb_hellsea05 [413-417]	objects	traced	0x489865 (bed slot 4)	Ambience bed, hell theme: sea ('amb_hellsea').
+0xCB	disco_bldg_path [435]	worship	traced	0x4819EF	Building-discovery cinematic starts ('disco_bldg_path'), layered with 0xCC.
+0xCC	disco_bldg_pop [438]	worship	traced	0x4819CF	Building-discovery cinematic starts ('disco_bldg_pop').
+0xCD	disco_bldg_end [436]	worship	traced	0x483D18 (stop 0x483E40)	Building-discovery cinematic final stage ('disco_bldg_end').
+0xCE	disco_bldg_circ [437]	worship	traced	0x483AD5 (stop 0x483F13)	Building-discovery cinematic circling stage ('disco_bldg_circ'); stopped after 12 stages.
+0xCF	tweets [439]	buildings	named	0x468F0D (stop 0x469011)	Bird tweets on a building drawn on screen with flags_3 +0x14 bit 0x1000. The bit is set by hut growth and mana distribution, so plausibly a 'contented hut'. Stopped when the bit clears.
+0xD0	swirl [440]	units	traced	0x481DFF (stop 0x4832A5)	Soul swirl ('swirl'): the local player killed an enemy shaman.
+0xD1	badswirl [451]	units	traced	0x481DE8 (stop 0x4832B4)	Bad swirl ('badswirl'): the local player's own shaman died.
+0xD2	v_intowind01..v_intowind08 [452-459]	spells	traced	0x50F7AB	A non-shaman person is sucked into a whirlwind ('v_intowind'). The shaman uses 0x1A/0x89.
+0xD3	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0xD4	branch_off01..Branch_off04 [466-469]	spells	traced	0x50F99F	Branch snapping off ('branch_off'): a whirlwind over a tree holding 100+ wood, 50% per hit, spawning a tumbling branch.
+0xD5	amb_w2001..amb_w2006 [460-465]	objects	traced	0x489865 (bed slot 4)	Ambience bed, theme 16: replaces the sea slot ('amb_w2').
+0xD6	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0xD7	bell1..bell3 [475-476]	buildings	traced	0x404BD2	Construction finished: the completion bell when a building enters state 2 (0x4049D0).
+0xD8	AngelD1..AngelD2 [470-471]	spells	traced	0x4D260D	Angel of Death person created (spawn voice 'AngelD').
+0xD9	Angelfall [472]	spells	traced	0x512278	Angel of Death meteor launched ('Angelfall'), tick 0 of the AoD controller.
+0xDA	Angelland [473]	spells	traced	0x514980	Angel of Death meteor impact ('Angelland'): shockwave init.
+0xDB	AngelWing2 [474]	spells	traced	0x4DBA41	Angel of Death wing flap ('AngelWing2'): every tick the angel's frame timer +0x37 is 0, i.e. once per animation loop. Not a one-shot at shadow allocation.
+0xDC	Angelblast [477]	spells	traced	0x4DBAD8	Angel of Death roar ('Angelblast'), every tick while counter +0x95 > 0. Armed by random rolls in hunting/engagement, failed engagements, and the carry/release countdown.
+0xDD	bookmark_set2 [478]	other	traced	0x47C5ED	Camera bookmark stored (ui_cmd 0x1E-0x21).
+0xDE	bookmark_ret2 [479]	other	traced	0x43E07E	Camera jump: bookmark recall (ui_cmd 0x22-0x25) or minimap click.
+0xDF	(no sample)	other	orphan	-	SILENT placeholder: no sample, no call site.
+0xE0	newplayer2 [481]	other	traced	0x457E90	Multiplayer lobby: an empty player slot becomes occupied ('newplayer2').
+0xE1	noentry [482]	units	traced	0x4D9629, 0x44DB0F	'noentry' (UI): a local non-shaman unit gets blocked (person state 33) within 2 command frames of the player's move click, with advisor message 0x25B and its 'no entry' label (0x44D7F0).
+0xE2	Sv_aff01..Sv_aff02 [39-40]	units	traced	0x4D9629	Same block, the unit is the local shaman ('Sv_aff').
+0xE3	infobnc [493]	other	traced	0x430DF1	A new message icon drops into the panel's message column ('infobnc').
+0xE4	infodrp [494]	other	traced	0x431D37	A falling message icon bounces at the bottom ('infodrp').

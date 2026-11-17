@@ -53,14 +53,14 @@ Agents working from this repo analyse the original game and document it. They ne
   state write-ups should point at these files rather than re-listing every state inline.
 - `docs/unit_types`: per-class unit/person/building/etc. type ids and names (a different axis from the state
   catalogs above - `+0x2B` type vs. `+0x2C` state).
-- `docs/sound.tsv`: catalog of sound ids, keyed by the `type_id` argument to `0x48A050` (`fn(unit, type_id, flag)`,
-  the one confirmed generic "play this sound" entry point - re-verify that assumption if a session ever finds a
-  second one). Columns: `sound_id  name  feature_area  status  trigger  role`, same `status`/`feature_area`
-  vocabulary as `functions.tsv`. `trigger` is the address(es) of the call site(s) found so far that pass this id
-  (a sound id is not a unique key the way a state number is - the SAME id can turn up at unrelated call sites, and
-  different ids can sound similar; never assume one id means only one thing without checking). `role` says exactly
-  when it plays (the condition at that call site), one line per distinct trigger if there's more than one. Built
-  the same incremental, one-session-at-a-time way as the other catalogs, via the `exe-function-map` skill.
+- `docs/sound.tsv`: catalog of ALL 229 sound ids (`0x00`-`0xE4`) of the exe's sound table `0x5ACF60`, keyed by the
+  `id` argument to `0x48A050` (`play_sound(unit, id, flags)`; `0x48A770(id, unit)` is the matching STOP). Columns:
+  `sound_id  name  feature_area  status  trigger  role`. `name` is the sample family the id plays, with its
+  0-based `Soundd2.sdt` entry range (an id picks one variant at random; ids flagged in the table use
+  `popfightnew.sdt` instead, `fight:` prefix). `status` uses the `functions.tsv` vocabulary plus `orphan` (in the
+  table, never played). `trigger` = call-site address(es), `role` = exactly when it plays. An id can have several
+  unrelated triggers; never assume one id means one thing. The machinery (table layout, flags, ambience bed,
+  battle loop, music/drums, CD audio, orphans, open leads) is in `docs/audio.md`.
 - `docs/commands.tsv`: catalog of the game's two player/AI-command dispatch layers, each its own raw-id numbering
   space (always say which `layer` a bare id belongs to, same rule as the state catalogs below): `ui_cmd` is
   `process_cmd`'s own id (a player action - keypress, UI click - read as this function's single argument,
