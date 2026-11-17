@@ -280,7 +280,8 @@ correlates 0.95-0.99 with the `Soundd2` one (downsampled to 11 kHz).
   github.com/daddesio/utkencode (README and `utk.h`, released to the public domain via the UNLICENSE), and the
   Niotso wiki UTK page it links (wiki.niotso.org/UTK). Only facts were taken from it; nothing was copied into this
   repo. The exe-side addresses and the Populous stereo extension are this repo's own findings.
-- Decoded copies for listening: `open-populous/target/audio/soundd2low_decoded/NNN_name.wav` (never committed),
+- Decoded copies were made for listening in a session scratchpad only (original game audio: never stored in
+  either repo or its build output),
   made with a scratch harness around daddesio's `utk.h` (drop the first bit; for stereo, two decoder states
   taking turns on the shared bit reader).
 
