@@ -104,9 +104,12 @@ the wrapped map (`0x450450`, squared 2D, height ignored).
   `0x56EA60`/`0x56EAA0`, only if the sound card exposes EAX). In play: preset 19 (`0x5E4BFC` = 0x13; "Plain" in the
   EAX 1.0 preset list). In the special/overlay view: a custom reverb - environment 13 ("Stone Corridor"), volume
   1.0, decay 5.0 s, damping 2.0 (`0x4895A0`). Re-applied by the ambience pass whenever the view changes (`0x5AE2FC`).
-- Fades: in high-quality mode a stopped sound fades out (`0x48B010`, fade value 0x1400) instead of cutting, and
-  chained variety loops fade each new variant in (same value); music fades in/out with 0x25800. Units of these
-  values not confirmed (as bytes of 22 kHz audio they would be ~0.12 s mono / ~1.7 s stereo).
+- Fades (confirmed): done in software by the game's own sound library, not by QMixer. Play flag `0x1000` attaches
+  a sample filter (`0x56D890` -> class `0x573C80`, vtable `0x594180`, process `0x573D00`) that multiplies each
+  16-bit sample by a gain ramping linearly 0 -> 1 over N bytes of PCM (params +0x24); flag `0x2000` is the
+  matching fade-out used on stop. N = 0x1400 for effects (5120 bytes = 0.116 s of 22 kHz mono): high-quality
+  mode only, on stop (`0x48B010`) and on each new variant of a chained loop (`0x48C440`). N = 0x25800 for music
+  (153600 bytes = 1.74 s of 22 kHz stereo), on music start (`0x48C230`, flags 0x21001) and stop (`0x48B8D0`).
 - Orbiting sources: when a cinematic/UI swoosh is played through `0x48A810` (discovery cinematics, soul swirl,
   bookmark camera jump), there is a 50% chance it gets a mover (`0x47FED0`) that circles the listener at a small
   fixed radius, 60/2048 of a turn per frame, sent as a cartesian 3D position each frame.
@@ -226,6 +229,24 @@ Per sample (`Soundd2.sdt` entries, 0-based):
   as a click at the start.
 - Music index 1 (`idea11`) is the frontend track; 2-5 are picked at random per level.
 
+## FMV audio
+The movies (`FMV\p3intro1-3.tgq`, `p3introj.tgq`, `outro.tgq`, `pop3mask.tgq`) are EA `SCHl` streams with
+EA-XA ADPCM audio, decoded by the exe itself (`0x57A2D0` dispatching to `0x57D870` mono / `0x57D9F0` stereo,
+from the stream reader `0x579D40`). This codec is NOT the `soundd2low` one (the bank loader never reaches it).
+
+## External cross-check: veritr1x/populous-recomp
+A native macOS recompilation of this same exe (github.com/veritr1x/populous-recomp, audio layer in its
+`recomp-kit` submodule, `dx/qmixer.cpp`). Read for facts only, nothing copied. Useful:
+- QMixer volume is a linear amplitude 0..32767 (they read QMIXER.dll's own handler: gain = value/32767), and
+  they report the game typically passes ~14190 (gain 0.43, about -7 dB). Not re-checked here.
+- Streamed waves (music) are fed by a game callback in chunks of 0x7800 or 0x3C00 bytes (`0x56F8DA`, callback
+  `0x576660`); a zero return marks the stream finished. Consistent with the music object's segment chaining.
+- The game hands QMixer plain PCM with a WAVEFORMATEX (no RIFF, no compressed format tag) - so the low-bank
+  codec, if used, is decoded by the game's own library before QMixer sees it.
+- Their QMixer replacement ignores 3D position, distance mapping and cones (plays everything centred), so it is
+  not a reference for the positional behaviour described above.
+- They confirmed the EA-XA decoders above against the intro movies.
+
 ## Open leads
 - `soundd2low.sdt` codec (flag `0x10`, data starting `e2 71`/`e3 71`): about 9x smaller than 11 kHz 16-bit PCM
   (~1.8 bits/sample). Not decoded in the exe's own code paths read so far: banks go through the C++ sound
@@ -234,6 +255,5 @@ Per sample (`Soundd2.sdt` entries, 0-based):
   low-quality sound on and see who touches an `e2 71` buffer.
 - Exact channel semantics of the music object (whether the drone and the drum loop run on two channels or one
   queue) depend on the QMixer wrapper; the drum choice logic itself is traced.
-- Mixer flag bits `0x2` (restart-style ambient: erosion, lava, quake, volcano rumbles) and table byte +4 unread.
 - `0x895DCB` (Shield hum gate) counts drawn units with `+0x15` bit `0x80` - "shielded" is inferred, not checked live.
 - Nothing has been checked by ear yet: every row is static (`traced`/`named`), none `verified`.
