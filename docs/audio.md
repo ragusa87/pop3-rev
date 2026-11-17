@@ -267,6 +267,11 @@ Identified statically 2026-11-17 (not yet confirmed by decoding a file - see bel
   header. Standard MicroTalk is mono-only, so stereo low-bank entries need that extension.
 - Rate: the decoder is rate-agnostic; the game plays the result at the entry's header rate (11025 Hz for most
   low-bank entries).
+- Credits: the codec description used to recognise it (frame/subframe sizes, header fields and their constants,
+  bit order, multi-pulse excitation, "first used in Beasts & Bumpkins") comes from daddesio's MicroTalk work,
+  github.com/daddesio/utkencode (README and `utk.h`, released to the public domain via the UNLICENSE), and the
+  Niotso wiki UTK page it links (wiki.niotso.org/UTK). Only facts were taken from it; nothing was copied into this
+  repo. The exe-side addresses and the Populous stereo extension are this repo's own findings.
 - Next step: decode one `0x12` entry with the reference decoder (raw stream, no container) and compare it with the
   same `Soundd2` entry.
 
