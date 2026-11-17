@@ -247,6 +247,29 @@ A native macOS recompilation of this same exe (github.com/veritr1x/populous-reco
   not a reference for the positional behaviour described above.
 - They confirmed the EA-XA decoders above against the intro movies.
 
+## `soundd2low.sdt` codec: EA MicroTalk (UTK)
+Identified statically 2026-11-17 (not yet confirmed by decoding a file - see below).
+- Bank source factory `0x570590` (entry flags byte +0x1B): `0x80` placeholder class, `0x20` MPEG class, **`0x10`
+  -> class `0x577960`** (in-memory, vtable `0x5949A0`) or `0x577C30` (streamed, reads 0x2000-byte chunks via
+  `0x578C00`), else plain PCM. Plain PCM gets a PCM WAVEFORMATEX from the header (`0x571150`: channels =
+  1 + flag bit 0, rate = header +0x18, bits = +0x1A).
+- Decoder: header parse `0x578B10`, excitation decode `0x578900`, per-channel frame decode `0x578D00` (+ synthesis
+  `0x5790A0`), frame driver `0x5798E0`, output `0x577B20` (432 float samples per frame per channel, clamped to
+  int16; channel state stride 0xD34, second channel at +0xD48; state block 0x1A7C bytes).
+- Why MicroTalk: LSB-first bit reader seeded from the first byte; 432-sample frames of four 108-sample subframes;
+  12 reflection coefficients; a 64-entry fixed-gain table built geometrically; header fields read as 1 bit, then
+  `32 - 4 bits`, `8 * (1 + 4 bits)`, `1.04 + 0.001 * 6 bits` (float constants at `0x594D20` = 8.0, 0.001, 1.04) -
+  exactly the public description of EA MicroTalk ("UTalk"/UTK), a multi-pulse LPC speech codec at ~32 kbit/s
+  ("MicroTalk 10:1"), first shipped by EA in Beasts & Bumpkins (1997). Public-domain reference decoders:
+  github.com/daddesio/utkencode (`utk.h`), wiki.niotso.org/UTK; also in vgmstream (EA MT).
+- Populous variant: when the entry is stereo (flag bit 0, data starting `e3 71`), one extra bit is read before the
+  standard header and gates decoding a second channel state; mono entries (`e2 71`) start with the standard
+  header. Standard MicroTalk is mono-only, so stereo low-bank entries need that extension.
+- Rate: the decoder is rate-agnostic; the game plays the result at the entry's header rate (11025 Hz for most
+  low-bank entries).
+- Next step: decode one `0x12` entry with the reference decoder (raw stream, no container) and compare it with the
+  same `Soundd2` entry.
+
 ## Other public sources (checked 2026-11-17)
 - No public decompilation or source of Populous: The Beginning. The OpenPop notes (github.com/OpenPop/notes) list a
   private repo built on "the official source code" (Brandantl/Populous-The-Beginning, not accessible) and
@@ -259,11 +282,6 @@ A native macOS recompilation of this same exe (github.com/veritr1x/populous-reco
 - No public QMixer SDK docs found; ScummVM's Titanic engine reimplements part of the QMixer API (qmixer.h).
 
 ## Open leads
-- `soundd2low.sdt` codec (flag `0x10`, data starting `e2 71`/`e3 71`): about 9x smaller than 11 kHz 16-bit PCM
-  (~1.8 bits/sample). Not decoded in the exe's own code paths read so far: banks go through the C++ sound
-  wrapper (`0x56xxxx`-`0x57xxxx`, vtable calls into `QMIXER.dll` QSWaveMix*), so the decoder is either in
-  that wrapper or in QMixer itself. Next step: break on the wrapper's bank open (`0x56DDC0` -> `0x575430`) with
-  low-quality sound on and see who touches an `e2 71` buffer.
 - Exact channel semantics of the music object (whether the drone and the drum loop run on two channels or one
   queue) depend on the QMixer wrapper; the drum choice logic itself is traced.
 - `0x895DCB` (Shield hum gate) counts drawn units with `+0x15` bit `0x80` - "shielded" is inferred, not checked live.
