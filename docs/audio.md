@@ -24,11 +24,11 @@ All sample indices the game passes to the mixer are **1-based** (entry `k` of a 
 |---|---|---|
 | +0 | u16 | first sample in `soundd2` (1-based; 0 = no sound - the id is silent) |
 | +2 | u16 | first sample in the fight bank (used only when +0xB != 0 and the fight bank loaded) |
-| +4 | u8 | `0x01` on work/eat/drink/build ids, `0x03` on stomp, else `0xFF` - unread so far |
+| +4 | u8 | animation-sync frame: when not `0xFF`, a positional sound waits (pending) until its unit's frame byte `+0x39` equals this value, so the chop lands on the axe frame (`0x01` chop/eat/drink/build/wildman eat-drink, `0x03` stomp) |
 | +5 | u8 | variant count in `soundd2`: one of `[first, first+count)` is picked at random per play |
 | +6 | u8 | variant count in the fight bank |
 | +7 | u8 | priority (0x20 faint ambient ... 0xB4 spells, 0xE6 volcano rise, 0xFF UI/voices) |
-| +8 | u8 | pitch spread in percent: pitch = 100 ± random(spread) (0 = fixed pitch) |
+| +8 | u8 | pitch spread in percent: the channel stores 100 ± random(spread), but nothing ever reads it and no frequency change is ever sent to the mixer, so this is **dead data: every sample plays at its native rate** |
 | +9 | u8 | runtime: number of channels currently playing this id (incremented on play) |
 | +0xA | u8 | volume 0-127 |
 | +0xB | u8 | non-zero = use the fight bank (`popfightnew.sdt`) instead of `soundd2` when it is loaded |
@@ -44,20 +44,83 @@ The full decoded id → sample-family list is the `name` column of `docs/sound.t
     unless flags has `0x800` (pause-menu clicks use `0x801`); an overlay/special view is up (`0x89C6C1`==2 or
     `0x89CE36` != 0) and the sound is positional (`unit` != 0) or is one of the random ambient one-shots
     `0x1C`/`0x50`/`0xC2`/`0xC6` - i.e. only UI sounds play over those screens.
-  - Positional (flags bit 0 clear): volume scaled by the distance from the unit to the local player's
-    camera target (tribe struct +0x24); farther than the cut-off → not played at all. Id `0x19`
-    (shaman "yes") is special-cased to attenuate only when the unit is the local tribe's own shaman.
+  - Positional (flags bit 0 clear): needs the unit within 48 cells of the listener point, or it is not played
+    (see "Mixer, distance and effects" for falloff and pan). Id `0x19` (shaman "yes") on the local tribe's own
+    shaman is never culled: its distance is clamped to 3/4 of the cut-off.
   - Flags bit 0 set: 2D/UI sound, full volume, no distance test.
   - Flags `0x4`: an ambience-bed slot (pan/slot index picked from the id, volume = bed weight × table volume,
     re-evaluated by `0x4895C0`; that helper also mutes the hell variants outside the hell theme and vice versa).
-  - Flags `0x10`: channel keeps following the unit (stores its `+0x33`).
-  - Flags `0x40`: kept on the channel; every id played with it is a continuous sound that has an explicit
-    `0x48A770` stop elsewhere (fire, whirlwind, swarm, swamp, guard tower, boat/balloon ride) - looping.
+  - Flags `0x2`: true loop - the same sample repeats (9999 times) until stopped (`warloop`, Shield hum, and the
+    restart-style rumbles of erosion/lava/quake/volcano).
+  - Flags `0x10`: remember the unit's `+0x33` (animation id); if it changes before the sound actually starts
+    (still waiting for its sync frame), the sound is dropped.
+  - Flags `0x40`: chained variety loop - each time the sample ends a NEW random variant of the id is queued
+    (callback `0x48C440`), until `0x48A770` stops it; the stop lets the current variant finish rather than
+    cutting it (fire, whirlwind, swarm, swamp, guard post, boat/balloon ride, burning building).
+  - Flags `0x800`: still plays while paused.
   - Ids `0x74`-`0x86` (local shaman's spell shouts): not replayed while one is already playing on the same unit.
 - `0x48A770(id, unit)` - **stop** the channel playing `id` (on `unit`, or any if 0). Returns 1 if one was found.
   (`sound.tsv` previously read the 0x408B80 call as a "positional play" - it is the burning-building crackle stop.)
 - `0x48B450(x)` stop every channel; `0x48B480` / `0x48B4B0` pause / resume every channel; `0x48B4E0` global
   mixer state change.
+
+## Mixer, distance and effects
+Back end: QSound's `QMIXER.dll` (QSWaveMix* API) under a C++ wrapper (`0x89CE71`, vtable `0x593E38`; QMixer back
+end vtable `0x593F38`, one thin method per import at `0x56F3xx`-`0x5700xx`), with Creative EAX 1.0 reverb on top.
+Session: 15 mixer channels (`0x48B9D9`); a quality preset bit (`0x400` high / `0x200` low quality option).
+
+**Voices (`0x48ABB0`).** At most 10 game sound channels (the rest of the mixer's channels are left to music).
+- The same id cannot restart within 250 ms of its last start (timer `0xD0C784`): the new request is dropped.
+- When 10 are playing, each live channel gets a score = priority (table +7) × 256, halved once per 16 steps of
+  remoteness (positional only, see `closeness` below), × 1024, then halved once per live copy of the same id
+  (twice per copy for looping/chained ids). The lowest-scoring channel is the victim. The new sound is scored
+  the same way from its own distance. If it scores at least as high, the victim is cut (no fade) and the new
+  sound takes its place; otherwise the new sound is dropped. Net: faraway, common or repeated sounds give way
+  to near, rare, high-priority ones (spells 0xB4, volcano 0xE6, UI/voices 0xFF).
+
+**Listener point.** The camera's look-at point (camera block `0x74A350` +0x24) moved 16 cells (0x1000) along the
+camera's heading (`+0x32`) by `0x4E6A70` - i.e. roughly under the viewer, not at the screen centre. Distances use
+the wrapped map (`0x450450`, squared 2D, height ignored).
+
+**Distance and pan (`0x48B100`, recomputed every frame by `0x48A900` while the unit lives).**
+- `d²` = squared distance unit→listener; cut-off `D² = 0x9000000` (D = 12288 units = 48 cells). Beyond it: the
+  channel is silenced and, during the per-frame update, stopped without fade (a chained loop finishes its current variant).
+- `closeness = 127 × (1 − d²/D²)` (quadratic falloff, 127 on top of the listener, 0 at 48 cells). The game also
+  keeps `table volume × (1 − d²/D²)` per channel, but uses it only as a "still audible" gate and for voice
+  stealing; it is not the volume it sends.
+- `pan` = bearing of the unit seen from the listener, relative to the camera heading + 90°, folded into 0-127
+  (64 = straight ahead or straight behind - front and back are not distinguished, both map to the same side).
+- What is sent to QSound: full table volume × master SFX volume (`0x895DB4`)/127, and a **polar 3D source
+  position**: azimuth = `-90°..+90°` from the pan (float table `0x5AE098`, linear, 64 → 0°), range =
+  `(127 − closeness) × 16` (0 at the listener, 2032 at the cut-off), elevation 0. So the audible loudness falloff
+  and the stereo/3D image are QSound's own rendering of that range/azimuth (QSound's default distance model, never
+  configured by the game), on top of the game's hard 48-cell cut-off. Updated every frame as the unit or camera moves.
+- 2D/UI sounds (flags bit 0): volume = channel volume × master/127, polar position azimuth 0, range 112 (fixed,
+  just in front of the listener).
+- Ambience-bed slots: as 2D, with the bed weight applied (`0x4895C0`).
+
+**Effects actually used.**
+- Reverb: EAX 1.0 (`DSPROPSETID_EAX_ReverbProperties` {4a4e6fc1-c341-11d1-b73a-444553540000}, set through
+  `0x56EA60`/`0x56EAA0`, only if the sound card exposes EAX). In play: preset 19 (`0x5E4BFC` = 0x13; "Plain" in the
+  EAX 1.0 preset list). In the special/overlay view: a custom reverb - environment 13 ("Stone Corridor"), volume
+  1.0, decay 5.0 s, damping 2.0 (`0x4895A0`). Re-applied by the ambience pass whenever the view changes (`0x5AE2FC`).
+- Fades: in high-quality mode a stopped sound fades out (`0x48B010`, fade value 0x1400) instead of cutting, and
+  chained variety loops fade each new variant in (same value); music fades in/out with 0x25800. Units of these
+  values not confirmed (as bytes of 22 kHz audio they would be ~0.12 s mono / ~1.7 s stereo).
+- Orbiting sources: when a cinematic/UI swoosh is played through `0x48A810` (discovery cinematics, soul swirl,
+  bookmark camera jump), there is a 50% chance it gets a mover (`0x47FED0`) that circles the listener at a small
+  fixed radius, 60/2048 of a turn per frame, sent as a cartesian 3D position each frame.
+- Random variant per play (all ids), and per repeat for chained loops.
+
+**Imported but never used by the game:** SetFrequency (no pitch change at all, see table +8), SetSourceVelocity /
+SetListenerVelocity / SetSpeedOfSound (no doppler), SetSourceCone, SetDistanceMapping, SetListenerPosition /
+Orientation (listener stays at the origin; sources are placed relative to it), SetSpeakerPlacement, SetPanRate.
+The wrapper can drive all of them, but no game code sets the corresponding parameter bits.
+
+**Channel record** (game side, 0x2A bytes, list `0x89CE6D`): +0x8 mixer handle, +0xC unit id, +0xE sample,
++0x10 sound id, +0x12 pitch % (unused), +0x14 table volume, +0x15 pan, +0x16 audible volume, +0x17 priority,
++0x18 flags (caller flags | 0x108; 0x8 pending start, 0x20 cancelled, 0x80 finish-then-stop, 0x200 fading),
++0x1A bed slot / unit animation id, +0x1C/+0x20 callback and mover objects, +0x24 start time, +0x28 closeness.
 
 ## Selection and order voices
 `0x489C40(selection, unit, single)` - called by `process_tribe_cmd` (0x4422AD, select command) and 0x444F31
