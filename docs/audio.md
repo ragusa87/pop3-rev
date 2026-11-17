@@ -248,7 +248,10 @@ A native macOS recompilation of this same exe (github.com/veritr1x/populous-reco
 - They confirmed the EA-XA decoders above against the intro movies.
 
 ## `soundd2low.sdt` codec: EA MicroTalk (UTK)
-Identified statically 2026-11-17 (not yet confirmed by decoding a file - see below).
+Identified statically and **confirmed by decoding** 2026-11-17: all 414 non-empty `0x10` entries decode with a
+stock MicroTalk decoder once the leading bit below is handled; lengths match the `Soundd2` entries (median ratio
+1.01, the excess is the last frame's padding) and, where both banks hold the same recording, the waveform
+correlates 0.95-0.99 with the `Soundd2` one (downsampled to 11 kHz).
 - Bank source factory `0x570590` (entry flags byte +0x1B): `0x80` placeholder class, `0x20` MPEG class, **`0x10`
   -> class `0x577960`** (in-memory, vtable `0x5949A0`) or `0x577C30` (streamed, reads 0x2000-byte chunks via
   `0x578C00`), else plain PCM. Plain PCM gets a PCM WAVEFORMATEX from the header (`0x571150`: channels =
@@ -262,9 +265,14 @@ Identified statically 2026-11-17 (not yet confirmed by decoding a file - see bel
   exactly the public description of EA MicroTalk ("UTalk"/UTK), a multi-pulse LPC speech codec at ~32 kbit/s
   ("MicroTalk 10:1"), first shipped by EA in Beasts & Bumpkins (1997). Public-domain reference decoders:
   github.com/daddesio/utkencode (`utk.h`), wiki.niotso.org/UTK; also in vgmstream (EA MT).
-- Populous variant: when the entry is stereo (flag bit 0, data starting `e3 71`), one extra bit is read before the
-  standard header and gates decoding a second channel state; mono entries (`e2 71`) start with the standard
-  header. Standard MicroTalk is mono-only, so stereo low-bank entries need that extension.
+- Populous variant: every low-bank entry (flag `0x04` clear) starts with ONE extra bit, read LSB-first before the
+  standard MicroTalk header: 0 = mono (data starts `e2 71`), 1 = a second channel follows (`e3 71`, the 21 stereo
+  ambience entries `amb2*`, `amb_spc*`, `ambhell2*`, `discoend`, `discosky`). Stereo = both channels share the one
+  header and one bit stream, alternating per frame: left frame, then right frame (`0x5798E0`), each with its own
+  filter/history state. Standard MicroTalk is mono-only; this is the Populous extension.
+- Oddity: the six `ambhell2*` entries decode ~1.41x longer than their `Soundd2` counterparts at their header
+  rate (and don't correlate with them) - either a different recording or a header rate that isn't the encoded
+  one; not chased.
 - Rate: the decoder is rate-agnostic; the game plays the result at the entry's header rate (11025 Hz for most
   low-bank entries).
 - Credits: the codec description used to recognise it (frame/subframe sizes, header fields and their constants,
@@ -272,8 +280,9 @@ Identified statically 2026-11-17 (not yet confirmed by decoding a file - see bel
   github.com/daddesio/utkencode (README and `utk.h`, released to the public domain via the UNLICENSE), and the
   Niotso wiki UTK page it links (wiki.niotso.org/UTK). Only facts were taken from it; nothing was copied into this
   repo. The exe-side addresses and the Populous stereo extension are this repo's own findings.
-- Next step: decode one `0x12` entry with the reference decoder (raw stream, no container) and compare it with the
-  same `Soundd2` entry.
+- Decoded copies for listening: `open-populous/target/audio/soundd2low_decoded/NNN_name.wav` (never committed),
+  made with a scratch harness around daddesio's `utk.h` (drop the first bit; for stereo, two decoder states
+  taking turns on the shared bit reader).
 
 ## Other public sources (checked 2026-11-17)
 - No public decompilation or source of Populous: The Beginning. The OpenPop notes (github.com/OpenPop/notes) list a
