@@ -247,6 +247,17 @@ A native macOS recompilation of this same exe (github.com/veritr1x/populous-reco
   not a reference for the positional behaviour described above.
 - They confirmed the EA-XA decoders above against the intro movies.
 
+## Other public sources (checked 2026-11-17)
+- No public decompilation or source of Populous: The Beginning. The OpenPop notes (github.com/OpenPop/notes) list a
+  private repo built on "the official source code" (Brandantl/Populous-The-Beginning, not accessible) and
+  OpenPopulous (an unofficial clone, not the original code).
+- Dungeon Keeper 2 uses the same SDT container and 40-byte header (ufdada/dk2-tools `Formats/Sound/sdt_struct.bt`):
+  types 2/3 PCM, 0x24/0x25 MP2 mono/stereo, flag 0x20 = MPEG, 0x04 = decoded-length field valid. It has no `0x10`
+  compressed type, so the `soundd2low` codec is Populous-specific as far as public info goes.
+- popre.net forum: music is MP2 converted from 44 kHz CD masters (by the game's composer), which fits the
+  CD-audio music mode (`0x895DB1` == 2) playing those masters as CD tracks.
+- No public QMixer SDK docs found; ScummVM's Titanic engine reimplements part of the QMixer API (qmixer.h).
+
 ## Open leads
 - `soundd2low.sdt` codec (flag `0x10`, data starting `e2 71`/`e3 71`): about 9x smaller than 11 kHz 16-bit PCM
   (~1.8 bits/sample). Not decoded in the exe's own code paths read so far: banks go through the C++ sound
