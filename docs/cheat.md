@@ -1121,3 +1121,7 @@ starting with `c:\` - the `wine ... D3DPOPTB.EXE` launcher also has the exe name
   times, 1560 → 1860 → 2058 → 2334, airborne 107 turns.
 - Two wood piles carried, n 0 → 19 in 20 turns.
 - Homing kept the sea tornado within about one cell of its target for 100 turns; then it left almost straight.
+- Sprites (decoded from `hfx0-0.dat` afterwards): funnel 1136-1151 and dust 1152-1159 are tint-2 alpha sprites,
+  cream in every `al0-X`, yet gold on screen: tint 2 at full strength through `alpha.dat` (the table at 0x87F000)
+  is palette 155, #E7B33F, which matches the measured 210/160/65 after blending. So the D3D path colours alpha
+  sprites through `alpha.dat`, and the per-segment colour class only adds the vertex tint of 0x516270.
