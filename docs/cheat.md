@@ -1107,7 +1107,7 @@ starting with `c:\` - the `wine ... D3DPOPTB.EXE` launcher also has the exe name
 
 **Results** (all match the static trace unless said):
 - 223 logged turns per tornado: sub-state 0 for 200, then 24 dissipating; segments 16 until the switch, then one
-  fewer per turn, 0 for the last 7 turns. Speed 120. Re-steer intervals 1-8 turns while homing. 8 dust puffs alive.
+  fewer per turn, 0 for the last 7 turns. Speed 120. Re-steer intervals 1-7 turns while homing. 8 dust puffs alive.
 - Segments: heights 1350..0 step 90, `+0x68` 512/(i+1), sprites staggered 1142, 1141, ... (frame - i), draw class
   34, and **`+0x6A` = 256 on every segment** (writer still unknown).
 - Colour: class 4 on dark land the whole first run. Moved onto the sea: class 5 entered at the bottom and climbed
