@@ -1088,3 +1088,36 @@ raw table entry (`table + (value-1)*4`) for class-7 types/states rather than tru
 **Side note**: `scripts/cursor_resync.py` used to attach to wine's `start.exe` launcher (its cmdline also
 contains `D3DPOPTB.EXE`), so it reported success without touching the game. Fixed: it now skips `start.exe` and
 requires the exe to be mapped in the process; live-checked (drifted cursor snapped onto the real pointer).
+
+## Whirlwind, live (2026-11-18)
+
+**Question**: check the static Whirlwind trace (open-populous pop3-rev-analysis.md "Whirlwind mechanics"), especially
+what it looks like: the funnel segments' height scale `+0x6A` (no writer found statically) and the colour classes.
+
+**Rig**: Docker rig, `launch_game.sh`, save "25bis". Menu by keys: focus starts wherever it was left (QUITTER this
+time; one Up from MULTIJOUEUR opened "Quitter ?"); Up x6 from QUITTER reaches CHARGER PARTIE. In the load list the
+keys only move focus to RETOUR, so rows need the mouse: a small helper that `mousemove`s to the window-local point,
+runs `cursor_resync.py X Y`, nudges by 1 px and does `mousedown`/`mouseup` hit every target first or second try
+(25BIS text at local (105, 292), CHARGER (320, 375)). Spell panel: "TORNADE" is the striped-funnel icon, row 3 left,
+local (20, 322); the spiral icon is another spell. `keep_mana_topped_up.py` keeps the charges coming (~20 s).
+`scripts/watch_whirlwind.py` logged every turn; `scripts/ww_to_sea.py` moved a fresh tornado (and its homing point)
+onto the nearest open-sea cell and the local camera with it. Both helpers must match the game process by a cmdline
+starting with `c:\` - the `wine ... D3DPOPTB.EXE` launcher also has the exe name in its cmdline (first version of
+`ww_to_sea.py` attached to it and silently read garbage).
+
+**Results** (all match the static trace unless said):
+- 223 logged turns per tornado: sub-state 0 for 200, then 24 dissipating; segments 16 until the switch, then one
+  fewer per turn, 0 for the last 7 turns. Speed 120. Re-steer intervals 1-8 turns while homing. 8 dust puffs alive.
+- Segments: heights 1350..0 step 90, `+0x68` 512/(i+1), sprites staggered 1142, 1141, ... (frame - i), draw class
+  34, and **`+0x6A` = 256 on every segment** (writer still unknown).
+- Colour: class 4 on dark land the whole first run. Moved onto the sea: class 5 entered at the bottom and climbed
+  one segment per turn (8 S + 8 land after 8 turns), back down to 4 when it drifted ashore. Live palette at
+  `0x87EFF8` gives the same tints as the files (-2 #FF2500, -1 #DB8707, 3/4/5 #FFFFFF). On screen the funnel is
+  the sprite's own gold either way (average funnel pixel RGB 210/160/65 over land and over sea): **no visible
+  colour change over sea in the D3D build**. Bright land (-2/-1) not crossed.
+- Lift: 7 spies lifted in the first run, n climbing 1 per turn to 18, heights on the formula (n=4: +341 vs 303±37,
+  n=18: ~+1395 vs 1364±37). **New**: a thrown victim still in the bottom segment's cell is caught again (new
+  `rand & 7` start) and, since the spiral never lowers it, stays at the throw's height; one spy was caught four
+  times, 1560 → 1860 → 2058 → 2334, airborne 107 turns.
+- Two wood piles carried, n 0 → 19 in 20 turns.
+- Homing kept the sea tornado within about one cell of its target for 100 turns; then it left almost straight.
