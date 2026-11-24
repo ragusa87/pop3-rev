@@ -93,11 +93,13 @@ Whenever a traced function's call to `0x48A050` resolves to a literal `type_id`,
 (re-read the file first, same append-then-resort discipline as the other catalogs). Columns:
 
 ```
-sound_id	name	feature_area	status	trigger	role
+sound_id	name	priority	volume	sync_frame	feature_area	status	trigger	role
 ```
 
 - `sound_id`: `0x...`, the literal id passed as `0x48A050`'s 2nd argument.
 - `name`: a short descriptive name once confirmed (by ear, live) or strongly implied by context, else `-`.
+- `priority`/`volume`/`sync_frame`: the id's own record bytes `+7`/`+0xA`/`+4` in the table (`0xFF` sync = `-`).
+  Data, already filled for all 229 ids; only change them if the table is re-read from a different build.
 - `feature_area`/`status`: same vocabulary as `functions.tsv`. `status` here means: `named` (seen at one call
   site, condition not fully read) / `traced` (the exact triggering condition is read and understood) /
   `verified` (confirmed by ear against the running game, not just the disassembly).

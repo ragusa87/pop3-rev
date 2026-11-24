@@ -55,9 +55,10 @@ Agents working from this repo analyse the original game and document it. They ne
   catalogs above - `+0x2B` type vs. `+0x2C` state).
 - `docs/sound.tsv`: catalog of ALL 229 sound ids (`0x00`-`0xE4`) of the exe's sound table `0x5ACF60`, keyed by the
   `id` argument to `0x48A050` (`play_sound(unit, id, flags)`; `0x48A770(id, unit)` is the matching STOP). Columns:
-  `sound_id  name  feature_area  status  trigger  role`. `name` is the sample family the id plays, with its
-  0-based `Soundd2.sdt` entry range (an id picks one variant at random; ids flagged in the table use
-  `popfightnew.sdt` instead, `fight:` prefix). `status` uses the `functions.tsv` vocabulary plus `orphan` (in the
+  `sound_id  name  priority  volume  sync_frame  feature_area  status  trigger  role`. `name` is the sample family
+  the id plays, with its 0-based `Soundd2.sdt` entry range (an id picks one variant at random; ids flagged in the
+  table use `popfightnew.sdt` instead, `fight:` prefix). `priority` (hex), `volume` (0-127) and `sync_frame`
+  (`-` = none) are the record's own bytes, read from the exe. `status` uses the `functions.tsv` vocabulary plus `orphan` (in the
   table, never played). `trigger` = call-site address(es), `role` = exactly when it plays. An id can have several
   unrelated triggers; never assume one id means one thing. The machinery (table layout, flags, ambience bed,
   battle loop, music/drums, CD audio, orphans, open leads) is in `docs/audio.md`.

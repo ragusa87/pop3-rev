@@ -36,7 +36,11 @@ All sample indices the game passes to the mixer are **1-based** (entry `k` of a 
 Ids with +0xB set: `0x0D`, `0x0E` (punches, `Punch*`), `0x27` (swords), `0x2B` (sword flashes `sw_flsh*`),
 `0x2D`-`0x30` (attack yells `Attk01..03`, `Attk99`), `0x32` (hit grunts `v_hit*`). Their `soundd2` fallback
 range is unrelated junk (`convert..sitespel`, `chop*`), so the fight bank is effectively required.
-The full decoded id → sample-family list is the `name` column of `docs/sound.tsv`.
+The full decoded id → sample-family list is the `name` column of `docs/sound.tsv`, with each id's priority, volume
+and sync frame beside it. The `+2`/`+6` fight-bank fields equal `+0`/`+5` for every id, so a fight-bank id plays the
+same entry indices in `popfightnew.sdt`; the `+0xB` byte is `3` on those 9 ids, `0` elsewhere. Nothing in the
+record says "plays while paused": that is the play call's own `0x800` flag (below), and the only literal `0x801`
+pushes before a `0x48A050` call (0x45EA2D, 0x45EA86, 0x45EAC3, 0x45EF1C, info-window clicks) all play `0x6A` `confirm`.
 
 ## API
 - `0x48A050(unit, id, flags)` - play. Returns the channel (0 if suppressed). Behaviour:
