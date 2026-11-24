@@ -69,6 +69,11 @@ capture logs") reproduces this exactly and pins the low hold precisely: pitch bo
 134-165** - tighter than the earlier "around turn 130-140" estimate, same value.
 
 ### `FLYBY_START`'s turn - SOLVED EXACTLY: turn 72
+
+**Units correction (2026-11-24, `docs/cheat.md` "Level 7 RC, live")**: the turn-72 START is script logic (turns),
+but the keyframe `start`/`duration` values are NOT turns: they are tenths of a second, rescaled at flyby start to
+drawn frames (x fps/10, fps measured over 6 frames and clamped 8..24, `0x449320`); the event clock `0x969BE0` counts
+drawn frames. Curve fits below that assumed turn units are off by the rig's fps/12 ratio.
 Open question #1 is closed. Ran the existing `cargo run -p pop3-ai-script --example ai_script_info --
 <path to cpscr010.dat>` dumper (the user's own hint: "use the command to dump level info" - level 1's `.hdr`
 byte 89 gives AI script number 10 for the red tribe, i.e. `cpscr010.dat`) against the real script file and

@@ -1176,3 +1176,16 @@ selected planet's record field.
   the site. Fitted keyframe start `s` -> turn ~ 11 + 1.29 s (4 position keyframes, +-3 turns): the flyby clock
   ran slower than one unit per turn in this rig (cause not checked).
 - Screenshots: `rc_*.png` in the session scratchpad only (turns 117-306, flyby with "Tour d'horizon" caption).
+
+**Follow-up, same day: the three open points closed statically.**
+- Sparkle frames: hfx 1288-1303 (alpha, tint 2 gold) is a 16-frame twinkle, big four-point flare shrinking
+  to a dot and growing back; the small sparkle plays 1294-1299 (the dot part). Both loop one frame per drawn
+  frame (`0x4EE7B0` kind 1, end-of-loop action 7 = plain loop).
+- `tribe+0x93D` bit 0x2 = "site built": set by the shaman's build order when its last pillar shot goes
+  (`0x433A10` state 3). Its only reader is the "remove the player's shaman" switch (`0x41C0B0`/`0x4438A0`, bit
+  0x80000): the human tribe's shaman is deleted at once if her site is built, else when the build ends. What
+  enables that mode (level option byte `0x89B7A3` bit 0x2) is only filled by block copies - not found.
+- The flyby clock counts DRAWN FRAMES (`0x449320` runs from `draw_main`). At flyby start it measures the fps
+  over 6 frames, clamps it to 8..24 and multiplies every keyframe start/duration by fps/10: script flyby times
+  are tenths of a second. This run calibrated 23 fps (table x2.3, read live) but then drew ~21 fps (1.75 frames
+  per turn), hence 1.29 turns per unit. Above 24 fps flybys play faster than intended.
