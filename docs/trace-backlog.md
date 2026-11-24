@@ -36,6 +36,14 @@ one with a different approach, or a later pop3-rev session may already have trac
 
 ## Reincarnation Centre animation, full live timing pass on level 7 (user request, 2026-11-09)
 
+**RESOLVED 2026-11-24** (live, genuine level 7): full timeline in `docs/cheat.md` "Level 7 RC, live"; spec in
+`open-populous` pop3-rev-analysis.md "Reincarnation sites". Answers: pillars 38/41/42/45/46/49/50/53 (same +3/+1
+stagger as level 1, one turn later), 16 turns each from ground - 256 to ground; the build does NOT finish before
+the flyby on this level (flyby orbits the site from turn 12, last stone up at 68); the sparkles are the levelling
+effect's own 32-sparkle spiral (7/0x3C) with 6-turn trails (7/0x3D), turns 15-35, hfx billboards; the savage ->
+brave conversion is done by the same levelling effect as its disc reaches each wildman (turns 17-21), so the
+correlation the user saw is real. Left open: which hfx frames animations 0x508/0x50E are; `tribe+0x93D` bit 0x2.
+
 Live-measure the Reincarnation Centre's own build/intro animation on **level 7** specifically (not level 1 -
 the user wants this level in particular, presumably a different RC setup/timing than level 1's already-traced
 one, see `docs/cheat.md`'s "RESOLVED (live session...)" pillar section and `docs/functions.tsv` rows `0x41c140`/

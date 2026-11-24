@@ -1125,3 +1125,54 @@ starting with `c:\` - the `wine ... D3DPOPTB.EXE` launcher also has the exe name
   cream in every `al0-X`, yet gold on screen: tint 2 at full strength through `alpha.dat` (the table at 0x87F000)
   is palette 155, #E7B33F, which matches the measured 210/160/65 after blending. So the D3D path colours alpha
   sprites through `alpha.dat`, and the per-segment colour class only adds the vertex tint of 0x516270.
+
+## Level 7 RC, live (2026-11-24)
+
+Live, read-only measurement of the Reincarnation Centre build on a genuine level 7 ("L'ennemi invisible"),
+asked for by the user (`docs/trace-backlog.md` "Reincarnation Centre animation, full live timing pass on level
+7"). Raw per-turn log: `mesurements/rc_level7.log` (`scripts/watch_rc_intro.py`: pillars, `tribe+0x93D`, camera
+focus/yaw, flyby event clock `0x969BE0`, every class-7 effect born/dying, every person within 2560 of the site).
+
+**Loading a chosen campaign level** (what finally worked, after several dead ends):
+1. Launch normally (`-allres`, no `-LEVEL`), click "Nouvelle partie" with the mouse recipe (move, then
+   `scripts/cursor_resync.py 320 152`, 1 px nudge, mousedown/up - a focus click elsewhere lands on
+   "Multijoueur"), Escape the FMV. The star map opens on "01".
+2. `scripts/docker/capture.sh scripts/set_star_map_level.py 7` - the label switches to "07 : L'ennemi
+   invisible" at once.
+3. Return (retry: about one in two presses lands). Census check: level 7 has the player's shaman alone, yellow
+   with 10 braves + shaman, 59 wildmen; an intro dialog pauses the turn counter at turn 4 until Return.
+
+Dead ends, so nobody retries them: `-LEVEL N` only stores N in `0x89D16E` and the bit it sets in `0x89D17C`
+is cleared before the star map; poking `0x89C6DD` (current level) after the star map writes it loads the map of
+level 1 under level 7's name (instantly "won", and counted as a win); poking `0x89B73F` (campaign slot) or the
+slot table `0x89A059` is overwritten by the star map; patching the new-game init `0x42A0BF` or `0x40F6DA` (a
+save-list function, not the star map) does nothing. A GDB write watchpoint on `0x89C6DD` gave the real writer:
+`0x48596B` in `0x4858F0`, the campaign start routine, called from the star map at `0x411102` with the
+selected planet's record field.
+
+**Results** (turns from the level's own counter, 12 a second):
+
+| What | Turns |
+|---|---|
+| intro dialog (pauses the counter) | 4 |
+| flyby clock starts / camera moves | 11 / 12 |
+| levelling busy (`tribe+0x93D` bit 0), sparkle ring alive | 14-35 / 15-35 |
+| wildmen -> braves (6 around the site) | 17 (2), 20 (3), 21 (1) |
+| pillars appear (slot 7 .. 0) | 38, 41, 42, 45, 46, 49, 50, 53 |
+| `tribe+0x93D` bit 0x2 set | 53 |
+| last pillar up (16 turns each) | 68 (slot 2: 64, slot 1: 65) |
+| camera leaves the site (2nd flyby keyframe) | 63 |
+| flyby back at the site | ~300 |
+
+- Same rhythm as level 1 (levelling 14-35, pillars 37..52), one turn later for the pillars.
+- Pillar heights: first seen at ground - 240, +16 a turn, end at their own cell's ground (128, 127, 116, 105).
+- Sparkles: 32 x 7/0x3C at radius 320 at turn 15 (state 11, die with the levelling at 35); 32 x 7/0x3D a turn
+  dropped at radius 0 (turn 15), 320, 480, ... 1920, then 2048 from turn 27 (6-turn life). Yellow's site gets
+  its own 32 + 32.
+- Conversion: the wildman object disappears and a NEW brave (new id) appears at the same spot, person state 10
+  for one turn then 19; two 7/0x3A conversion flashes (tribe 0 and tribe 255) per wildman, 8 turns each.
+  Wildmen on the +x side went first: the levelling tests cells at their corner.
+- Flyby: level 7's yellow script (cpscr021) starts it on its first 8-turn tick with no turn gate, keyframe 1 =
+  the site. Fitted keyframe start `s` -> turn ~ 11 + 1.29 s (4 position keyframes, +-3 turns): the flyby clock
+  ran slower than one unit per turn in this rig (cause not checked).
+- Screenshots: `rc_*.png` in the session scratchpad only (turns 117-306, flyby with "Tour d'horizon" caption).
