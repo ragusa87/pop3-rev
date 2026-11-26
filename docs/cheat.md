@@ -1239,3 +1239,13 @@ Return; `scripts/watch_discovery.py` (read only) logs every discovery 6/2, glow 
 - Nothing changed over the 40 turns watched (no bob, no turn). Seen in the game (tutorial flyover): a yellow blob
   high over the vault; the glyph itself was too small to see at that distance.
 - Not seen live: the vault firing (the shaman was not sent there). `SAVE/` was unchanged afterwards.
+
+## Building construction drawing, level 1, live (2026-11-27)
+**Rig**: as "Vault reward icon" above; Escape ends the tutorial flyover. `scripts/list_buildings.py` (read only),
+`scripts/poke_building_stage.py` (WRITES memory).
+- Level 1 at turn 76: 5 buildings, all built (state 2, draw class 5, stage 4, no wood-stock companion: `+0x82` 0).
+- Forced the two blue huts (#625 mesh 131, #626 mesh 107) to draw class 10 (construction renderer) with stage
+  0, 1, 2, 3, then back to draw class 5 / stage 4, one screenshot each. The look changes with the stage only:
+  stage 0 a bare wooden frame; 1 the frame plus roof ribs; 2 walls and door start; 3 walls whole, roof still
+  ribs; draw class 5 the finished thatched hut. Confirms per-face stage flags (`facs` byte 59) drive it.
+- Later (turn 3389) #626 had grown into a medium hut (#619, mesh 108). `SAVE/` unchanged.
