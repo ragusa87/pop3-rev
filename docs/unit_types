@@ -100,8 +100,8 @@ unit_class|unit_type|description
 6|4|debug flying
 6|5|debug flag
 6|6|trigger
-6|8|angel of death flight companion (ground-shadow/visible flying body, see person_states.tsv state 28)
-6|0xa|discovery marker
+6|8|angel of death flight companion (ground-shadow/visible flying body, see person_states.tsv state 28); also the glow under a discovery or a discovery marker (state 9, draw class 0x2B, hfx 1417, functions.tsv 0x4fc570)
+6|0xa|discovery marker (the floating reward icon over a vault, one per permanent discovery, state 8, functions.tsv 0x4fc570)
 --------------------------------
 7|*|effect
 7|1|simple blast
