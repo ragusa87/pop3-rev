@@ -1189,3 +1189,20 @@ selected planet's record field.
   over 6 frames, clamps it to 8..24 and multiplies every keyframe start/duration by fps/10: script flyby times
   are tenths of a second. This run calibrated 23 fps (table x2.3, read live) but then drew ~21 fps (1.75 frames
   per turn), hence 1.29 turns per unit. Above 24 fps flybys play faster than intended.
+
+## Wildman eating, level 17, live (2026-11-26)
+
+Question from an open-populous session: the eat sounds (0x03/0xBE) are only played by person state 15, but the
+docs had a wildman eating beside its tree in state 5 - does a wildman at a tree make the eat sound at all?
+
+Level 17 loaded with the star-map recipe ("Level 7 RC, live"). `scripts/watch_wildman_states.py --turns 2500`
+logged every wildman state change (raw log: `mesurements/wildman_states_level17.log`).
+
+- Wildmen at a tree go 8 -> 5 -> 15 -> 8, the tree still in `+0x72` the whole time: 285 transitions 5 -> 15, all
+  pointing at a tree (scenery types 1-3). State 5 is the walk (median 56 turns, max 128 = its give-up timer),
+  state 15 the meal (median 73, max 99 = 50 + rand(50)). No non-wildman was ever in state 15.
+- Static: state 5's handler (0x4D6970) returns 15 once within 120 units of the tree on both axes; state 15
+  (0x4D6BE0) plays 0x03 or 0xBE every turn no sound is attached. So the eat sound does play at a tree, back to back.
+- Side finding: the wildman's tree-search radius byte (0x5A7069 row 1 = 0x5A709B) is 12, the same byte the shore
+  search reads; the docs said 18.
+- Audio is disabled in this rig, so the sound itself was not heard, only the state that plays it reached.
