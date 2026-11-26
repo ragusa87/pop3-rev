@@ -112,8 +112,8 @@ sound_id	name	priority	volume	sync_frame	feature_area	status	trigger	role
 0x6E	Zoom_out [147]	0xFF	63	-	other	traced	0x4A16C6	'Zoom_out' click: UI toggle button (0x4A1680, same logic as ui_cmd 0x97) when tribe+0x93D bit 0x80 is clear; queues tribe_cmd 0x5F(1).
 0x6F	Zoom_in [148]	0xFF	63	-	other	traced	0x4A16A5	'Zoom_in' click: same toggle with the bit set; queues tribe_cmd 0x5F(0).
 0x70	discosky [169]	0xFF	127	-	worship	traced	0x4FAFB4, 0x4FBBB9	Discovery claimed (UI, 'discosky'): a person reaches a discovery (0x4FACF0), or a trigger hands a discovery straight to a tribe (0x4FB270).
-0x71	discopop [168]	0xFF	127	-	worship	traced	0x4815AE, 0x4841BB	Discovery cinematic starts ('discopop'): spell discovery (0x4815A0), or discovery kind 0xB (0x4841B0).
-0x72	discoend [167]	0xFF	127	-	worship	traced	0x48276B (stop 0x483296)	Spell/swirl cinematic reaches its arrival stage ('discoend'); stopped when the cinematic ends.
+0x71	discopop [168]	0xFF	127	-	worship	traced	0x4815AE, 0x4841BB	Discovery cinematic starts ('discopop'): spell discovery (0x4841B0, the spell cinematic's only sound), or a discovery of any kind other than building/spell (0x4815A0, swirl).
+0x72	discoend [167]	0xFF	127	-	worship	traced	0x48276B (stop 0x483296)	Swirl cinematic (0x482290) kind-5 arrival stage ('discoend'), stopped in kind 10: the non-building/non-spell discovery swirl and the soul swirl; the spell path's swirl (kinds 7/8) never plays it.
 0x73	Sel_spel [145]	0xFF	63	-	other	traced	0x44C446	GUI click 'Sel_spel': a GUI-dialog widget of kind 9-0x21 activated (spell-panel buttons).
 0x74	Sv_dance..Sv_dance2 [225-226]	0x80	100	-	spells	orphan	-	ORPHAN: shout slot for spell type 0 (none) of the local shaman table; never reached.
 0x75	Sv_blast..Sv_blast2 [219-220]	0x80	100	-	spells	traced	0x4C1BFC, 0x4C1CE6 (0x4C1B80)	Local player shaman cast shout for spell type 1 (burn): 0x74 + spell type, played when the spell is launched (0x4C1B80), on the shaman, or as a 2D sound if the tribe has no shaman and flag +0x93F bit 8 is set. Not replayed while another 0x74-0x86 shout is still playing on the same shaman.
@@ -204,8 +204,8 @@ sound_id	name	priority	volume	sync_frame	feature_area	status	trigger	role
 0xCA	amb_hellsea01..amb_hellsea05 [413-417]	0x40	32	-	objects	traced	0x489865 (bed slot 4)	Ambience bed, hell theme: sea ('amb_hellsea').
 0xCB	disco_bldg_path [435]	0xFF	127	-	worship	traced	0x4819EF	Building-discovery cinematic starts ('disco_bldg_path'), layered with 0xCC.
 0xCC	disco_bldg_pop [438]	0xFF	127	-	worship	traced	0x4819CF	Building-discovery cinematic starts ('disco_bldg_pop').
-0xCD	disco_bldg_end [436]	0xFF	127	-	worship	traced	0x483D18 (stop 0x483E40)	Building-discovery cinematic final stage ('disco_bldg_end').
-0xCE	disco_bldg_circ [437]	0xFF	127	-	worship	traced	0x483AD5 (stop 0x483F13)	Building-discovery cinematic circling stage ('disco_bldg_circ'); stopped after 12 stages.
+0xCD	disco_bldg_end [436]	0xFF	127	-	worship	traced	0x483D18 (stop 0x483E40)	Building-discovery cinematic, first frame of stage 4 (flight to the panel) ('disco_bldg_end'); its stop only runs for a mesh with 0 faces, so never in practice.
+0xCE	disco_bldg_circ [437]	0xFF	127	-	worship	traced	0x483AD5 (stop 0x483F13)	Building-discovery cinematic, first frame of stage 1 ('disco_bldg_circ'); stopped at frame 24 of stage 4 (12 frames after the faces start peeling off).
 0xCF	tweets [439]	0x80	40	-	buildings	named	0x468F0D (stop 0x469011)	Bird tweets on a building drawn on screen with flags_3 +0x14 bit 0x1000. The bit is set by hut growth and mana distribution, so plausibly a 'contented hut'. Stopped when the bit clears.
 0xD0	swirl [440]	0xFF	127	-	units	traced	0x481DFF (stop 0x4832A5)	Soul swirl ('swirl'): the local player killed an enemy shaman.
 0xD1	badswirl [451]	0xFF	127	-	units	traced	0x481DE8 (stop 0x4832B4)	Bad swirl ('badswirl'): the local player's own shaman died.
