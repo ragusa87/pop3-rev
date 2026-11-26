@@ -1,0 +1,621 @@
+# run 1 (turns 257-293, tribe 2)
+attached to pid 106
+t257 CONVERT #645 born tribe 2 pos 0x5100,0x4500 h 496 state 60 life 22 counter 46
+t257 CONVERT #645 life 22 counter 46 state 60
+   person #1752 type 1 tribe -1 state 5/0 cells (+2.04,+2.08) 
+   person #1758 type 1 tribe -1 state 5/0 cells (+2.79,-2.55) 
+t258 CONVERT #645 life 21 counter 47 state 60
+   person #1752 type 1 tribe -1 state 5/0 cells (+2.13,+2.08) 
+   person #1758 type 1 tribe -1 state 5/0 cells (+2.83,-2.46) 
+t259 CONVERT #645 life 18 counter 48 state 60
+   person #1280 type 2 tribe 2 state 10/0 cells (-2.91,+0.11) 
+   person #1752 type 1 tribe -1 state 5/0 cells (+2.23,+2.07) 
+   person #1758 type 1 tribe -1 state 5/0 cells (+2.86,-2.37) 
+t260 CONVERT #645 life 17 counter 49 state 60
+   person #1280 type 2 tribe 2 state 19/0 cells (-2.91,+0.11) 
+   person #1752 type 1 tribe -1 state 5/0 cells (+2.32,+2.06) 
+   person #1758 type 1 tribe -1 state 5/0 cells (+2.89,-2.29) 
+t261 CONVERT #645 life 16 counter 50 state 60
+   person #1280 type 2 tribe 2 state 19/4 cells (-3.00,+0.00) 
+   person #1752 type 1 tribe -1 state 5/0 cells (+2.41,+2.05) 
+   person #1758 type 1 tribe -1 state 15/0 cells (+2.93,-2.20) 
+t262 CONVERT #645 life 15 counter 51 state 60
+   person #1752 type 1 tribe -1 state 5/0 cells (+2.50,+2.04) 
+t263 CONVERT #645 life 14 counter 52 state 60
+   person #1752 type 1 tribe -1 state 5/0 cells (+2.59,+2.04) 
+t264 CONVERT #645 life 13 counter 53 state 60
+   person #992 type 2 tribe 2 state 14/0 cells (+0.24,+3.01) 
+   person #1280 type 2 tribe 2 state 14/0 cells (-3.00,+0.00) 
+   person #1752 type 1 tribe -1 state 5/0 cells (+2.69,+2.03) 
+t265 CONVERT #645 life 12 counter 54 state 60
+   person #1752 type 1 tribe -1 state 15/0 cells (+2.78,+2.02) 
+t266 CONVERT #645 life 11 counter 55 state 60
+t267 CONVERT #645 life 18 counter 56 state 60
+   person #1336 type 2 tribe 2 state 10/0 cells (+2.78,+2.02) 
+   person #1754 type 1 tribe -1 state 6/0 cells (-3.11,-3.49) 
+t268 CONVERT #645 life 17 counter 57 state 60
+   person #1336 type 2 tribe 2 state 19/0 cells (+2.78,+2.02) 
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.15,-3.56) 
+t269 CONVERT #645 life 16 counter 58 state 60
+   person #1336 type 2 tribe 2 state 19/2 cells (+2.94,+2.01) 
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.21,-3.63) 
+t270 CONVERT #645 life 15 counter 59 state 60
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.30,-3.64) 
+t271 CONVERT #645 life 14 counter 60 state 60
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.39,-3.65) 
+t272 CONVERT #645 life 13 counter 61 state 60
+   person #992 type 2 tribe 2 state 10/1 cells (+0.24,+3.01) 
+   person #1280 type 2 tribe 2 state 10/1 cells (-3.14,-0.09) 
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.48,-3.66) 
+t273 CONVERT #645 life 12 counter 62 state 60
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.49,-3.58) 
+t274 CONVERT #645 life 11 counter 63 state 60
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.50,-3.49) 
+t275 CONVERT #645 life 18 counter 64 state 60
+   person #1151 type 2 tribe 2 state 10/0 cells (+2.93,-2.20) 
+   person #1336 type 2 tribe 2 state 19/4 cells (+4.00,+2.00) 
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.52,-3.40) 
+t276 CONVERT #645 life 17 counter 65 state 60
+   person #1151 type 2 tribe 2 state 19/0 cells (+2.93,-2.20) 
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.53,-3.32) 
+t277 CONVERT #645 life 16 counter 66 state 60
+   person #1151 type 2 tribe 2 state 19/2 cells (+2.98,-2.06) 
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.60,-3.27) 
+t278 CONVERT #645 life 15 counter 67 state 60
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.69,-3.28) 
+t279 CONVERT #645 life 14 counter 68 state 60
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.78,-3.29) 
+t280 CONVERT #645 life 13 counter 69 state 60
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.87,-3.30) 
+t281 CONVERT #645 life 12 counter 70 state 60
+   person #1754 type 1 tribe -1 state 8/0 cells (-3.95,-3.31) 
+t282 CONVERT #645 life 11 counter 71 state 60
+t283 CONVERT #645 life 10 counter 72 state 60
+t284 CONVERT #645 life 9 counter 73 state 60
+   person #1151 type 2 tribe 2 state 19/4 cells (+3.00,-1.00) 
+   person #1336 type 2 tribe 2 state 19/5 cells (+4.00,+2.00) 
+t285 CONVERT #645 life 8 counter 74 state 60
+t286 CONVERT #645 life 7 counter 75 state 60
+t287 CONVERT #645 life 6 counter 76 state 60
+t288 CONVERT #645 life 5 counter 77 state 60
+t289 CONVERT #645 life 4 counter 78 state 60
+t290 CONVERT #645 life 3 counter 79 state 60
+t291 CONVERT #645 life 2 counter 80 state 60
+t292 CONVERT #645 life 1 counter 81 state 60
+t293 CONVERT #645 gone
+t447 CONVERT #771 born tribe 1 pos 0x2700,0xa500 h 87 state 60 life 22 counter 0
+t447 CONVERT #771 life 22 counter 0 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+3.53,-0.98) 
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.74,+1.91) 
+t448 CONVERT #771 life 21 counter 1 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+3.41,-0.98) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.01) 
+t449 CONVERT #771 life 20 counter 2 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+3.27,-0.97) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.10) 
+t450 CONVERT #771 life 19 counter 3 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+3.12,-0.97) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.19) 
+t451 CONVERT #771 life 18 counter 4 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+2.98,-0.97) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.28) 
+t452 CONVERT #771 life 17 counter 5 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+2.86,-0.97) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.37) 
+t453 CONVERT #771 life 16 counter 6 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+2.74,-0.97) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.45) 
+t454 CONVERT #771 life 15 counter 7 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+2.62,-0.96) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.53) 
+t455 CONVERT #771 life 18 counter 8 state 60
+   person #1076 type 2 tribe 1 state 10/0 cells (+2.00,+1.80) 
+   person #1783 type 1 tribe -1 state 8/3 cells (-1.66,-0.64) 
+   person #1785 type 1 tribe -1 state 8/0 cells (+2.49,-0.96) 
+   person #1787 type 1 tribe -1 state 8/3 cells (-2.66,-1.71) 
+   person #1816 type 1 tribe -1 state 8/0 cells (+3.39,+2.84) 
+   person #1818 type 1 tribe -1 state 8/3 cells (-1.72,-0.66) 
+   person #1819 type 1 tribe -1 state 8/3 cells (-2.55,+0.29) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.56) 
+t456 CONVERT #771 life 17 counter 9 state 60
+   person #1076 type 2 tribe 1 state 19/0 cells (+2.00,+1.80) 
+   person #1783 type 1 tribe -1 state 8/3 cells (-1.59,-0.71) 
+   person #1785 type 1 tribe -1 state 8/0 cells (+2.30,-0.96) 
+   person #1787 type 1 tribe -1 state 8/3 cells (-2.60,-1.78) 
+   person #1816 type 1 tribe -1 state 8/0 cells (+3.31,+2.77) 
+   person #1818 type 1 tribe -1 state 8/3 cells (-1.66,-0.72) 
+   person #1819 type 1 tribe -1 state 8/3 cells (-2.48,+0.36) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.60) 
+t457 CONVERT #771 life 16 counter 10 state 60
+   person #1076 type 2 tribe 1 state 19/2 cells (+2.02,+1.82) 
+   person #1783 type 1 tribe -1 state 8/3 cells (-1.53,-0.77) 
+   person #1785 type 1 tribe -1 state 8/0 cells (+2.12,-0.96) 
+   person #1787 type 1 tribe -1 state 8/3 cells (-2.54,-1.84) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+3.17,+2.79) 
+   person #1818 type 1 tribe -1 state 8/3 cells (-1.60,-0.78) 
+   person #1819 type 1 tribe -1 state 8/3 cells (-2.42,+0.41) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.63) 
+t458 CONVERT #771 life 15 counter 11 state 60
+   person #1783 type 1 tribe -1 state 8/3 cells (-1.46,-0.84) 
+   person #1785 type 1 tribe -1 state 6/0 cells (+1.93,-0.95) 
+   person #1787 type 1 tribe -1 state 8/3 cells (-2.48,-1.90) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+3.08,+2.73) 
+   person #1818 type 1 tribe -1 state 8/3 cells (-1.54,-0.84) 
+   person #1819 type 1 tribe -1 state 8/3 cells (-2.37,+0.47) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.67) 
+t459 CONVERT #771 life 14 counter 12 state 60
+   person #1783 type 1 tribe -1 state 8/3 cells (-1.40,-0.90) 
+   person #1785 type 1 tribe -1 state 8/0 cells (+1.82,-0.87) 
+   person #1787 type 1 tribe -1 state 8/3 cells (-2.42,-1.96) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+2.98,+2.67) 
+   person #1818 type 1 tribe -1 state 8/3 cells (-1.48,-0.91) 
+   person #1819 type 1 tribe -1 state 8/3 cells (-2.31,+0.53) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.70) 
+t460 CONVERT #771 life 13 counter 13 state 60
+   person #1783 type 1 tribe -1 state 8/3 cells (-1.33,-0.97) 
+   person #1785 type 1 tribe -1 state 8/0 cells (+1.71,-0.78) 
+   person #1787 type 1 tribe -1 state 8/3 cells (-2.37,-2.02) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+2.88,+2.62) 
+   person #1819 type 1 tribe -1 state 8/3 cells (-2.25,+0.58) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.73) 
+t461 CONVERT #771 life 12 counter 14 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+1.54,-0.80) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+2.77,+2.56) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.76) 
+t462 CONVERT #771 life 11 counter 15 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+1.41,-0.88) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+2.67,+2.50) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.78) 
+t463 CONVERT #771 life 18 counter 16 state 60
+   person #1164 type 2 tribe 1 state 10/0 cells (-1.33,-0.97) 
+   person #1785 type 1 tribe -1 state 8/0 cells (+1.29,-0.96) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+2.56,+2.43) 
+   person #1823 type 1 tribe -1 state 8/0 cells (-3.74,+2.80) 
+t464 CONVERT #771 life 17 counter 17 state 60
+   person #1164 type 2 tribe 1 state 19/0 cells (-1.33,-0.97) 
+   person #1785 type 1 tribe -1 state 8/0 cells (+1.16,-1.04) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+2.44,+2.36) 
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.74,+2.82) 
+t465 CONVERT #771 life 16 counter 18 state 60
+   person #1164 type 2 tribe 1 state 19/2 cells (-1.17,-0.99) 
+   person #1785 type 1 tribe -1 state 8/0 cells (+1.04,-1.12) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+2.31,+2.29) 
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.78,+2.86) 
+t466 CONVERT #771 life 15 counter 19 state 60
+   person #1164 type 2 tribe 1 state 19/4 cells (-1.00,-1.00) 
+   person #1785 type 1 tribe -1 state 8/0 cells (+0.91,-1.20) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+2.19,+2.21) 
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.87,+2.86) 
+t467 CONVERT #771 life 14 counter 20 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+0.79,-1.28) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+2.06,+2.14) 
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.96,+2.77) 
+t468 CONVERT #771 life 13 counter 21 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+0.66,-1.37) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+1.95,+2.07) 
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.99,+2.65) 
+t469 CONVERT #771 life 12 counter 22 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+0.53,-1.45) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+1.81,+2.00) 
+t470 CONVERT #771 life 11 counter 23 state 60
+   person #1785 type 1 tribe -1 state 8/0 cells (+0.42,-1.52) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+1.68,+1.92) 
+t471 CONVERT #771 life 18 counter 24 state 60
+   person #1233 type 2 tribe 1 state 10/0 cells (+0.42,-1.52) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+1.54,+1.84) 
+t472 CONVERT #771 life 17 counter 25 state 60
+   person #1233 type 2 tribe 1 state 19/0 cells (+0.42,-1.52) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+1.41,+1.76) 
+t473 CONVERT #771 life 16 counter 26 state 60
+   person #1233 type 2 tribe 1 state 19/2 cells (+0.28,-1.61) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+1.31,+1.70) 
+t474 CONVERT #771 life 15 counter 27 state 60
+   person #1816 type 1 tribe -1 state 6/0 cells (+1.17,+1.62) 
+t475 CONVERT #771 life 14 counter 28 state 60
+   person #1076 type 2 tribe 1 state 19/4 cells (+3.00,+3.00) 
+   person #1164 type 2 tribe 1 state 19/5 cells (-1.00,-1.00) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+1.03,+1.54) 
+t476 CONVERT #771 life 13 counter 29 state 60
+   person #1233 type 2 tribe 1 state 19/4 cells (+0.00,-2.00) 
+   person #1816 type 1 tribe -1 state 6/0 cells (+0.90,+1.46) 
+t477 CONVERT #771 life 12 counter 30 state 60
+   person #1816 type 1 tribe -1 state 6/0 cells (+0.77,+1.38) 
+t478 CONVERT #771 life 11 counter 31 state 60
+   person #1816 type 1 tribe -1 state 6/0 cells (+0.64,+1.31) 
+# run 2 (turns 496-3118)
+attached to pid 106
+t496 CONVERT #771 born tribe 1 pos 0x2700,0xa500 h 87 state 60 life 17 counter 49
+t496 CONVERT #771 life 17 counter 49 state 60
+   sparkles alive 21
+   sparkle #707 born d=1280 (821,-982) dh=288 life 5 state 47
+   person #724 type 2 tribe 1 state 10/7 cells (+3.99,+2.00) NEW
+   sparkle #1002 born d=1279 (249,1255) dh=233 life 4 state 47
+   sparkle #1017 born d=1279 (1237,-327) dh=457 life 3 state 47
+   person #1076 type 2 tribe 1 state 19/5 cells (+3.00,+3.00) NEW
+   person #1108 type 2 tribe 1 state 19/5 cells (+1.00,+1.00) NEW
+   person #1131 type 2 tribe 1 state 19/0 cells (-2.25,+0.58) NEW
+   person #1164 type 2 tribe 1 state 19/5 cells (-1.00,-1.00) NEW
+   sparkle #1167 born d=1281 (-1080,688) dh=-104 life 5 state 47
+   sparkle #1170 born d=1280 (-1026,765) dh=-95 life 2 state 47
+   sparkle #1174 born d=1279 (345,1232) dh=257 life 7 state 47
+   sparkle #1175 born d=1280 (-1264,-204) dh=-111 life 2 state 47
+   sparkle #1189 born d=1280 (-972,833) dh=-82 life 1 state 47
+   person #1233 type 2 tribe 1 state 19/5 cells (+0.00,-2.00) NEW
+   sparkle #1234 born d=1280 (1053,727) dh=437 life 4 state 47
+   sparkle #1260 born d=1280 (1242,-308) dh=461 life 2 state 47
+   sparkle #1280 born d=1280 (790,-1007) dh=278 life 6 state 47
+   sparkle #1292 born d=1279 (375,1223) dh=263 life 6 state 47
+   sparkle #1346 born d=1281 (-498,-1180) dh=7 life 6 state 47
+   sparkle #1347 born d=1279 (1057,-721) dh=362 life 3 state 47
+   person #1367 type 2 tribe 1 state 19/4 cells (-0.76,-0.86) NEW
+   sparkle #1380 born d=1280 (668,-1092) dh=256 life 2 state 47
+   sparkle #1498 born d=1279 (1279,19) dh=494 life 2 state 47
+   sparkle #1655 born d=1279 (1279,31) dh=495 life 4 state 47
+   sparkle #1783 born d=1281 (-679,-1086) dh=-44 life 3 state 47
+   sparkle #1785 born d=1280 (-1243,307) dh=-111 life 4 state 47
+   sparkle #1786 born d=1281 (-911,-900) dh=-111 life 5 state 47
+   person #1787 type 1 tribe -1 state 8/3 cells (-2.37,-2.02) NEW
+   sparkle #1818 born d=1281 (-110,-1276) dh=107 life 4 state 47
+t497 CONVERT #771 life 16 counter 50 state 60
+   sparkles alive 24
+   person #1131 type 2 tribe 1 state 19/2 cells (-2.13,+0.70) 
+   sparkle #1169 born d=1279 (1207,423) dh=483 life 5 state 47
+   sparkle #1171 born d=1281 (610,-1126) dh=247 life 6 state 47
+   sparkle #1473 born d=1279 (1269,160) dh=495 life 5 state 47
+   sparkle #1831 born d=1279 (827,976) dh=359 life 5 state 47
+t498 CONVERT #771 life 15 counter 51 state 60
+   sparkles alive 23
+   sparkle #1168 born d=1280 (-1279,54) dh=-111 life 7 state 47
+   sparkle #1179 born d=1280 (183,-1267) dh=166 life 7 state 47
+   sparkle #1258 born d=1280 (-1277,94) dh=-111 life 4 state 47
+   sparkle #1415 born d=1281 (-353,-1231) dh=47 life 6 state 47
+t499 CONVERT #771 life 14 counter 52 state 60
+   sparkles alive 24
+   sparkle #646 born d=1280 (1016,778) dh=425 life 7 state 47
+   sparkle #929 born d=1279 (668,1091) dh=320 life 7 state 47
+   person #1131 type 2 tribe 1 state 19/4 cells (-2.00,+1.00) 
+   sparkle #1202 born d=1280 (1201,-443) dh=432 life 6 state 47
+   sparkle #1839 born d=1280 (756,-1033) dh=269 life 6 state 47
+t500 CONVERT #771 life 13 counter 53 state 60
+   sparkles alive 23
+   sparkle #957 born d=1280 (1077,691) dh=445 life 5 state 47
+   sparkle #1189 born d=1279 (-569,1146) dh=54 life 4 state 47
+   sparkle #1191 born d=1280 (759,-1031) dh=269 life 5 state 47
+   sparkle #1760 born d=1280 (-346,1232) dh=114 life 4 state 47
+t501 CONVERT #771 life 12 counter 54 state 60
+   sparkles alive 24
+   sparkle #1170 born d=1279 (144,1271) dh=217 life 4 state 47
+   sparkle #1260 born d=1281 (-1164,-534) dh=-111 life 4 state 47
+   sparkle #1380 born d=1280 (-63,1278) dh=179 life 7 state 47
+   sparkle #1498 born d=1280 (1209,420) dh=484 life 4 state 47
+t502 CONVERT #771 life 11 counter 55 state 60
+   sparkles alive 21
+   sparkle #1017 born d=1280 (727,1053) dh=330 life 5 state 47
+   sparkle #1347 born d=1281 (-1253,-266) dh=-111 life 7 state 47
+   person #1367 type 2 tribe 1 state 19/1 cells (-0.76,-0.86) 
+   sparkle #1580 born d=1280 (981,-822) dh=337 life 4 state 47
+   sparkle #1783 born d=1279 (1259,226) dh=492 life 7 state 47
+t503 CONVERT #771 life 18 counter 56 state 60
+   sparkles alive 23
+   sparkle #987 born d=1280 (951,856) dh=403 life 5 state 47
+   sparkle #1002 born d=1279 (-102,1275) dh=170 life 7 state 47
+   person #1234 type 2 tribe 1 state 10/0 cells (-2.37,-2.02) 
+   person #1367 type 2 tribe 1 state 19/2 cells (-0.76,-0.86) 
+   sparkle #1655 born d=1280 (678,-1086) dh=257 life 4 state 47
+   sparkle #1818 born d=1281 (-450,-1199) dh=22 life 6 state 47
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.92,+2.32) 
+t504 CONVERT #771 life 17 counter 57 state 60
+   sparkles alive 24
+   sparkle #707 born d=1279 (497,1179) dh=289 life 4 state 47
+   sparkle #1152 born d=1280 (-402,1215) dh=100 life 7 state 47
+   sparkle #1167 born d=1279 (-334,1235) dh=117 life 7 state 47
+   person #1234 type 2 tribe 1 state 19/0 cells (-2.37,-2.02) 
+   sparkle #1786 born d=1280 (691,1077) dh=325 life 7 state 47
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.84,+2.33) 
+t505 CONVERT #771 life 16 counter 58 state 60
+   sparkles alive 19
+   person #1164 type 2 tribe 1 state 19/1 cells (-1.00,-1.00) 
+   sparkle #1169 born d=1280 (-854,-954) dh=-95 life 7 state 47
+   sparkle #1175 born d=1280 (-526,-1167) dh=-1 life 6 state 47
+   person #1234 type 2 tribe 1 state 19/2 cells (-2.20,-2.01) 
+   sparkle #1258 born d=1280 (-457,-1196) dh=19 life 5 state 47
+   person #1367 type 2 tribe 1 state 19/4 cells (-1.00,-1.16) 
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.75,+2.35) 
+   sparkle #1831 born d=1281 (-708,-1067) dh=-51 life 7 state 47
+t506 CONVERT #771 life 15 counter 59 state 60
+   sparkles alive 20
+   person #1164 type 2 tribe 1 state 19/2 cells (-1.00,-1.00) 
+   sparkle #1171 born d=1280 (-153,-1271) dh=97 life 4 state 47
+   sparkle #1174 born d=1281 (-1063,714) dh=-101 life 7 state 47
+   sparkle #1198 born d=1279 (606,1126) dh=309 life 7 state 47
+   person #1234 type 2 tribe 1 state 19/4 cells (-2.00,-2.00) 
+   sparkle #1274 born d=1280 (-1029,762) dh=-95 life 7 state 47
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.66,+2.36) 
+t507 CONVERT #771 life 14 counter 60 state 60
+   sparkles alive 22
+   person #1164 type 2 tribe 1 state 19/4 cells (-1.00,-0.84) 
+   sparkle #1189 born d=1280 (-130,1273) dh=165 life 5 state 47
+   sparkle #1415 born d=1280 (1006,-791) dh=346 life 4 state 47
+   sparkle #1473 born d=1281 (-1065,711) dh=-101 life 6 state 47
+   sparkle #1760 born d=1280 (-1031,759) dh=-96 life 5 state 47
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.58,+2.37) 
+t508 CONVERT #771 life 13 counter 61 state 60
+   sparkles alive 23
+   sparkle #957 born d=1281 (-791,-1007) dh=-74 life 5 state 47
+   person #1131 type 2 tribe 1 state 19/5 cells (-2.00,+1.00) 
+   sparkle #1170 born d=1280 (-558,1152) dh=57 life 6 state 47
+   sparkle #1260 born d=1280 (668,-1092) dh=256 life 6 state 47
+   sparkle #1498 born d=1281 (-1279,62) dh=-111 life 6 state 47
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.49,+2.38) 
+t509 CONVERT #771 life 12 counter 62 state 60
+   sparkles alive 24
+   sparkle #646 born d=1280 (-1084,681) dh=-105 life 7 state 47
+   sparkle #929 born d=1280 (1268,172) dh=495 life 6 state 47
+   sparkle #1191 born d=1281 (-842,-965) dh=-91 life 7 state 47
+   sparkle #1580 born d=1279 (1119,620) dh=459 life 6 state 47
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.41,+2.39) 
+t510 CONVERT #771 life 11 counter 63 state 60
+   sparkles alive 25
+   sparkle #1017 born d=1281 (-1233,-346) dh=-111 life 7 state 47
+   sparkle #1202 born d=1281 (-157,-1271) dh=96 life 6 state 47
+   sparkle #1655 born d=1281 (-165,-1270) dh=94 life 7 state 47
+   person #1823 type 1 tribe -1 state 6/0 cells (-3.33,+2.40) 
+   sparkle #1839 born d=1280 (1128,-604) dh=386 life 5 state 47
+t511 CONVERT #771 life 18 counter 64 state 60
+   sparkles alive 24
+   sparkle #987 born d=1279 (918,891) dh=392 life 4 state 47
+   sparkle #1168 born d=1279 (-645,1105) dh=30 life 4 state 47
+   sparkle #1292 born d=1280 (1274,-122) dh=487 life 4 state 47
+   person #1346 type 2 tribe 1 state 10/0 cells (-3.33,+2.40) 
+   sparkle #1380 born d=1280 (1220,-387) dh=446 life 6 state 47
+t512 CONVERT #771 life 17 counter 65 state 60
+   sparkles alive 25
+   sparkle #1277 born d=27790 (-19328,-19968) dh=529 life 16 state 47
+   person #1346 type 2 tribe 1 state 19/0 cells (-3.33,+2.40) 
+   sparkle #1347 born d=1280 (-1208,423) dh=-111 life 7 state 47
+   sparkle #1783 born d=1280 (-304,1243) dh=124 life 7 state 47
+   sparkle #1787 born d=1280 (727,1053) dh=330 life 5 state 47
+   sparkle #1818 born d=1280 (571,-1146) dh=239 life 7 state 47
+t513 CONVERT #771 life 16 counter 66 state 60
+   sparkles alive 26
+   sparkle #1002 born d=1279 (1271,-145) dh=484 life 4 state 47
+   person #1076 type 2 tribe 1 state 14/0 cells (+3.00,+3.00) 
+   person #1108 type 2 tribe 1 state 14/0 cells (+1.00,+1.00) 
+   sparkle #1171 born d=1279 (1278,-55) dh=491 life 5 state 47
+   sparkle #1258 born d=1280 (-842,964) dh=-42 life 4 state 47
+   sparkle #1279 born d=1280 (-919,891) dh=-72 life 7 state 47
+   sparkle #1287 born d=30102 (11904,-27648) dh=409 life 16 state 47
+   sparkle #1337 born d=21592 (5056,-20992) dh=425 life 16 state 47
+   person #1346 type 2 tribe 1 state 19/2 cells (-3.24,+2.29) 
+t514 CONVERT #771 life 15 counter 67 state 60
+   sparkles alive 29
+   sparkle #1152 born d=1280 (261,1253) dh=236 life 5 state 47
+   sparkle #1175 born d=1280 (-1239,-323) dh=-111 life 4 state 47
+   sparkle #1179 born d=1280 (-1271,152) dh=-111 life 4 state 47
+   person #1367 type 2 tribe 1 state 19/5 cells (-1.00,-1.16) 
+   sparkle #1415 born d=1280 (799,-1000) dh=281 life 6 state 47
+   sparkle #1786 born d=22593 (8192,-21056) dh=415 life 16 state 47
+   sparkle #1823 born d=19607 (5056,-18944) dh=433 life 16 state 47
+t515 CONVERT #771 life 14 counter 68 state 60
+   sparkles alive 30
+   sparkle #1158 born d=20953 (6144,-20032) dh=428 life 16 state 47
+   sparkle #1169 born d=1281 (-914,-897) dh=-111 life 4 state 47
+   sparkle #1172 born d=7215 (6528,3072) dh=487 life 16 state 47
+   sparkle #1176 born d=30573 (-20096,-23040) dh=522 life 16 state 47
+   sparkle #1189 born d=1279 (891,918) dh=382 life 4 state 47
+   person #1234 type 2 tribe 1 state 19/5 cells (-2.00,-2.00) 
+   person #1346 type 2 tribe 1 state 19/4 cells (-3.00,+2.00) 
+   sparkle #1760 born d=1280 (78,-1278) dh=147 life 5 state 47
+   sparkle #1831 born d=1279 (1095,661) dh=451 life 6 state 47
+t516 CONVERT #771 life 13 counter 69 state 60
+   sparkles alive 34
+   sparkle #957 born d=1281 (-353,-1231) dh=47 life 7 state 47
+   person #1164 type 2 tribe 1 state 19/5 cells (-1.00,-0.84) 
+   sparkle #1174 born d=1279 (-75,1277) dh=176 life 5 state 47
+   sparkle #1196 born d=8129 (7296,3584) dh=494 life 16 state 47
+   sparkle #1203 born d=32545 (-20096,-25600) dh=464 life 16 state 47
+   sparkle #1274 born d=1280 (971,-834) dh=334 life 5 state 47
+   sparkle #1473 born d=1281 (-692,-1078) dh=-47 life 7 state 47
+   sparkle #1828 born d=20770 (6144,-19840) dh=431 life 16 state 47
+t517 CONVERT #771 life 12 counter 70 state 60
+   sparkles alive 32
+   sparkle #1170 born d=1281 (-1271,156) dh=-111 life 6 state 47
+   sparkle #1260 born d=1280 (-250,1255) dh=137 life 7 state 47
+   sparkle #1498 born d=1279 (827,976) dh=359 life 7 state 47
+   sparkle #1827 born d=1281 (-917,-894) dh=-111 life 7 state 47
+t518 CONVERT #771 life 11 counter 71 state 60
+   sparkles alive 33
+   sparkle #987 born d=1281 (-142,-1273) dh=100 life 6 state 47
+   sparkle #1168 born d=1279 (-184,1266) dh=152 life 7 state 47
+   sparkle #1292 born d=1280 (-797,1001) dh=-24 life 6 state 47
+   sparkle #1839 born d=1279 (295,1245) dh=247 life 5 state 47
+t519 CONVERT #771 life 10 counter 72 state 60
+   sparkles alive 31
+   sparkle #646 born d=1280 (288,1247) dh=244 life 7 state 47
+   sparkle #1191 born d=1279 (445,1199) dh=278 life 4 state 47
+   sparkle #1202 born d=1280 (-635,1111) dh=33 life 4 state 47
+   sparkle #1825 born d=1280 (-753,1035) dh=-7 life 5 state 47
+t520 CONVERT #771 life 9 counter 73 state 60
+   sparkles alive 32
+   sparkle #1002 born d=1280 (-734,-1049) dh=-58 life 6 state 47
+   sparkle #1258 born d=1280 (-169,-1269) dh=93 life 6 state 47
+   sparkle #1380 born d=1280 (1181,493) dh=477 life 5 state 47
+   sparkle #1787 born d=1280 (-526,-1167) dh=-1 life 7 state 47
+t521 CONVERT #771 life 8 counter 74 state 60
+   sparkles alive 33
+   sparkle #1017 born d=1280 (592,-1135) dh=244 life 6 state 47
+   sparkle #1171 born d=1279 (1059,-718) dh=362 life 4 state 47
+   sparkle #1175 born d=1279 (394,1217) dh=268 life 6 state 47
+   sparkle #1179 born d=1279 (467,1191) dh=282 life 4 state 47
+t522 CONVERT #771 life 7 counter 75 state 60
+   sparkles alive 37
+   sparkle #1152 born d=1280 (-361,1228) dh=110 life 5 state 47
+   sparkle #1169 born d=1280 (-1051,-731) dh=-111 life 5 state 47
+   sparkle #1189 born d=1280 (1277,82) dh=496 life 5 state 47
+   sparkle #1347 born d=1280 (-766,-1026) dh=-66 life 5 state 47
+t523 CONVERT #771 life 6 counter 76 state 60
+   sparkles alive 35
+   sparkle #1279 born d=1280 (-809,-992) dh=-80 life 6 state 47
+   sparkle #1415 born d=1281 (265,-1253) dh=182 life 5 state 47
+   sparkle #1760 born d=1279 (991,808) dh=417 life 7 state 47
+   sparkle #1783 born d=1280 (-930,-880) dh=-111 life 4 state 47
+t524 CONVERT #771 life 5 counter 77 state 60
+   sparkles alive 33
+   sparkle #1174 born d=1279 (771,1021) dh=338 life 6 state 47
+   sparkle #1274 born d=1281 (-40,-1280) dh=124 life 6 state 47
+   person #1346 type 2 tribe 1 state 19/5 cells (-3.00,+2.00) 
+   sparkle #1818 born d=1281 (-44,-1280) dh=123 life 7 state 47
+   sparkle #1831 born d=1280 (-692,1077) dh=15 life 4 state 47
+t525 CONVERT #771 life 4 counter 78 state 60
+   sparkles alive 33
+   sparkle #707 born d=1280 (105,-1276) dh=152 life 5 state 47
+   sparkle #929 born d=1280 (-766,1025) dh=-11 life 4 state 47
+   sparkle #1580 born d=1280 (582,-1140) dh=242 life 6 state 47
+   sparkle #1655 born d=1279 (1255,249) dh=492 life 5 state 47
+t526 CONVERT #771 life 3 counter 79 state 60
+   sparkles alive 34
+   sparkle #1170 born d=1279 (375,1223) dh=263 life 7 state 47
+   sparkle #1191 born d=1281 (-970,-837) dh=-111 life 7 state 47
+   sparkle #1202 born d=1280 (318,-1240) dh=195 life 7 state 47
+   sparkle #1839 born d=1280 (1260,-223) dh=476 life 7 state 47
+t527 CONVERT #771 life 2 counter 80 state 60
+   sparkles alive 30
+   sparkle #987 born d=1280 (-1238,326) dh=-111 life 4 state 47
+   sparkle #1292 born d=1279 (1270,-153) dh=483 life 6 state 47
+   sparkle #1825 born d=1280 (-1171,518) dh=-111 life 6 state 47
+   sparkle #1827 born d=1280 (-1149,-565) dh=-111 life 7 state 47
+t528 CONVERT #771 life 1 counter 81 state 60
+   sparkles alive 31
+   sparkle #1168 born d=1280 (-604,1128) dh=43 life 5 state 47
+   sparkle #1171 born d=1281 (-519,-1171) dh=1 life 4 state 47
+   sparkle #1179 born d=1280 (-757,1032) dh=-8 life 4 state 47
+   sparkle #1380 born d=1280 (-941,868) dh=-76 life 5 state 47
+t529 CONVERT #771 gone
+t3098 CONVERT #1175 born tribe 2 pos 0x4f00,0x4900 h 496 state 60 life 22 counter 22
+t3098 CONVERT #1175 life 22 counter 22 state 60
+   sparkles alive 0
+   person #641 type 1 tribe -1 state 8/0 cells (-0.23,+0.44) 
+t3099 CONVERT #1175 life 21 counter 23 state 60
+   sparkles alive 4
+   person #641 type 1 tribe -1 state 8/0 cells (-0.14,+0.43) 
+   sparkle #674 born d=1281 (-402,-1216) dh=-24 life 5 state 47
+   sparkle #1110 born d=1279 (1123,613) dh=-24 life 7 state 47
+   sparkle #1360 born d=1281 (-1124,-614) dh=-24 life 4 state 47
+   sparkle #1652 born d=1281 (-1253,-266) dh=-24 life 4 state 47
+t3100 CONVERT #1175 life 18 counter 24 state 60
+   sparkles alive 8
+   sparkle #718 born d=1280 (865,943) dh=-24 life 7 state 47
+   person #1046 type 2 tribe 2 state 10/0 cells (-0.14,+0.43) 
+   sparkle #1078 born d=1281 (164,-1270) dh=-24 life 5 state 47
+   sparkle #1374 born d=1280 (-797,1001) dh=-24 life 7 state 47
+   sparkle #1811 born d=1280 (859,-949) dh=-24 life 6 state 47
+t3101 CONVERT #1175 life 17 counter 25 state 60
+   sparkles alive 12
+   person #1046 type 2 tribe 2 state 19/0 cells (-0.14,+0.43) 
+   sparkle #1179 born d=1281 (-1022,-772) dh=-24 life 7 state 47
+   sparkle #1209 born d=1280 (504,-1177) dh=-24 life 6 state 47
+   sparkle #1435 born d=1280 (-1033,756) dh=-25 life 5 state 47
+   sparkle #1710 born d=1280 (-1092,668) dh=-25 life 5 state 47
+t3102 CONVERT #1175 life 16 counter 26 state 60
+   sparkles alive 16
+   sparkle #717 born d=1279 (1013,781) dh=-24 life 6 state 47
+   person #1046 type 2 tribe 2 state 19/2 cells (+0.02,+0.40) 
+   sparkle #1254 born d=1281 (-1278,-83) dh=-24 life 4 state 47
+   sparkle #1305 born d=1280 (836,969) dh=-24 life 6 state 47
+   person #1324 type 7 tribe 2 state 10/1 cells (-0.28,-0.17) 
+   sparkle #1325 born d=1280 (-1266,191) dh=-24 life 6 state 47
+t3103 CONVERT #1175 life 15 counter 27 state 60
+   sparkles alive 18
+   sparkle #641 born d=1280 (1276,98) dh=-24 life 6 state 47
+   sparkle #1253 born d=1279 (1272,-138) dh=-24 life 6 state 47
+   sparkle #1362 born d=1280 (-866,943) dh=-24 life 5 state 47
+   sparkle #1767 born d=1279 (956,850) dh=-24 life 6 state 47
+t3104 CONVERT #1175 life 14 counter 28 state 60
+   sparkles alive 21
+   sparkle #1033 born d=1280 (-505,1176) dh=-24 life 6 state 47
+   person #1046 type 2 tribe 2 state 19/4 cells (+0.00,+0.00) 
+   sparkle #1095 born d=1280 (762,-1029) dh=-24 life 4 state 47
+   sparkle #1118 born d=1279 (303,1243) dh=-24 life 6 state 47
+   sparkle #1152 born d=1280 (-1177,504) dh=-25 life 6 state 47
+t3105 CONVERT #1175 life 13 counter 29 state 60
+   sparkles alive 24
+   sparkle #1164 born d=1281 (-1210,420) dh=-25 life 7 state 47
+   sparkle #1280 born d=1281 (-1263,-212) dh=-24 life 7 state 47
+   sparkle #1473 born d=1281 (-1189,-476) dh=-24 life 5 state 47
+   sparkle #1818 born d=1280 (554,-1154) dh=-24 life 4 state 47
+t3106 CONVERT #1175 life 12 counter 30 state 60
+   sparkles alive 23
+   sparkle #683 born d=1279 (533,1163) dh=-24 life 6 state 47
+   sparkle #1360 born d=1280 (-204,-1264) dh=-24 life 5 state 47
+   sparkle #1380 born d=1279 (1255,249) dh=-24 life 5 state 47
+   sparkle #1652 born d=1281 (-1080,688) dh=-25 life 7 state 47
+t3107 CONVERT #1175 life 11 counter 31 state 60
+   sparkles alive 24
+   sparkle #674 born d=1280 (-1133,596) dh=-25 life 7 state 47
+   sparkle #1385 born d=1279 (815,986) dh=-24 life 7 state 47
+   sparkle #1398 born d=1279 (1279,-8) dh=-24 life 6 state 47
+   sparkle #1731 born d=1280 (937,-872) dh=-24 life 4 state 47
+t3108 CONVERT #1175 life 10 counter 32 state 60
+   sparkles alive 22
+   sparkle #673 born d=1280 (-1178,-501) dh=-24 life 5 state 47
+   sparkle #1050 born d=1280 (627,-1116) dh=-24 life 7 state 47
+   sparkle #1258 born d=1279 (1223,-376) dh=-24 life 5 state 47
+   sparkle #1784 born d=1280 (-250,1255) dh=-24 life 5 state 47
+t3109 CONVERT #1175 life 9 counter 33 state 60
+   sparkles alive 22
+   sparkle #1254 born d=1280 (-763,1028) dh=-24 life 4 state 47
+   sparkle #1435 born d=1281 (-679,-1086) dh=-24 life 5 state 47
+   sparkle #1710 born d=1279 (1216,397) dh=-24 life 7 state 47
+   sparkle #1811 born d=1279 (1177,500) dh=-24 life 7 state 47
+t3110 CONVERT #1175 life 8 counter 34 state 60
+   sparkles alive 22
+   sparkle #718 born d=1279 (-327,1237) dh=-24 life 7 state 47
+   sparkle #1129 born d=1281 (-1249,-285) dh=-24 life 7 state 47
+   sparkle #1209 born d=1280 (261,1253) dh=-24 life 6 state 47
+   sparkle #1374 born d=1280 (-1094,664) dh=-25 life 7 state 47
+t3111 CONVERT #1175 life 7 counter 35 state 60
+   sparkles alive 23
+   sparkle #717 born d=1280 (330,-1237) dh=-24 life 7 state 47
+   sparkle #1095 born d=1280 (-1082,684) dh=-25 life 7 state 47
+   sparkle #1325 born d=1281 (-741,-1045) dh=-24 life 6 state 47
+   sparkle #1362 born d=1280 (1053,-728) dh=-24 life 5 state 47
+t3112 CONVERT #1175 life 6 counter 36 state 60
+   sparkles alive 25
+   sparkle #641 born d=1280 (-20,-1280) dh=-24 life 7 state 47
+   sparkle #1253 born d=1280 (-583,-1140) dh=-24 life 4 state 47
+   sparkle #1345 born d=32469 (3712,32256) dh=85 life 16 state 47
+   sparkle #1767 born d=1280 (-83,1277) dh=-24 life 6 state 47
+   sparkle #1818 born d=1279 (991,808) dh=-24 life 6 state 47
+t3113 CONVERT #1175 life 5 counter 37 state 60
+   sparkles alive 23
+   person #656 type 2 tribe 2 state 21/0 cells (+1.25,+0.99) 
+   sparkle #1033 born d=1280 (-327,-1238) dh=-24 life 7 state 47
+   person #1046 type 2 tribe 2 state 19/9 cells (+0.00,+0.00) 
+   sparkle #1118 born d=1280 (-1280,0) dh=-24 life 4 state 47
+   sparkle #1152 born d=1280 (879,-930) dh=-24 life 5 state 47
+   sparkle #1473 born d=1280 (129,1273) dh=-24 life 5 state 47
+t3114 CONVERT #1175 life 4 counter 38 state 60
+   sparkles alive 24
+   sparkle #1360 born d=1281 (-987,-816) dh=-24 life 5 state 47
+   sparkle #1380 born d=1281 (-590,-1137) dh=-24 life 7 state 47
+   sparkle #1508 born d=1280 (724,1055) dh=-24 life 5 state 47
+   sparkle #1731 born d=1281 (-1221,-387) dh=-24 life 5 state 47
+t3115 CONVERT #1175 life 3 counter 39 state 60
+   sparkles alive 27
+   sparkle #683 born d=1280 (47,1279) dh=-24 life 6 state 47
+   sparkle #1164 born d=1279 (1176,504) dh=-24 life 4 state 47
+   sparkle #1280 born d=1280 (113,-1275) dh=-24 life 5 state 47
+   sparkle #1305 born d=1279 (214,1261) dh=-24 life 5 state 47
+t3116 CONVERT #1175 life 2 counter 40 state 60
+   sparkles alive 26
+   sparkle #673 born d=1281 (-1279,66) dh=-24 life 6 state 47
+   sparkle #1254 born d=1281 (-1156,-551) dh=-24 life 4 state 47
+   sparkle #1258 born d=1280 (762,1028) dh=-24 life 7 state 47
+   sparkle #1732 born d=1280 (1023,-769) dh=-24 life 7 state 47
+t3117 CONVERT #1175 life 1 counter 41 state 60
+   sparkles alive 25
+   sparkle #675 born d=1280 (-728,1053) dh=-24 life 7 state 47
+   sparkle #1156 born d=1280 (-1002,-797) dh=-24 life 4 state 47
+   sparkle #1385 born d=1280 (781,-1014) dh=-24 life 4 state 47
+   sparkle #1435 born d=1281 (-1216,-402) dh=-24 life 5 state 47
+t3118 CONVERT #1175 gone

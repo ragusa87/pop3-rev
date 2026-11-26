@@ -1209,3 +1209,20 @@ logged every wildman state change (raw log: `mesurements/wildman_states_level17.
 - Save side effect: even a clean star-map start of level 17 rewrote one byte of `SAVE/SAVGAM00.HDR` (offset
   5014, 0 -> 16, i.e. the 0-based level). Back up `SAVE/` before a live session and restore it afterwards; the
   container stop did not rewrite it again.
+
+## Convert spell, level 17, live (2026-11-26)
+
+Question: how is the Convert ring drawn, how wide is it, does it make wildmen move, how long does it last.
+Level 17 loaded with the star-map recipe ("Level 7 RC, live"); no player input: the computer shamans cast it on
+their own. `scripts/watch_convert.py` logged every 7/0x49 effect, the 7/0x3C sparkles born while one lives and
+the people within 4 cells (raw log: `mesurements/convert_level17.log`, three casts, turns 257, 496 and 3098).
+
+- Life 22 at birth (computer caster; 18 for a human per the init), -1 a turn, back to 18 on each conversion,
+  deleted exactly 18 turns after the last one. Conversions on effect counters 48/56/64 and 24: every 8 turns.
+- Conversions up to (-2.91, +0.11), (+2.78, +2.02), (+2.93, -2.20) cells away: the 7 x 7 computer square. A
+  wildman eating at a tree (person state 15) was converted; the new brave is a new id, state 10 then 19.
+- Sparkles: 4 new a turn, every one born 1279-1281 world units from the cast cell's centre, life 4-7, 21-24
+  alive at once, effect state 47 (static countdown), height = ground - 24 (-24 over the sea).
+- No wildman walked towards the effect. One wildman was in person state 8 sub-state 3 (the "on a coast cell"
+  branch of the effect) and was converted 7 turns later on the same spot.
+- Save side effect again: `SAVGAM00.HDR` changed; restored from the scratchpad copy after `docker compose down`.
