@@ -1226,3 +1226,16 @@ the people within 4 cells (raw log: `mesurements/convert_level17.log`, three cas
 - No wildman walked towards the effect. One wildman was in person state 8 sub-state 3 (the "on a coast cell"
   branch of the effect) and was converted 7 turns later on the same spot.
 - Save side effect again: `SAVGAM00.HDR` changed; restored from the scratchpad copy after `docker compose down`.
+
+## Vault reward icon, level 1, live (2026-11-27)
+**Rig**: `launch_game.sh`, New Game by mouse (`cursor_resync.py 320 152`), Escape, `set_star_map_level.py 1`,
+Return; `scripts/watch_discovery.py` (read only) logs every discovery 6/2, glow 6/8 and vault 2/18 on change.
+- Level 1's vault (#628, building 18) at (767, 64242), ground height 75.
+- The visible icon is a **discovery marker** 6/0x0A (#1837) at (768, 64256), height 1147, state 8, sprite 1077
+  (building 7's panel glyph), draw class 0, +0x74 = 7, +0x7A = 2 (kind building), +0x78 = 1809 (its glow).
+- Its glow 6/8 (#1809): same x/z, height 1067 (marker - 80), state 9, sprite 1417, draw class 0x2B.
+- The discovery behind it (#1838) is dormant: state 0, height 875 (ground + 800), kind 2, reward 7,
+  availability 1. The two other discoveries of the level (kind 11, availability 3) have no marker.
+- Nothing changed over the 40 turns watched (no bob, no turn). Seen in the game (tutorial flyover): a yellow blob
+  high over the vault; the glyph itself was too small to see at that distance.
+- Not seen live: the vault firing (the shaman was not sent there). `SAVE/` was unchanged afterwards.
