@@ -1206,3 +1206,6 @@ logged every wildman state change (raw log: `mesurements/wildman_states_level17.
 - Side finding: the wildman's tree-search radius byte (0x5A7069 row 1 = 0x5A709B) is 12, the same byte the shore
   search reads; the docs said 18.
 - Audio is disabled in this rig, so the sound itself was not heard, only the state that plays it reached.
+- Save side effect: even a clean star-map start of level 17 rewrote one byte of `SAVE/SAVGAM00.HDR` (offset
+  5014, 0 -> 16, i.e. the 0-based level). Back up `SAVE/` before a live session and restore it afterwards; the
+  container stop did not rewrite it again.
