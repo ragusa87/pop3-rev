@@ -79,9 +79,9 @@ unit_class|unit_type|description
 5|4|mass fruit tree
 5|5|special fruit tree 1
 5|6|special fruit tree 2
-5|7|plant 1
-5|8|plant 2
-5|9|head
+5|7|plant 1 (drawn as hfx 2, a reed tuft sprite)
+5|8|plant 2 (drawn as hfx 3, reeds with orange flower heads)
+5|9|head (prayer place; look set by the trigger on its cell: stone head, stone totem, winged-death totem or totem pole, functions.tsv 0x4fbd20)
 5|0xa|fire
 5|0xb|wood pile
 5|0xc|reincarnation pillar
