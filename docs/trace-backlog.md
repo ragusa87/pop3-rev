@@ -1206,6 +1206,16 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   queues straight into `0x435780`/`0x435CB0`, the shared template-apply pair), rather than continuing to sweep
   `process_cmd`'s own switches (now exhausted for this purpose).
 
+**Bounded re-check, 2026-11-27 (player UI path to kinds 15/16)**: kind 16 (disguise) stays resolved (top of this
+section). For kind 15 one more static data point, against the user's in-play report that a spy's attack on a
+building sets it alight: the per-action x per-type object table (`0x5A6D50`, 9-word rows by person type) gives the
+spy its OWN entry in row 6, the building-attack axe chop (object 0x1E = anim 11 with the spy's draw class 17), and
+row 14 holds the two 'set fire' objects (0x64 brave, 0x65 spy, anim 17) - i.e. the exe expects a spy ordered to
+attack a building to chop at it like any follower, and only the arson order to use the firebrand. Still no
+player-side issuer of kind 15 found; not chased further (bounded). The remaining concrete lead is unchanged: a
+live watch of a human spy's `+0x2C`/order kind while the user left-clicks an enemy hut, to see whether kind 19
+(chop) or kind 15 (firebrand) actually runs.
+
 ## Live-session attempt at the disguise-icon click, stalled on GUI automation friction (later session, no new static ground covered)
 
 Picked up the "a live session is the concrete next step" recommendation repeated throughout the section above,
