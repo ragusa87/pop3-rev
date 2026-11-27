@@ -1249,3 +1249,43 @@ Return; `scripts/watch_discovery.py` (read only) logs every discovery 6/2, glow 
   stage 0 a bare wooden frame; 1 the frame plus roof ribs; 2 walls and door start; 3 walls whole, roof still
   ribs; draw class 5 the finished thatched hut. Confirms per-face stage flags (`facs` byte 59) drive it.
 - Later (turn 3389) #626 had grown into a medium hut (#619, mesh 108). `SAVE/` unchanged.
+
+## Level 1 AI training, live (2026-11-27)
+Question (open-populous TODO "trace the computer tribes on levels 1 and 2"): when and how many units red trains
+on level 1, and whether bridging to red's island triggers its attack. Results:
+open-populous pop3-rev-analysis.md "Level 1, live: when red trains, and what the bridge really triggers".
+
+**Rig**: `launch_game.sh`, New Game by mouse, Escape, Return (star map opens on level 1).
+`scripts/watch_ai_training.py` (read only) logs every person born/removed/retyped, red's person-state changes, a
+per-tribe census on change, the first 64 script variables of each script slot on change (red = slot 1) and the
+banks every 64 turns. Raw logs: `mesurements/ai_level1.log` (run 1, played, ends with the level won at turn
+26 140) and `mesurements/ai_level1_retrain.log` (run 2, red's warriors killed with `scripts/kill_units.py` at
+turns 145 and 2485). Decoded script: own scratch printer over open-populous `pop3-ai-script` (not committed).
+
+**Addresses used** (D3D build):
+- Script variables: `0x95F7B2 + slot*12552 + 0x1000`, one i32 per `$N` (red's `$13` = 1 at turn 1, `$57` = 1 at
+  turn 72, as `cpscr010` says). Slot 0 holds something else (non-script values).
+- Red's `INT_ATTR_*` values: one byte per attribute at `0x96081A` (index = attribute - 1000), found by pattern
+  search on the values the script sets. All `PREF_*_PEOPLE` and `PREF_*_TRAINS` 0.
+- Cursor pick: `0x87CABE` u16 = cell under the cursor (low byte = 2·x, high byte = 2·z, so a half-cell grid), and
+  `0x87CAC2` u16 = the thing id under it (0 for ground). `0x87CABC` bit 0 = cursor over a cell.
+- Camera focus: tribe record `+0x24` (x, z u16), the same field `ww_to_sea.py` writes: `scripts/cam_focus.py X Z`.
+- Cell records `0x8A03F0`, 16 bytes per cell, `+8` u16 ground height: `scripts/terrain_map.py` prints land/sea.
+
+**Playing it with xdotool** (what worked):
+- `click.sh` = `mousemove` to the window point, `cursor_resync.py X Y`, 1 px nudge, **wait ~0.5 s**, then
+  mousedown/up. Without the wait an order click on the ground is often dropped (the shaman ignored three move
+  orders, then took one with a hover first).
+- Aim with the pick address, not the picture: hover, read `0x87CABE`, adjust. A move to an unwalkable cell puts
+  the unit in person state 33 (blocked), which looks like praying beside a totem.
+- The left panel jumps back to Spells whenever a prayer grants a new charge (with a large 3D icon of the spell
+  over the view). While braves keep praying at a head, it flips every few seconds: do tab click → icon → plan in
+  one quick sequence with small relative mouse steps (a big pointer warp also drops the held plan). The building
+  plan's footprint is yellow when valid, red when not.
+- Land Bridge from the shaman standing at the shore cell (state 19, not 33); the cursor shows a forbidden sign out
+  of range.
+- Killing by memory: `kill_units.py TRIBE TYPE [--housed]` sets life `+0x6E` to 0; the exe's per-turn life step
+  then runs the normal death (state 3) on the next turn.
+- Careful with Lightning near red's shaman: she dies, and with level 1's reincarnation off every red person dies
+  the same turn and the level is won.
+- `SAVE/` unchanged by both runs (backed up and restored anyway).
