@@ -942,7 +942,12 @@ on-enter handler). Full write-up: `docs/functions.tsv` rows `0x439c30`/`0x439d30
 either a live memory session (an agent with Wine/the running game, or the user's own measurement) or a future
 static pass with `game/constant.dat` present - **not done this session, left open on purpose**:
 
-- **Live values for every table this session could only read the FORMULA/shape of.** `0x439D30` substate 2's
+- **RESOLVED 2026-11-27 (static, `functions.tsv` rows `0x439d30`/`0x4f8e10`/`0x4f35b0`/`0x4f6cc0`): the windup is one
+  loop of anim 17 at its draw class's 2 turns a frame = 24 turns (`*0x59DF44` is `load_vele`'s per-VSTART-entry
+  frame-count table); `0x89DDE7`/`0x89DDEA` are just `tribe+0xC1F` (controller type) and `tribe+0xC22` (tribe_num);
+  `0x960812` is the victim's `SPY_DISCOVER_CHANCE` attribute and the roll only runs for a human player's spy; the
+  discovery sweep is the 3x3 cells around the spy and only rolls for spies inside the AI's settlement area.**
+  Original text: **Live values for every table this session could only read the FORMULA/shape of.** `0x439D30` substate 2's
   firebrand windup delay reads `*0x59DF44` - a POINTER variable that is zero in the static image (populated at
   runtime, presumably from a loaded resource file) - so neither it nor the paired `0x5A6AFB` table's real
   per-object numbers could be confirmed; same for the discovery-roll threshold table `0x960812` and the
@@ -1016,12 +1021,15 @@ static pass with `game/constant.dat` present - **not done this session, left ope
   against the near-identical `0x8A03E4`/`0x8A03EC` slots used elsewhere in this session's own investigation** -
   plausibly the same per-cell "other object list" family at a different byte offset within the same cell record,
   not confirmed.
-- **The person-state-21 table `0x89DDE7` (read by both this session's substate-4 discovery roll and the
+- **RESOLVED 2026-11-27: `0x89DDE7` is `tribe+0xC1F` (controller type, 1 = computer), not a latch.** Original
+  text: **The person-state-21 table `0x89DDE7` (read by both this session's substate-4 discovery roll and the
   already-documented state-21 tick handler, `0x4D3701`) still has no confirmed meaning** - this session's own
   reading ("a per-tribe 'already alerted to infiltrators' latch") is a guess from the one new call site found,
   not independently confirmed; a live session comparing its value before/after a successful vs. failed arson
   attempt against the same tribe would settle it.
-- **Checked, inconclusive: whether `0x439D30`'s own substate-4 discovery-roll tables (`0x89DDE7`/`0x89DDEA`,
+- **RESOLVED 2026-11-27: `0x960812` IS `SPY_DISCOVER_CHANCE`, read from the computer-player attribute block
+  `0x9607EA + tribe*48` (index = attribute id - 1000), not through `script_vars`; `0x89DDE7`/`0x89DDEA` are
+  tribe_struct fields.** Original text: **Checked, inconclusive: whether `0x439D30`'s own substate-4 discovery-roll tables (`0x89DDE7`/`0x89DDEA`,
   stride 3173 bytes/tribe, and the derived percent-curve `0x960812`, stride 48) are the exe's own implementation
   of `open-populous`'s already-documented AI-script attribute `INT_ATTR_SPY_DISCOVER_CHANCE` (id 1040,
   `ai-scripts.md`).** Computed the confirmed `script_vars` address for `SPY_DISCOVER_CHANCE`/`ENEMY_SPY_MAX_STAND`/
