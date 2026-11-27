@@ -50,7 +50,12 @@ stagger as level 1, one turn later), 16 turns each from ground - 256 to ground; 
 the flyby on this level (flyby orbits the site from turn 12, last stone up at 68); the sparkles are the levelling
 effect's own 32-sparkle spiral (7/0x3C) with 6-turn trails (7/0x3D), turns 15-35, hfx billboards; the savage ->
 brave conversion is done by the same levelling effect as its disc reaches each wildman (turns 17-21), so the
-correlation the user saw is real. Left open: which hfx frames animations 0x508/0x50E are; `tribe+0x93D` bit 0x2.
+correlation the user saw is real. **Both follow-ups RESOLVED 2026-11-24 (commit 1438ee1, re-checked 2026-11-27)**:
+animation 0x508 is hfx 1288-1303 (16-frame gold four-point twinkle, draw class 0x2C), 0x50E plays its dot part
+1294-1299 (draw class 0x2E), both looping one frame per drawn frame (`effect_states.csv` 47, `functions.tsv`
+0x4ee7b0); `tribe+0x93D` bit 0x2 is "site built", set when the shaman's build order fires its last pillar shot,
+read only by the "remove the player's shaman" mode (tribe bit 0x80000). Conversion timing: each wildman turns
+3-7 turns into the 21-turn levelling (level 7: turns 17, 20, 21). Still open: what sets tribe bit 0x80000.
 
 Live-measure the Reincarnation Centre's own build/intro animation on **level 7** specifically (not level 1 -
 the user wants this level in particular, presumably a different RC setup/timing than level 1's already-traced
