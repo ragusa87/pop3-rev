@@ -1784,3 +1784,12 @@ would explain the "inlet drawn as water" report.
 from the parity of the 4-31 turn hold) with the snap flag, speed stays 0, and the end of sub-state 7 steers to the
 spot it already stands on, so the facing is kept. Spec in `open-populous` pop3-rev-analysis.md "Bored poses".
 Live check, optional: watch `+0x5D` (heading) and `+0x3D` (position) of an idle brave across a sub-state 6/7.
+
+### Delayed mana reservoir: the 50-turn flag
+**RESOLVED 2026-11-27** (static). `give_mana_delayed` (`0x41A500`) waits 50 turns instead of 1000 when
+`0x89C661` bit 0x8 is set, and that bit is the multiplayer-game flag: its only setter is the network lobby start
+(`0x40F16D`, lobby state `0x894CF9` = 5), cleared by `clear_tribe_session`. This corrects the "BYRNE cheat flag"
+reading in `commands.tsv`/`functions.tsv`/`cheat.md`: the cheat handlers run only while it is clear. Other rows
+still calling it the cheat flag (ui_cmd 0x3e-0x43, 0x53-0x56, tribe_cmd 0x41/0x44/0x45/0x76, `0x479840`, `0x4abd86`,
+cheat.md's `0x41C140` note) should be re-read with that meaning; the real cheat-enable bit (what Tab+F11 BYRNE
+sets) is still unlocated. Reservoir callers: shaman death and mana discoveries (kind 6) only.
