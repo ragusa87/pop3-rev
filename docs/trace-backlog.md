@@ -1733,3 +1733,11 @@ cell corner (floor), gated by a radius from the exact point growing 380 -> 5158;
 point. Spec in `open-populous` pop3-rev-analysis.md "Flatten (effect state 31)". Land bridge (0x50EE00) is
 separate code. Left: whether the HUD/shot snaps the cast point at all before the effect is made (a live read of
 the effect's `+0x3D` against the clicked position would settle it).
+
+### Worshipping the shaman: range and her states
+**RESOLVED 2026-11-27** (static). Person state 19 sub-state 9, recruited by `0x4E0270` (shaman only, every 8
+turns, her 3x3 cells, followers standing at sub-state 5/7/8): cap 1 from the per-person turn in every state of
+hers, cap 200 from her state 42 sub-state 5 (at the reincarnation site). Kept while she is within 2360 units per
+axis (32-turn re-check). The earlier person-state-5 hypothesis is moot: it is a sub-state, not a state. Spec in
+`open-populous` pop3-rev-analysis.md "Worshipping the shaman". Live check, optional: an idle group near the
+player's shaman should kneel one by one, about 0.67 s apart.
