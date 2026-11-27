@@ -1751,3 +1751,9 @@ height <= 0. Spec: `open-populous` pop3-rev-analysis.md "Sea, shore and land". L
 heights of cells (66-73, 83-90) a few turns in (`scripts/livemem.py` on the map-cell table 0x8A03E4 +0x4, record =
 base + 16 * (z * 128 + x)) to confirm the red boat hut (cell 68,84) has pulled its water part from 1 to 0, which
 would explain the "inlet drawn as water" report.
+
+### Idle shuffle: step length
+**RESOLVED 2026-11-27** (static). There is no step: state 19 sub-state 6 sets a heading goal of ±768 (135°, sign
+from the parity of the 4-31 turn hold) with the snap flag, speed stays 0, and the end of sub-state 7 steers to the
+spot it already stands on, so the facing is kept. Spec in `open-populous` pop3-rev-analysis.md "Bored poses".
+Live check, optional: watch `+0x5D` (heading) and `+0x3D` (position) of an idle brave across a sub-state 6/7.
