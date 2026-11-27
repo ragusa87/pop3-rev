@@ -2,6 +2,14 @@
 
 ## Ghost Army, two items left open after this session's full trace (2026-11-11)
 
+**RESOLVED 2026-11-27** (static): both items. Cast: the generic class-11 pipeline with no per-type branch
+(`0x4C1940` sends spell types 1-21 to `0x4C1D10`; `0x4C1B80` sets the 6-turn wait sub-state 3), so 6 turns, then
+a standard shot 8/1 (row 9 `+0x27`, 1400 units/turn, homing bit set, `+0x2F` = 0 so never shield-deflected), then
+effect 7/0xC at the target whose tick 5 spawns the ghosts. Targeting: all 48 ghost-bit reads in the exe enumerated,
+none on the candidate side of any target scan/eligibility check, so a ghost is found and ranked like any person.
+Side finding: a ghost attacking a building skips the building's damage (`0x51A2A0` row). Spec in `open-populous`
+pop3-rev-analysis.md "Ghost Army mechanics".
+
 `process_ghost_army`/`0x50D1A0` is now fully traced and live-verified (`docs/functions.tsv` row, `docs/effect_states.csv`
 row 13, `open-populous` `docs/specs/pop3-rev-analysis.md` "Ghost Army mechanics"/TODO.md). Two concrete items came up
 answering an `open-populous` implementation session's own open-question list that weren't resolved this session:
