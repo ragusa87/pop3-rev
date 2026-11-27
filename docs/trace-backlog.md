@@ -188,6 +188,16 @@ what's already known from level 1 and reusable as a starting point - `scripts/wa
   fields (while still attached) has any visible side effect at all - not checked, but likely none since nothing
   clears the attachment reference; and none of disembark's 17 call sites besides `delete_unit` were individually
   surveyed. Full write-up: `docs/person_states.tsv` row 28, `docs/functions.tsv` rows `0x4657d0`/`0x4659d0`.
+  **RESOLVED 2026-11-27** (static): the state-26 question has one real side effect - the panicked passenger stays
+  seated and unmoved (physics off via `+0xC` bit 0x4000, re-pinned and re-headed by the seat sync `0x465EA0` every
+  turn), but if it is the DRIVER its speed 110 reads as "driver moving" (`0x463E80`/`0x466A20` only test driver
+  speed != 0): a parked vehicle sets off and a moving one keeps going towards the driver's `+0x53`; a balloon within
+  1040 of that takes the arrival branch `0x4EB9A0` and unloads the driver - a candidate for the "panic makes people
+  jump off" memory. And the GRAB does unseat: state 40's ENTER `0x4E05E0` pushes the vehicle 40 along the angel's
+  heading (`0x4E93F0`, vehicle `+0x14` bit 0x8) and force-disembarks the victim (`0x466C80(victim, 1)`). Left open:
+  whether a driver's `+0x53` is still within 1040 after an ordinary trip (live check: panic a lone balloon rider
+  with an angel and watch `+0x2C`/`+0x9F` of rider and balloon), what a passenger does after its 64 panic turns
+  end in its type's default state, and the remaining 15 disembark call sites.
 - **RESOLVED (simulation side): yes, real pitch and bank ARE computed, not yaw-only.** `0x4DDB30` eases two
   further fields on the companion every tick via the engine's generic tilt helper (`0x4E6C80`, also used by the
   sinking-building rock animation): a speed-dependent nose-up pitch (`+0x6C`, grows the slower the angel flies,
