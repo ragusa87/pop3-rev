@@ -1656,3 +1656,13 @@ dedicated to keyboard-modifier state** - this doesn't disprove the bit-`0x1`-is-
 "some other bit of this byte does something Ctrl/Shift-unrelated" is no longer a surprising result if a future
 session finds it, and a live watch of this byte should expect to see MULTIPLE, unrelated bits moving for
 unrelated reasons, not just the one being tested for.
+
+## Unit stats and guessed constants (2026-11-27)
+
+### Health: run-time lives, the wildman's life, the stranded rate
+**RESOLVED 2026-11-27** (static, cross-checked against the earlier fight capture). `init_person` (`0x4D5920`) rolls
+max and starting life in [3L/4, L) of the file's `LIFE_` for every type that heals; wildman 32 fixed (exe table
+only), angel 10000 fixed. Stranded (state 33, `0x4D9580`/`0x4D9650`): grace 352 (human) / 864 (computer) / 32
+(no-breeding tribe) climbing by 7 every 8 turns, then 56 life per 8 turns; healing still runs. Spec in
+`open-populous` pop3-rev-analysis.md "Starting and maximum life" and "Stranded". Left: the role of global flag
+`0x89C668` bit 0x4 (set only for level ids 54/79; skips the stranded damage, doubles a tribe-0 brave's life).
