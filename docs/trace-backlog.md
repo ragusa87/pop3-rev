@@ -1741,3 +1741,13 @@ hers, cap 200 from her state 42 sub-state 5 (at the reincarnation site). Kept wh
 axis (32-turn re-check). The earlier person-state-5 hypothesis is moot: it is a sub-state, not a state. Spec in
 `open-populous` pop3-rev-analysis.md "Worshipping the shaman". Live check, optional: an idle group near the
 player's shaman should kneel one by one, about 0.67 s apart.
+
+### Sea-level drawing threshold
+**RESOLVED 2026-11-27** (static), one live check left. No height threshold: `0x44DF40` sets blend 0 only on a
+point whose 3 x 3 heights are all <= 0 (sea), builds each cell's coast shape from its 4 corners' sea bits
+(table 0x5AA318 -> 0x5AA328), and raises a land-locked height-0 point to 1. The renderer (0x46CB90,
+0x4BE3F4) and the simulation (0x44F980, 0x4EEFF0) read that same shape; building flooding (0x408080) alone tests
+height <= 0. Spec: `open-populous` pop3-rev-analysis.md "Sea, shore and land". Live check left: level 19, read the
+heights of cells (66-73, 83-90) a few turns in (`scripts/livemem.py` on the map-cell table 0x8A03E4 +0x4, record =
+base + 16 * (z * 128 + x)) to confirm the red boat hut (cell 68,84) has pulled its water part from 1 to 0, which
+would explain the "inlet drawn as water" report.
