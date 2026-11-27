@@ -1362,6 +1362,20 @@ in `docs/commands.tsv` (`ui_cmd` rows `0x6e`/`0x6f`, `0x71`-`0x78`; `tribe_cmd` 
   coincidence worth remembering before assuming anything near that address range is disguise-related) and its
   unread neighbour `0x4DE680`.
 
+- **RESOLVED, later session (2026-11-27), from the default keymap `0x5D5DE8`** (functions.tsv, found for the
+  Space question in "Notifications"): **`ui_cmd 0x72`/`0x73` are REFUTED as a tab switch** - they are the right
+  mouse button's press and release of "right click on anything: query it" (`0x47AE00` resolves the hovered thing;
+  `0x98E908` bit `0x40` = query showing, `0x80` = button held); the tabs are Insert/Home/PgUp = `ui_cmd 0xCD`/
+  `0xCC`/`0xCE`. **`ui_cmd 0x77`/`0x78` are CONFIRMED as building placement**: the left-button release while a plan
+  is held (input mode `0x89C6E7`==7), `0x78` = Ctrl or Alt = place and keep holding the plan (walls stay held
+  anyway); the older write-up had its type-17 branches swapped (17 = guard post: free cell -> `tribe_cmd 0x62`,
+  marked cell -> remove the marks). Same mode: Space = `ui_cmd 0x7B` (rotate), right release or Esc = `0x7C` (put
+  away), Shift + right release = `0x79` (own plan cell) / `0x7A` (guard post marker). Rows in `commands.tsv` and
+  `functions.tsv` (`0x47ae00`, `0x4ba6b0`). Still open: `tribe_cmd 0x69` and `0x62`'s handlers, the option bit
+  `0x89C663` `0x20`, and whether `tribe_cmd 0x11` (`ui_cmd 0x79`) is plan removal; the building-icon Shift+click
+  dispatch (`0x4A1240`, callback of a 24-entry widget list at `0x5CC6F0`; its Shift branch queues `tribe_cmd
+  0x54`/`0x55`, the rest unread) is the next lead for "send them to the nearest building of that type".
+
 ## HUD widget dispatch, round 2: spell tab resolved, building tab clarified, disguise icon still not found (later session)
 
 Chased the user's own detailed, first-hand HUD descriptions (Population tab unit-count modifier, Shift+click
