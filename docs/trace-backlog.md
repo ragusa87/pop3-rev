@@ -1725,3 +1725,11 @@ inside a turn": formations, pre-fights, fights, ONE interleaved unit pass (0x4ED
 recount + income, deferred deletion, terrain recompute, mana distribution. Left (unidentified, minor): the
 per-tribe byte countdown `tribe+0xC24`, the countdown lists 0x969D92 (0x4EC3B0) and 0x895FAD (0x504660), the
 global countdown 0x96A85C (0x4A5D40), and who reads the activity tag `+0x76` bits 12-14 (0x4F42C0).
+
+### Flatten's per-turn curve
+**RESOLVED 2026-11-27** (static). Effect state 31's body is 0x512700 (Ghidra's `process_lightning` is a misnomer),
+init 0x5126A0: 15 turns, `h += (T - h) / turns_left` on the 45 MWSEARCH ring 0-3 points around the cast point's
+cell corner (floor), gated by a radius from the exact point growing 380 -> 5158; T = calc_point_height at the
+point. Spec in `open-populous` pop3-rev-analysis.md "Flatten (effect state 31)". Land bridge (0x50EE00) is
+separate code. Left: whether the HUD/shot snaps the cast point at all before the effect is made (a live read of
+the effect's `+0x3D` against the clicked position would settle it).
