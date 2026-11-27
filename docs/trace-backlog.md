@@ -738,6 +738,27 @@ what's already known from level 1 and reusable as a starting point - `scripts/wa
   (network sends, file I/O, and other externally-visible actions are exactly the kind of thing that shows up as
   a named import, even when the UI code that triggers them is deeply indirect/callback-based).
 
+- **RESOLVED, later session (2026-11-27), statically: the `esi==0x39` case in `0x4A9D90` and the chat recipient
+  widget, both via one new find - the game's default KEYMAP, a static table at `0x5D5DE8`** (own `functions.tsv`
+  row; 188 records of key, press/release, modifiers, condition callback, raw `ui_cmd`). `0x4A9D90` is the in-game
+  keyboard handler `fn(scan_code, pressed)` after all (Ghidra's `switchD_004a9dca` cases are the six modifier
+  keys); its `esi==0x39` branch is NOT the normal Space path - it only runs while a message box is open (`0x89C669`
+  bit `0x10000000`) and only once the level is won or lost (`0x89C664` bits 2/4), sending `ui_cmd 0x5B` (show the
+  level status screen, which `S`/`ui_cmd 0x63` toggles; the multiplayer variant sets the bit or sends `0x63`).
+  Normal Space goes through the keymap: four bindings tried in order - `0x7B` (a building plan held: rotate it),
+  `0x5A` (a flyby running: skip it), `0x5B` (won/lost: status screen), `0x59` (combat-alert camera, no condition) -
+  which confirms the earlier live `0x59` hit as Space and explains why it was flaky. The `0x489470` "widget list"
+  walked live earlier is this keymap, indexed by key code (its categories 1-4 were Esc and keys 1/2/3), and the
+  byte pairs read as a "tribe busy" gate (`0x9845AE`/`0x98462E`/`0x9845BB`/`0x9845C7`) are Ctrl-held/Shift-held
+  tests - worth re-reading `0x49E650`'s spell-icon branches with that in mind (Ctrl vs Shift + right click,
+  shortcuts.md). **Chat recipients**: `0x49EB50` is the click callback of 8 widgets in HUD panel 6, the chat panel
+  that `M` (`ui_cmd 0x5F`) opens through `0x4AEE40`: a 2x2 block of name boxes plus tick icons (3 other tribes,
+  All). Details in `functions.tsv` (`0x5d5de8`, `0x489300`, `0x489470`, `0x4a9d90`, `0x4aa1c0`, `0x49eb50`,
+  `0x4aee40`) and `commands.tsv` (`ui_cmd 0x59`/`0x5A`/`0x5B`/`0x5F`/`0x63`/`0xF`/`0x10`). Still open: whether
+  `0x89C661` bit 0x8 (chat's gate) is the multiplayer flag; `0x449080`, called for Space in the message-box state.
+  **Next step for the whole HUD thread**: fill `commands.tsv`'s `input` column for every id from the keymap table
+  (a 10-line dump), instead of hunting keybinds one by one.
+
 - **Attempted the recommended live-memory check, later session (2026-11-08) - initially looked like a NEW, more
   fundamental blocker than "mouse doesn't work" (ordinary gameplay hotkeys not reaching the game at all), but a
   user correction resolved it: it's a focus problem, not a broken input path.** Full method in `docs/cheat.md`
