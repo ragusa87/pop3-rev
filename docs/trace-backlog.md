@@ -1692,3 +1692,14 @@ only), angel 10000 fixed. Stranded (state 33, `0x4D9580`/`0x4D9650`): grace 352 
 (no-breeding tribe) climbing by 7 every 8 turns, then 56 life per 8 turns; healing still runs. Spec in
 `open-populous` pop3-rev-analysis.md "Starting and maximum life" and "Stranded". Left: the role of global flag
 `0x89C668` bit 0x4 (set only for level ids 54/79; skips the stranded damage, doubles a tribe-0 brave's life).
+
+## Core simulation and terrain (2026-11-27)
+
+### Order of work inside a turn
+**RESOLVED 2026-11-27** (static). `main_loop_outer` (0x4A5590) drains and runs the tribe commands, stages the
+local player's next one, then per catch-up turn runs the native AI (0x461510) and `main_loop_inner` (0x4EC6F0),
+whose full call order is in `functions.tsv` 0x4EC6F0 and in `open-populous` pop3-rev-analysis.md "Order of work
+inside a turn": formations, pre-fights, fights, ONE interleaved unit pass (0x4ED700, newest first), guard list,
+recount + income, deferred deletion, terrain recompute, mana distribution. Left (unidentified, minor): the
+per-tribe byte countdown `tribe+0xC24`, the countdown lists 0x969D92 (0x4EC3B0) and 0x895FAD (0x504660), the
+global countdown 0x96A85C (0x4A5D40), and who reads the activity tag `+0x76` bits 12-14 (0x4F42C0).
