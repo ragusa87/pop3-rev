@@ -1629,6 +1629,23 @@ real remaining next step, not further walks of this specific table.
   as "not identified, plausibly a map-wide or radius-derived cell count," exactly the toggle this would need to
   explain - not re-read this session).
 
+- **RESOLVED, later session (2026-11-27): the Population (followers panel) Ctrl/Shift + click, and the "select
+  the shaman" path.** The modifier is read inside the widget callbacks themselves: `0x4A0F00` (type and shaman
+  icons, widget records `0x5CAEE2` shaman + `0x5CB23C`.. brave/warrior/firewarrior/preacher/spy, type at the
+  record's `+0x37`) and `0x4A1090` ("all" icon, `0x5CB1FA`) test Shift-held then Ctrl-held via the key-state
+  arrays (`0x9845BB`/`0x9845C7` Shift, `0x9845AE`/`0x98462E` Ctrl - NOT a "tribe busy" gate, see the keymap entry
+  in "Notifications") and call `0x450F30(variant, 0, type, 0)`: plain = variant 0 -> `tribe_cmd 0x7D` (one pick),
+  Shift = 1 -> `0x53` (every follower of the type), Ctrl = 5 -> `0x72` (the pick repeated `MULTIPLE_SELECT_NUM`
+  = 5 times, the constant at `0x5AA598` the earlier row left unidentified); "all" icon: Shift = 4 -> `0x48`
+  (everyone but the shaman), Ctrl/plain over type 0. The pick (`0x451720`) takes not-yet-selected, selectable
+  followers of the type, never the shaman, by activity group (`+0x76` bits 12-14, order 0,2,4,3,1,5,6 from
+  `0x59CD94`), nearest the camera's cell. **Shaman**: there is a dedicated path - the shaman icon (type 7) only
+  acts if the tribe has one, sets tribe `+0x93D` bit `0x800`, and `tribe_cmd 0x7D` with type 7 selects
+  `tribe+0x89D` directly. Rows: `commands.tsv` (`tribe_cmd 0x7D`/`0x53`/`0x72`/`0x48`), `functions.tsv`
+  (`0x4a0f00`, `0x4a1090`, `0x450f30`, `0x451720`). Still open: the icons' second callback (`0x4A1010` ->
+  `0x4DE810`, plausibly right click: cycle/look at a unit of that type), `0x4518C0` (the pick's fallback),
+  `0x4458D0` (passengers of a picked unit's vehicle), and whether a click clears the selection first.
+
 ## Found a second reader of the Ctrl-candidate byte `0x895DAA`, but it unravels into front-end/new-game code, not an in-game HUD panel (later session)
 
 Went looking for a sibling "Shift" bit alongside `ui_cmd 0x71`'s own confirmed bit-`0x1` reader of `0x895DAA`
